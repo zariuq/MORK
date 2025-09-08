@@ -1,13 +1,15 @@
 from functools import partial
 from multiprocessing import Pool, cpu_count
 from client import MORK, ManagedMORK
-
+import re
+from collections import defaultdict
+from itertools import combinations
 
 DATASETS = (
-    "royal92",
     "lordOfTheRings",
     "adameve",
     "simpsons",
+    "royal92",
 )
 
 def preprocessing(server, datasets=DATASETS):
@@ -53,18 +55,104 @@ def is_different_hack(scope, ids, leave_out_id):
     with scope.work_at(namespace=f'(simple (isIdDifferent "{leave_out_id}" "{{}}"))') as private_ns:
         private_ns.upload_("\n".join(id0 for id0 in ids if id0 != leave_out_id))
 
-def hack(server, datasets=DATASETS, parallel=True):
-    # HACK: Generate isIdDifferent relations so that sister relations aren't reflective
-    if parallel: pool = Pool(cpu_count()//2)
-    with server.work_at("aunt-kg") as ins:
+# def hack(server, datasets=DATASETS, parallel=True):
+#     # HACK: Generate isIdDifferent relations so that sister relations aren't reflective
+#     if parallel: pool = Pool(cpu_count()//2)
+#     with server.work_at("aunt-kg") as ins:
+#         for dataset in datasets:
+#             with ins.work_at(dataset) as scope:
+#                 ids_string = scope.download("(src (Individuals $i (Id $id)))", "$id").data
+#                 ids = [line.strip()[1:-1] for line in ids_string.strip().splitlines() if line]
+#                 if parallel: pool.map(partial(is_different_hack, scope._bare(), ids), ids)
+#                 else: scope.upload_("".join(f'(simple (isIdDifferent "{leave_out_id}" "{id0}"))\n'
+#                                             for id0 in ids for leave_out_id in ids if id0 != leave_out_id))
+#     if parallel: pool.terminate()
+
+def hack(server, datasets=DATASETS, parallel=False):
+    with server.work_at("aunt-kg").and_time() as ins:
         for dataset in datasets:
             with ins.work_at(dataset) as scope:
-                ids_string = scope.download("(src (Individuals $i (Id $id)))", "$id").data
-                ids = [line.strip()[1:-1] for line in ids_string.strip().splitlines() if line]
-                if parallel: pool.map(partial(is_different_hack, scope._bare(), ids), ids)
-                else: scope.upload_("".join(f'(simple (isIdDifferent "{leave_out_id}" "{id0}"))\n'
-                                            for id0 in ids for leave_out_id in ids if id0 != leave_out_id))
-    if parallel: pool.terminate()
+                ids_text = scope.download("(src (Individuals $i (Id $id)))", "$id").data
+                ids = [ln.strip()[1:-1] for ln in ids_text.strip().splitlines() if ln]
+                n = len(ids)
+                print(f"[hack] {dataset}: generating isIdDifferent for {n} IDs (~{n*(n-1)} pairs)")
+                if parallel:
+                    from multiprocessing import Pool, cpu_count
+                    from functools import partial
+                    pool = Pool(max(1, cpu_count() // 2))
+                    try:
+                        pool.map(partial(is_different_hack, scope._bare(), ids), ids)
+                    finally:
+                        pool.terminate()
+                else:
+                    K = max(1, n // 50)  # progress reporting chunk
+                    for idx, left in enumerate(ids, 1):
+                        scope.upload_("".join(
+                            f'(simple (isIdDifferent "{left}" "{right}"))\n'
+                            for right in ids if right != left
+                        ))
+                        if idx % K == 0 or idx == n:
+                            print(f"[hack] {dataset}: {idx}/{n} ids processed")
+
+
+def _chunked_upload(scope, lines_iter, chunk_size=200_000):
+    """Upload in big chunks so we don't spam the server with tiny requests."""
+    buf = []
+    for ln in lines_iter:
+        buf.append(ln)
+        if len(buf) >= chunk_size:
+            scope.upload_("".join(buf))
+            buf.clear()
+    if buf:
+        scope.upload_("".join(buf))
+
+def _parse_quoted_pairs(lines_text):
+    """Parse lines like: ("ParentID" "ChildID") -> [("ParentID","ChildID"), ...]"""
+    out = []
+    for ln in lines_text.splitlines():
+        ln = ln.strip()
+        if not ln:
+            continue
+        parts = re.findall(r'"([^"]*)"', ln)
+        if len(parts) == 2:
+            out.append((parts[0], parts[1]))
+    return out
+
+def siblings_only_hack(server, datasets=("simpsons", "adameve", "lordOfTheRings", "royal92")):
+    """Generate (simple (isIdDifferent A B)) only for children with the same parents."""
+    with server.work_at("aunt-kg").and_time() as ins:
+        for dataset in datasets:
+            with ins.work_at(dataset) as scope:
+                # download (simple (parent $p $c)) as pairs "(P C)"
+                txt = scope.download('(simple (parent $p $c))', '($p $c)').data
+                pairs = _parse_quoted_pairs(txt)
+
+                # Build parent->children, and child->set(parents)
+                parent_children = defaultdict(set)
+                child_parents = defaultdict(set)
+                for p, c in pairs:
+                    parent_children[p].add(c)
+                    child_parents[c].add(p)
+
+                # Group children by exact parent-set (so full-siblings only)
+                sibling_groups = defaultdict(set)
+                for c, ps in child_parents.items():
+                    key = tuple(sorted(ps))  # normalize e.g. ("Mother","Father")
+                    sibling_groups[key].add(c)
+
+                # Produce isIdDifferent only within each sibling group
+                total_pairs = sum(len(g)*(len(g)-1) for g in sibling_groups.values())
+                print(f"[hack-siblings-only] {dataset}: {len(sibling_groups)} sibling groups, ~{total_pairs} ordered pairs")
+
+                def gen_lines():
+                    for group in sibling_groups.values():
+                        # ordered pairs within the group
+                        for a in group:
+                            for b in group:
+                                if a != b:
+                                    yield f'(simple (isIdDifferent "{a}" "{b}"))\n'
+
+                _chunked_upload(scope, gen_lines(), chunk_size=200_000)
 
 def processing(server, datasets=DATASETS, human_readable=True):
     with server.work_at("aunt-kg") as ins:
@@ -86,7 +174,8 @@ def _main():
     with ManagedMORK.connect(binary_path="../target/release/mork_server").and_terminate() as server:
         server.clear().block()
         preprocessing(server)
-        hack(server, parallel=True)
+        # hack(server, parallel=True)
+        siblings_only_hack(server, datasets=("simpsons","adameve","lordOfTheRings","royal92"))
         processing(server, human_readable=False)
 
 if __name__ == '__main__':
