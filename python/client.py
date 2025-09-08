@@ -627,8 +627,15 @@ class ManagedMORK(MORK):
         return self
 
     def and_terminate(self):
-        self.finalization += ("terminate",)
-        return self
+        # self.finalization += ("terminate",)
+        # return self
+        # Only schedule OS-level terminate when we actually spawned a process.
+         if self.process is not None:
+             self.finalization += ("terminate",)
+         else:
+             # Connected to an external server; nothing to terminate.
+             pass
+         return self
 
     def cleanup(self):
         if self.process is not None:
