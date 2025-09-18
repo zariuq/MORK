@@ -742,416 +742,12 @@ fn bc2() {
     println!("elapsed {} steps {} size {}", t0.elapsed().as_millis(), steps, s.btm.val_count());
 
     let mut v = vec![];
-    s.dump_all_sexpr(&mut v).unwrap();
+    // s.dump_all_sexpr(&mut v).unwrap();
     s.dump_sexpr(expr!(s, "[2] ev [3] : $ 𝜒"), expr!(s, "_1"), &mut v);
     let res = String::from_utf8(v).unwrap();
 
     println!("proof of 𝜒: {res}");
     assert!(res.contains("(@ ax-mp (@ ax-mp mp2b.1 mp2b.2) mp2b.3)\n"));
-}
-
-// This new version of mm0 uses a robust "Data Pipeline" pattern that works
-// correctly with the manual ticking loop. Each step produces a unique data
-// atom that becomes the input for the next step in the pipeline.
-fn mm0() {
-    use std::time::Instant;
-    use mork::space::Space;
-    use mork::expr;
-
-    const P: &str = r#"
-    ; --- Data Pipeline Rules ---
-
-    ; Step 1: Decompose the main goal. This is the entry point.
-    ; THE FIX IS HERE: The pattern now correctly matches the nested application.
-    (exec decompose-goal
-      (, (goal (: (@ (@ $f $x) $y) $R)) (kb (: $f (-> $A (-> $B $R)))))
-      (, (subgoal-for $x $A) (subgoal-for $y $B)))
-
-    ; Step 2: Solve subgoals. These rules look for the intermediate products
-    ; from Step 1 and produce new, unique evidence atoms.
-    (exec solve-subgoal-t
-      (, (subgoal-for ⟨t⟩ term) (kb (: ⟨t⟩ term)))
-      (, (evidence-for t-is-term)))
-    (exec solve-subgoal-0
-      (, (subgoal-for ⟨0⟩ term) (kb (: ⟨0⟩ term)))
-      (, (evidence-for 0-is-term)))
-
-    ; Step 3: Synthesize the final proof. This rule waits for the unique
-    ; evidence products from Step 2 to appear.
-    (exec synthesize-final-proof
-      (, (evidence-for t-is-term) (evidence-for 0-is-term))
-      (, (ev (: (@ (@ ⟨+⟩ ⟨t⟩) ⟨0⟩) term))))
-
-    ; --- Knowledge Base & Goal ---
-    (kb (: ⟨+⟩ (-> term (-> term term))))
-    (kb (: ⟨t⟩ term))
-    (kb (: ⟨0⟩ term))
-    (goal (: (@ (@ ⟨+⟩ ⟨t⟩) ⟨0⟩) term))
-    "#;
-
-    println!("\n== mm0 (Data Pipeline Version - Corrected) ==");
-    let mut s = Space::new();
-    let t0 = Instant::now();
-    s.load_sexpr(P.as_bytes(), expr!(s, "$"), expr!(s, "_1")).unwrap();
-
-    let mut success = false;
-    let mut ticks = 0;
-    for i in 0..100 {
-        ticks = i + 1;
-        let n = s.metta_calculus(1);
-        
-        // Check for success inside the loop to stop as soon as the proof is found
-        let pat = expr!(s, "(ev (: (@ (@ ⟨+⟩ ⟨t⟩) ⟨0⟩) term))");
-        let mut buf = Vec::new();
-        s.dump_sexpr(pat, expr!(s, "_1"), &mut buf);
-        if !buf.is_empty() {
-            success = true;
-            break;
-        }
-
-        if n == 0 { break; } // Stop if the space has saturated
-    }
-    let elapsed = t0.elapsed();
-
-    // --- Analytics ---
-    println!("\n--- Analytics ---");
-    let mut full_dump_buffer = Vec::new();
-    s.dump_all_sexpr(&mut full_dump_buffer).unwrap();
-    let full_dump_string = String::from_utf8_lossy(&full_dump_buffer);
-    
-    // We can re-verify with the string search, but the loop break is the real test
-    let success_check = full_dump_string.contains("(ev (: (@ (@ ⟨+⟩ ⟨t⟩) ⟨0⟩) term))");
-
-    println!("Status: {}", if success_check { "✅ SUCCESS" } else { "❌ FAILURE" });
-    println!("Completed in {:?} after {} ticks.", elapsed, ticks);
-    println!("\n--- Full Final State Dump ---");
-    print!("{}", full_dump_string);
-    println!("----------------------------------------------------------");
-}
-
-
-fn mm1_b_tpl() {
-    use mork::expr;
-    use mork::space::Space;
-    use std::time::Instant;
-
-    const P: &str = r#"
-; ---------- KB: primitive symbols ----------
-(kb (: ⟨+⟩ (-> ⟨term⟩ (-> ⟨term⟩ ⟨term⟩))))
-(kb (: ⟨=⟩ (-> ⟨term⟩ (-> ⟨term⟩ ⟨wff⟩))))
-(kb (: ⟨t⟩ ⟨term⟩))
-(kb (: ⟨0⟩ ⟨term⟩))
-
-; ---------- KB: generalized constructors ----------
-(kb (: ⟨tpl⟩ (-> (: $x ⟨term⟩) (-> (: $y ⟨term⟩)
-                      (: (⟨+⟩ $x $y) ⟨term⟩)))))
-(kb (: ⟨weq⟩ (-> (: $x ⟨term⟩) (-> (: $y ⟨term⟩)
-                      (: (⟨=⟩ $x $y) ⟨wff⟩)))))
-
-; ---------- Deterministic pipeline rules ----------
-(exec tpl-apply-kb
-  (, (kb (: ⟨tpl⟩ (-> (: $x ⟨term⟩) (-> (: $y ⟨term⟩)
-                           (: (⟨+⟩ $x $y) ⟨term⟩)))))
-     (kb (: $x ⟨term⟩))
-     (kb (: $y ⟨term⟩)))
-  (, (ev (: (⟨+⟩ $x $y) ⟨term⟩))))
-
-(exec weq-apply-kb
-  (, (kb (: ⟨weq⟩ (-> (: $a ⟨term⟩) (-> (: $b ⟨term⟩)
-                           (: (⟨=⟩ $a $b) ⟨wff⟩)))))
-     (ev (: $lhs ⟨term⟩))
-     (kb (: $rhs ⟨term⟩)))
-  (, (ev (: (⟨=⟩ $lhs $rhs) ⟨wff⟩))))
-"#;
-
-    let t0 = Instant::now();
-    let mut s = Space::new();
-    s.load_sexpr(P.as_bytes(), expr!(s, "$"), expr!(s, "_1")).unwrap();
-
-    // Tick up to a small bound; break when saturated or when target appears.
-    let mut ticks = 0usize;
-    let target = "(ev (: (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) ⟨wff⟩))";
-    loop {
-        ticks += 1;
-        let n = s.metta_calculus(1);
-        // Check success by string membership over a full dump buffer.
-        let mut buf = Vec::new();
-        s.dump_all_sexpr(&mut buf).unwrap();
-        let out = String::from_utf8_lossy(&buf);
-        let done = out.contains(target);
-        if done || n == 0 || ticks >= 32 {
-            println!("\n== mm1_b_tpl: result = {} in {:?} after {} tick(s) ==",
-                     if done { "SUCCESS" } else { "INCOMPLETE" }, t0.elapsed(), ticks);
-            println!("\n--- Full Final State Dump ---");
-            print!("{out}");
-            break;
-        }
-    }
-}
-
-
-fn mm1_b2_tpl() {
-    use mork::expr;
-    use mork::space::Space;
-    use std::time::Instant;
-
-    const P: &str = r#"
-; ---------- KB: primitive symbols ----------
-(kb (: ⟨+⟩ (-> ⟨term⟩ (-> ⟨term⟩ ⟨term⟩))))
-(kb (: ⟨=⟩ (-> ⟨term⟩ (-> ⟨term⟩ ⟨wff⟩))))
-(kb (: ⟨t⟩ ⟨term⟩))
-(kb (: ⟨0⟩ ⟨term⟩))
-
-; ---------- KB: generalized constructors ----------
-(kb (: ⟨tpl⟩ (-> (: $x ⟨term⟩) (-> (: $y ⟨term⟩)
-                      (: (⟨+⟩ $x $y) ⟨term⟩)))))
-(kb (: ⟨weq⟩ (-> (: $x ⟨term⟩) (-> (: $y ⟨term⟩)
-                      (: (⟨=⟩ $x $y) ⟨wff⟩)))))
-
-; ---------- Small generalization ----------
-(exec lift
-  (, (kb (: $t $T)))
-  (, (ev (: $t $T))))
-
-(exec tpl-apply
-  (, (kb (: ⟨tpl⟩ (-> (: $x ⟨term⟩) (-> (: $y ⟨term⟩)
-                           (: (⟨+⟩ $x $y) ⟨term⟩)))))
-     (ev (: $x ⟨term⟩))
-     (ev (: $y ⟨term⟩)))
-  (, (ev (: (⟨+⟩ $x $y) ⟨term⟩))))
-
-(exec weq-apply
-  (, (kb (: ⟨weq⟩ (-> (: $a ⟨term⟩) (-> (: $b ⟨term⟩)
-                           (: (⟨=⟩ $a $b) ⟨wff⟩)))))
-     (ev (: $a ⟨term⟩))
-     (ev (: $b ⟨term⟩)))
-  (, (ev (: (⟨=⟩ $a $b) ⟨wff⟩))))
-"#;
-
-    let t0 = Instant::now();
-    let mut s = Space::new();
-    s.load_sexpr(P.as_bytes(), expr!(s, "$"), expr!(s, "_1")).unwrap();
-
-    let mut ticks = 0usize;
-    let target = "(ev (: (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) ⟨wff⟩))";
-    loop {
-        ticks += 1;
-        let n = s.metta_calculus(1);
-        let mut buf = Vec::new();
-        s.dump_all_sexpr(&mut buf).unwrap();
-        let out = String::from_utf8_lossy(&buf);
-        let done = out.contains(target);
-        if done || n == 0 || ticks >= 32 {
-            println!("\n== mm1_b2_tpl: result = {} in {:?} after {} tick(s) ==",
-                     if done { "SUCCESS" } else { "INCOMPLETE" }, t0.elapsed(), ticks);
-            println!("\n--- Full Final State Dump ---");
-            print!("{out}");
-            break;
-        }
-    }
-}
-
-fn mm1_forward() {
-    use mork::expr;
-    use mork::space::Space;
-    use std::time::Instant;
-
-    // Program: universe, typed constructors, axioms (curried), tiny pipeline, and final assembly.
-    const P: &str = r#"
-; ===== Universe & primitives =====
-(kb (: ⟨+⟩ (-> ⟨term⟩ (-> ⟨term⟩ ⟨term⟩))))
-(kb (: ⟨=⟩ (-> ⟨term⟩ (-> ⟨term⟩ ⟨wff⟩))))
-(kb (: ⟨t⟩ ⟨term⟩))
-(kb (: ⟨0⟩ ⟨term⟩))
-
-; ===== Generalized typed constructors =====
-(kb (: ⟨tpl⟩ (-> (: $x ⟨term⟩) (-> (: $y ⟨term⟩)
-                      (: (⟨+⟩ $x $y) ⟨term⟩)))))
-(kb (: ⟨weq⟩ (-> (: $x ⟨term⟩) (-> (: $y ⟨term⟩)
-                      (: (⟨=⟩ $x $y) ⟨wff⟩)))))
-(kb (: ⟨wim⟩ (-> (: $P ⟨wff⟩) (-> (: $Q ⟨wff⟩) 
-                      (: (⟨->⟩ $P $Q) ⟨wff⟩)))))
-
-; ===== Axioms encoded in "curried" form =====
-(kb (: ⟨a2-curry⟩ (-> (: $a ⟨term⟩)
-                  (: (⟨=⟩ (⟨+⟩ $a ⟨0⟩) $a) ⟨|-⟩))))
-(kb (: ⟨a1-curry⟩ (-> (: $a ⟨term⟩) (-> (: $b ⟨term⟩) (-> (: $c ⟨term⟩)
-                  (: (⟨->⟩ (⟨=⟩ $a $b) (⟨->⟩ (⟨=⟩ $a $c) (⟨=⟩ $b $c))) ⟨|-⟩))))))
-(kb (: ⟨mp-curry⟩ (-> (: $P ⟨wff⟩) (-> (: $Q ⟨wff⟩)
-                  (-> (: $P ⟨|-⟩) (-> (: (⟨->⟩ $P $Q) ⟨|-⟩) (: $Q ⟨|-⟩)))))))
-
-(kb (: ⟨a2⟩ (-> (: $a ⟨term⟩) (: (⟨=⟩ (⟨+⟩ $a ⟨0⟩) $a) ⟨|-⟩))))
-(kb (: ⟨a1⟩ (-> (: $a ⟨term⟩) (: $b ⟨term⟩) (: $c ⟨term⟩) (: (⟨->⟩ (⟨=⟩ $a $b) (⟨->⟩ (⟨=⟩ $a $c) (⟨=⟩ $b $c))) ⟨|-⟩))))
-(kb (: ⟨mp⟩ (-> (: $P ⟨wff⟩) (: $Q ⟨wff⟩) (: $P ⟨|-⟩) (: (⟨->⟩ $P $Q) ⟨|-⟩) (: $Q ⟨|-⟩))))
-
-; ===== Pipeline rules (unchanged names & behavior) =====
-
-; Lift KB typings into usable "ev" facts
-(exec lift (, (kb (: $t $T))) (, (ev (: $t $T))))
-
-; (+ x y) : term from x:term, y:term using tpl
-(exec tpl-apply
-  (, (ev (: $x ⟨term⟩))
-     (ev (: $y ⟨term⟩)))
-  (, (ev (: (⟨+⟩ $x $y) ⟨term⟩))))
-
-; (= a b) : wff from a:term, b:term using weq
-(exec weq-apply
-  (, (ev (: $a ⟨term⟩))
-     (ev (: $b ⟨term⟩)))
-  (, (ev (: (⟨=⟩ $a $b) ⟨wff⟩))))
-
-; Generic wim (implication constructor) rule
-(exec wim-apply
-  (, (ev (: $P ⟨wff⟩))
-     (ev (: $Q ⟨wff⟩)))
-  (, (ev (: (⟨->⟩ $P $Q) ⟨wff⟩))))
-
-; ⊢ ((t+0) = t) via a2-curry @ t
-(exec a2-instantiate-t
-  (, (ev (: $a ⟨term⟩)))
-  (, (ev (: (⟨=⟩ (⟨+⟩ $a ⟨0⟩) $a) ⟨|-⟩))))
-
-;(exec a1-instantiate-PtoQ
-;  (, (ev (: $a ⟨term⟩))
-;     (ev (: $bc ⟨term⟩)))
-;  (, (ev (: (⟨->⟩ (⟨=⟩ $a $bc)
-;               (⟨->⟩ (⟨=⟩ $a $bc)
-;                       (⟨=⟩ $bc $bc))) ⟨|-⟩))))
-
-;; Slower than hardcoding in $bc, but :D.
-(exec a1-instantiate-PtoQ
-  (, (ev (: $a ⟨term⟩))
-     (ev (: $b ⟨term⟩))
-     (ev (: $c ⟨term⟩)))
-  (, (ev (: (⟨->⟩ (⟨=⟩ $a $b)
-               (⟨->⟩ (⟨=⟩ $a $c)
-                       (⟨=⟩ $b $c))) ⟨|-⟩))))             
-
-; mp                       
-(exec derive-P-to-Q-direct3
-  (, (ev (: $P ⟨wff⟩))
-     (ev (: $IMP ⟨wff⟩))
-     (ev (: $P ⟨|-⟩))
-     (ev (: (⟨->⟩ $P $IMP) ⟨|-⟩)))
-  (, (ev (: $IMP ⟨|-⟩))))
-
-; Final assembly using mp-curry (same single step as the working mm1)
-; Inserting $P and $Q in appropriately.
-; $P :- (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩)
-; $Q :- (⟨=⟩ ⟨t⟩ ⟨t⟩)
-; Works now (with the P -> Q part)
-(exec assemble-final-proof-direct
-  (, (ev (: $P ⟨wff⟩))
-     (ev (: $Q ⟨wff⟩))
-     (ev (: $P ⟨|-⟩))
-     (ev (: (⟨->⟩ $P $Q) ⟨|-⟩)))
-  (, (ev (: $Q ⟨|-⟩))))
-"#;
-
-
-    let mut s = Space::new();
-    let t0 = Instant::now();
-    s.load_sexpr(P.as_bytes(), expr!(s, "$"), expr!(s, "_1")).unwrap();
-
-    // Targets (kept identical to mm1())
-    let want_ev_term_tplus0    = "(ev (: (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨term⟩))";
-    let want_ev_wff_p          = "(ev (: (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) ⟨wff⟩))";
-    let want_ev_wff_q          = "(ev (: (⟨=⟩ ⟨t⟩ ⟨t⟩) ⟨wff⟩))";
-    let want_ev_proof_p        = "(ev (: (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) ⟨|-⟩))";
-    let want_ev_proof_ptoq     = "(ev (: (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨=⟩ ⟨t⟩ ⟨t⟩)) ⟨|-⟩))";  
-    let want_ev_proof_ptoptoq  = "(ev (: (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨=⟩ ⟨t⟩ ⟨t⟩))) ⟨|-⟩))";
-    let want_final_evidence    = "(ev (: (⟨=⟩ ⟨t⟩ ⟨t⟩) ⟨|-⟩)";
-
-    println!("=== MM1 (forward): Proving ⊢ (t = t) ===");
-
-    let mut ticks = 0usize;
-    loop {
-        ticks += 1;
-        let n = s.metta_calculus(1);
-
-        let mut tmut = Vec::new();
-        // trying to get: (ev (: (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) ⟨|-⟩))
-        s.dump_sexpr(
-          expr!(s, "[2] ev [3] : [3] ⟨=⟩ $ $ ⟨|-⟩"),  // Pattern
-          expr!(s, "[2] ev [3] : [3] ⟨=⟩ _1 _2 ⟨|-⟩"),  // Template: full reconstruction  
-          &mut tmut
-      );
-
-        let result = String::from_utf8(tmut).unwrap();
-        println!("Query result (tick {}): {}", ticks, result);
-
-        for line in result.lines() {
-          let trimmed = line.trim();
-          if trimmed == want_ev_proof_p {
-              println!("✅ EXACT MATCH found at tick {}: {}", ticks, trimmed);
-              break;
-          }
-        }
-
-        let mut proof_ptoq_check = Vec::new();
-        s.dump_sexpr(
-            expr!(s, "[2] ev [3] : [3] ⟨->⟩ [3] ⟨=⟩ [3] ⟨+⟩ ⟨t⟩ ⟨0⟩ ⟨t⟩ [3] ⟨=⟩ ⟨t⟩ ⟨t⟩ ⟨|-⟩"),  // Pattern
-            expr!(s, "[2] ev [3] : [3] ⟨->⟩ [3] ⟨=⟩ [3] ⟨+⟩ ⟨t⟩ ⟨0⟩ ⟨t⟩ [3] ⟨=⟩ ⟨t⟩ ⟨t⟩ ⟨|-⟩"),  // Template: return same expression
-            &mut proof_ptoq_check
-        );
-
-        if !proof_ptoq_check.is_empty() {
-            let result = String::from_utf8(proof_ptoq_check).unwrap();
-            println!("🎯 Found P→Q proof: {}", result.trim());
-        } else {
-            println!("P→Q proof not found yet");
-        }
-
-        let mut buf = Vec::new();
-        s.dump_all_sexpr(&mut buf).unwrap();
-        let dump = String::from_utf8_lossy(&buf);
-
-        let line_has = |needle: &str| dump.lines().any(|l| l.trim_start().starts_with(needle));
-
-        let have_tplus0_term  = line_has(want_ev_term_tplus0);
-        let have_wff_p_ev     = line_has(want_ev_wff_p);
-        let have_wff_q_ev     = line_has(want_ev_wff_q);
-        let have_proof_p_ev   = line_has(want_ev_proof_p);
-        let have_ptoq_ev      = line_has(want_ev_proof_ptoq);
-        let have_ptoptoq_ev   = line_has(want_ev_proof_ptoptoq);
-        let have_final        = line_has(want_final_evidence);
-
-        if have_final {
-            println!("\n== mm1 (forward): ✅ SUCCESS in {:?} after {} tick(s) ==", t0.elapsed(), ticks);
-            println!("  (+ t 0) : term ............. {}", if have_tplus0_term { "✓" } else { "—" });
-            println!("  wff_P (ev) ................. {}", if have_wff_p_ev { "✓" } else { "—" });
-            println!("  wff_Q (ev) ................. {}", if have_wff_q_ev { "✓" } else { "—" });
-            println!("  proof_P (a2@t, ev) ......... {}", if have_proof_p_ev { "✓" } else { "—" });
-            println!("  proof_PtoQ (a1, ev) ........ {}", if have_ptoq_ev { "✓" } else { "—" });
-            println!("  proof_PtoPtoQ (a1, ev) ..... {}", if have_ptoptoq_ev { "✓" } else { "—" });
-
-            println!("\n--- Final evidence confirmation ---");
-            println!("✅ Successfully derived ⊢ (t = t)");
-
-            println!("\n--- Full Final State Dump ---");
-            print!("{dump}");
-            break;
-        }
-
-        if n == 0 || ticks >= 128 {
-            println!("\n== mm1 (forward): — FAILURE in {:?} after {} tick(s) ==", t0.elapsed(), ticks);
-            println!("  (+ t 0) : term ............. {}", if have_tplus0_term { "✓" } else { "—" });
-            println!("  wff_P (ev) ................. {}", if have_wff_p_ev { "✓" } else { "—" });
-            println!("  wff_Q (ev) ................. {}", if have_wff_q_ev { "✓" } else { "—" });
-            println!("  proof_P (a2@t, ev) ......... {}", if have_proof_p_ev { "✓" } else { "—" });
-            println!("  proof_PtoQ (a1, ev) ........ {}", if have_ptoq_ev { "✓" } else { "—" });
-            println!("  proof_PtoPtoQ (a1, ev) ..... {}", if have_ptoptoq_ev { "✓" } else { "—" });
-
-            if !have_final {
-                println!("\n❌ Failed to derive ⊢ (t = t)");
-            }
-
-            println!("\n--- Full Final State Dump ---");
-            print!("{dump}");
-            break;
-        }
-    }
 }
 
 fn bc3() {
@@ -2117,6 +1713,208 @@ fn mm1_forward() {
 }
 
 
+// This new version of mm0 uses a robust "Data Pipeline" pattern that works
+// correctly with the manual ticking loop. Each step produces a unique data
+// atom that becomes the input for the next step in the pipeline.
+fn mm0() {
+    use std::time::Instant;
+    use mork::space::Space;
+    use mork::expr;
+
+    const P: &str = r#"
+    ; --- Data Pipeline Rules ---
+
+    ; Step 1: Decompose the main goal. This is the entry point.
+    ; THE FIX IS HERE: The pattern now correctly matches the nested application.
+    (exec decompose-goal
+      (, (goal (: (@ (@ $f $x) $y) $R)) (kb (: $f (-> $A (-> $B $R)))))
+      (, (subgoal-for $x $A) (subgoal-for $y $B)))
+
+    ; Step 2: Solve subgoals. These rules look for the intermediate products
+    ; from Step 1 and produce new, unique evidence atoms.
+    (exec solve-subgoal-t
+      (, (subgoal-for ⟨t⟩ term) (kb (: ⟨t⟩ term)))
+      (, (evidence-for t-is-term)))
+    (exec solve-subgoal-0
+      (, (subgoal-for ⟨0⟩ term) (kb (: ⟨0⟩ term)))
+      (, (evidence-for 0-is-term)))
+
+    ; Step 3: Synthesize the final proof. This rule waits for the unique
+    ; evidence products from Step 2 to appear.
+    (exec synthesize-final-proof
+      (, (evidence-for t-is-term) (evidence-for 0-is-term))
+      (, (ev (: (@ (@ ⟨+⟩ ⟨t⟩) ⟨0⟩) term))))
+
+    ; --- Knowledge Base & Goal ---
+    (kb (: ⟨+⟩ (-> term (-> term term))))
+    (kb (: ⟨t⟩ term))
+    (kb (: ⟨0⟩ term))
+    (goal (: (@ (@ ⟨+⟩ ⟨t⟩) ⟨0⟩) term))
+    "#;
+
+    println!("\n== mm0 (Data Pipeline Version - Corrected) ==");
+    let mut s = Space::new();
+    let t0 = Instant::now();
+    s.load_sexpr(P.as_bytes(), expr!(s, "$"), expr!(s, "_1")).unwrap();
+
+    let mut success = false;
+    let mut ticks = 0;
+    for i in 0..100 {
+        ticks = i + 1;
+        let n = s.metta_calculus(1);
+        
+        // Check for success inside the loop to stop as soon as the proof is found
+        let pat = expr!(s, "(ev (: (@ (@ ⟨+⟩ ⟨t⟩) ⟨0⟩) term))");
+        let mut buf = Vec::new();
+        s.dump_sexpr(pat, expr!(s, "_1"), &mut buf);
+        if !buf.is_empty() {
+            success = true;
+            break;
+        }
+
+        if n == 0 { break; } // Stop if the space has saturated
+    }
+    let elapsed = t0.elapsed();
+
+    // --- Analytics ---
+    println!("\n--- Analytics ---");
+    let mut full_dump_buffer = Vec::new();
+    s.dump_all_sexpr(&mut full_dump_buffer).unwrap();
+    let full_dump_string = String::from_utf8_lossy(&full_dump_buffer);
+    
+    // We can re-verify with the string search, but the loop break is the real test
+    let success_check = full_dump_string.contains("(ev (: (@ (@ ⟨+⟩ ⟨t⟩) ⟨0⟩) term))");
+
+    println!("Status: {}", if success_check { "✅ SUCCESS" } else { "❌ FAILURE" });
+    println!("Completed in {:?} after {} ticks.", elapsed, ticks);
+    println!("\n--- Full Final State Dump ---");
+    print!("{}", full_dump_string);
+    println!("----------------------------------------------------------");
+}
+
+
+fn mm1_b_tpl() {
+    use mork::expr;
+    use mork::space::Space;
+    use std::time::Instant;
+
+    const P: &str = r#"
+; ---------- KB: primitive symbols ----------
+(kb (: ⟨+⟩ (-> ⟨term⟩ (-> ⟨term⟩ ⟨term⟩))))
+(kb (: ⟨=⟩ (-> ⟨term⟩ (-> ⟨term⟩ ⟨wff⟩))))
+(kb (: ⟨t⟩ ⟨term⟩))
+(kb (: ⟨0⟩ ⟨term⟩))
+
+; ---------- KB: generalized constructors ----------
+(kb (: ⟨tpl⟩ (-> (: $x ⟨term⟩) (-> (: $y ⟨term⟩)
+                      (: (⟨+⟩ $x $y) ⟨term⟩)))))
+(kb (: ⟨weq⟩ (-> (: $x ⟨term⟩) (-> (: $y ⟨term⟩)
+                      (: (⟨=⟩ $x $y) ⟨wff⟩)))))
+
+; ---------- Deterministic pipeline rules ----------
+(exec tpl-apply-kb
+  (, (kb (: ⟨tpl⟩ (-> (: $x ⟨term⟩) (-> (: $y ⟨term⟩)
+                           (: (⟨+⟩ $x $y) ⟨term⟩)))))
+     (kb (: $x ⟨term⟩))
+     (kb (: $y ⟨term⟩)))
+  (, (ev (: (⟨+⟩ $x $y) ⟨term⟩))))
+
+(exec weq-apply-kb
+  (, (kb (: ⟨weq⟩ (-> (: $a ⟨term⟩) (-> (: $b ⟨term⟩)
+                           (: (⟨=⟩ $a $b) ⟨wff⟩)))))
+     (ev (: $lhs ⟨term⟩))
+     (kb (: $rhs ⟨term⟩)))
+  (, (ev (: (⟨=⟩ $lhs $rhs) ⟨wff⟩))))
+"#;
+
+    let t0 = Instant::now();
+    let mut s = Space::new();
+    s.load_sexpr(P.as_bytes(), expr!(s, "$"), expr!(s, "_1")).unwrap();
+
+    // Tick up to a small bound; break when saturated or when target appears.
+    let mut ticks = 0usize;
+    let target = "(ev (: (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) ⟨wff⟩))";
+    loop {
+        ticks += 1;
+        let n = s.metta_calculus(1);
+        // Check success by string membership over a full dump buffer.
+        let mut buf = Vec::new();
+        s.dump_all_sexpr(&mut buf).unwrap();
+        let out = String::from_utf8_lossy(&buf);
+        let done = out.contains(target);
+        if done || n == 0 || ticks >= 32 {
+            println!("\n== mm1_b_tpl: result = {} in {:?} after {} tick(s) ==",
+                     if done { "SUCCESS" } else { "INCOMPLETE" }, t0.elapsed(), ticks);
+            println!("\n--- Full Final State Dump ---");
+            print!("{out}");
+            break;
+        }
+    }
+}
+
+
+fn mm1_b2_tpl() {
+    use mork::expr;
+    use mork::space::Space;
+    use std::time::Instant;
+
+    const P: &str = r#"
+; ---------- KB: primitive symbols ----------
+(kb (: ⟨+⟩ (-> ⟨term⟩ (-> ⟨term⟩ ⟨term⟩))))
+(kb (: ⟨=⟩ (-> ⟨term⟩ (-> ⟨term⟩ ⟨wff⟩))))
+(kb (: ⟨t⟩ ⟨term⟩))
+(kb (: ⟨0⟩ ⟨term⟩))
+
+; ---------- KB: generalized constructors ----------
+(kb (: ⟨tpl⟩ (-> (: $x ⟨term⟩) (-> (: $y ⟨term⟩)
+                      (: (⟨+⟩ $x $y) ⟨term⟩)))))
+(kb (: ⟨weq⟩ (-> (: $x ⟨term⟩) (-> (: $y ⟨term⟩)
+                      (: (⟨=⟩ $x $y) ⟨wff⟩)))))
+
+; ---------- Small generalization ----------
+(exec lift
+  (, (kb (: $t $T)))
+  (, (ev (: $t $T))))
+
+(exec tpl-apply
+  (, (kb (: ⟨tpl⟩ (-> (: $x ⟨term⟩) (-> (: $y ⟨term⟩)
+                           (: (⟨+⟩ $x $y) ⟨term⟩)))))
+     (ev (: $x ⟨term⟩))
+     (ev (: $y ⟨term⟩)))
+  (, (ev (: (⟨+⟩ $x $y) ⟨term⟩))))
+
+(exec weq-apply
+  (, (kb (: ⟨weq⟩ (-> (: $a ⟨term⟩) (-> (: $b ⟨term⟩)
+                           (: (⟨=⟩ $a $b) ⟨wff⟩)))))
+     (ev (: $a ⟨term⟩))
+     (ev (: $b ⟨term⟩)))
+  (, (ev (: (⟨=⟩ $a $b) ⟨wff⟩))))
+"#;
+
+    let t0 = Instant::now();
+    let mut s = Space::new();
+    s.load_sexpr(P.as_bytes(), expr!(s, "$"), expr!(s, "_1")).unwrap();
+
+    let mut ticks = 0usize;
+    let target = "(ev (: (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) ⟨wff⟩))";
+    loop {
+        ticks += 1;
+        let n = s.metta_calculus(1);
+        let mut buf = Vec::new();
+        s.dump_all_sexpr(&mut buf).unwrap();
+        let out = String::from_utf8_lossy(&buf);
+        let done = out.contains(target);
+        if done || n == 0 || ticks >= 32 {
+            println!("\n== mm1_b2_tpl: result = {} in {:?} after {} tick(s) ==",
+                     if done { "SUCCESS" } else { "INCOMPLETE" }, t0.elapsed(), ticks);
+            println!("\n--- Full Final State Dump ---");
+            print!("{out}");
+            break;
+        }
+    }
+}
+
+
 use std::ffi::OsStr;
 use std::ffi::OsString;
 use serde::{Serialize, Deserialize};
@@ -2165,6 +1963,9 @@ fn main() {
 
     // pddl_ts("/home/adam/Projects/ThesisPython/cache/gripper-strips/transition_systems/");
     // stv_roman();
+    // mm0();
+    // mm1_b_tpl();
+    // mm1_b2_tpl();
     // mm1_forward();
     // return;
 
