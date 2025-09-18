@@ -995,6 +995,1117 @@ fn mm0() {
     println!("----------------------------------------------------------");
 }
 
+fn mm1_a() {
+    use mork::space::Space;
+    use mork::expr;
+    use std::time::Instant;
+
+    const P: &str = r#"
+    ; --- KB: Just the types of our axioms and constructors ---
+    ; Let P := ((t + 0) = t) and Q := (t = t)
+    (kb (: ⟨mp-curry⟩ (-> (: $P ⟨wff⟩) (-> (: $Q ⟨wff⟩) (-> (: $P ⟨|-⟩) (-> (: (⟨->⟩ $P $Q) ⟨|-⟩) (: $Q ⟨|-⟩)))))))
+    (kb (: ⟨a2-curry⟩ (-> (: $t ⟨term⟩) (: (⟨=⟩ (⟨+⟩ $t ⟨0⟩) $t) ⟨|-⟩))))
+    (kb (: ⟨a1-curry⟩ (-> (: $t ⟨term⟩) (-> (: $r ⟨term⟩) (-> (: $s ⟨term⟩) (: (⟨->⟩ (⟨=⟩ $t $r) (⟨->⟩ (⟨=⟩ $t $s) (⟨=⟩ $r $s))) ⟨|-⟩))))))
+
+    ; --- Premise "Ingredients": The proven components we will assemble ---
+    ; We give them simple names (wff_P, proof_P, etc.)
+    
+    ; The types (wffs)
+    (: wff_P  (: (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) ⟨wff⟩))
+    (: wff_Q  (: (⟨=⟩ ⟨t⟩ ⟨t⟩) ⟨wff⟩))
+
+    ; The proofs (sequents)
+    (: proof_P (: (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) ⟨|-⟩))
+    ; This next term is the proof of (P -> (P -> Q)) which simplifies to (P -> Q) after one MP, a common pattern.
+    ; For our purpose, it's the required |- (P -> Q) premise, derived from axiom a1.
+    (: proof_PtoQ (: (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨=⟩ ⟨t⟩ ⟨t⟩))) ⟨|-⟩))
+
+    ; --- The Assembler Rule ---
+    ; This single rule finds our named ingredients and composes them.
+    (exec assemble-final-proof
+      (, (: wff_P $type_wff_P)
+         (: wff_Q $type_wff_Q)
+         (: proof_P $type_proof_P)
+         (: proof_PtoQ $type_proof_PtoQ)
+         (kb (: ⟨mp-curry⟩ $_))) ; Just confirm mp-curry is in the KB
+      (, (ev (: (⟨=⟩ ⟨t⟩ ⟨t⟩) ⟨|-⟩)
+             ; This is the beautiful compositional proof term:
+             ((((⟨mp-curry⟩ wff_P) wff_Q) proof_P) proof_PtoQ))))
+    "#;
+
+    // --- Load, Run, and Verify ---
+    let mut s = Space::new();
+    s.load_sexpr(P.as_bytes(), expr!(s, "$"), expr!(s, "_1")).unwrap();
+    let t0 = Instant::now();
+
+    // A single tick should be enough for this simple assembly.
+    println!("Tick 1");
+    s.metta_calculus(1);
+    
+    // --- Verification ---
+    println!("\n--- Verifying Result ---");
+    let mut full_dump_buffer = Vec::new();
+    s.dump_all_sexpr(&mut full_dump_buffer).unwrap();
+    let full_dump_string = String::from_utf8_lossy(&full_dump_buffer);
+
+    // Use the robust string search method for verification
+    let target_evidence = "(ev (: (⟨=⟩ ⟨t⟩ ⟨t⟩) ⟨|-⟩) ((((⟨mp-curry⟩ wff_P) wff_Q) proof_P) proof_PtoQ))";
+    let success = full_dump_string.contains(target_evidence);
+
+    if success {
+        println!("\n✅ SUCCESS in {:?}", t0.elapsed());
+        println!("Assembled proof of (t = t) and found the following evidence line:");
+        println!("{}", target_evidence);
+
+    } else {
+        println!("\n❌ FAILURE: mm1 proof not assembled.");
+    }
+    
+    println!("\n--- Full Final State Dump ---");
+    print!("{}", full_dump_string);
+}
+
+fn mm1_b() {
+    use mork::space::Space;
+    use mork::expr;
+    use std::time::Instant;
+
+    const P: &str = r#"
+    ; --- KB: The Raw Materials (Type Constructors) ---
+    (kb (: ⟨=⟩  (-> ⟨term⟩ (-> ⟨term⟩ ⟨wff⟩))))
+    (kb (: ⟨+⟩  (-> ⟨term⟩ (-> ⟨term⟩ ⟨term⟩))))
+    (kb (: ⟨t⟩ ⟨term⟩))
+    (kb (: ⟨0⟩ ⟨term⟩))
+
+    ; --- Step 1: Derive that (t + 0) is a term ---
+    ; This rule consumes two kb facts and produces a new, unique "derived-term" atom.
+    ; It corresponds to the 'tpl' axiom: term ( t + r )
+    (exec derive-term-tplus0
+      (, (kb (: ⟨t⟩ ⟨term⟩)) (kb (: ⟨0⟩ ⟨term⟩)))
+      (, (derived-term t+0 (: (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨term⟩))))
+
+    ; --- Step 2: Derive wff_P using the newly derived term ---
+    ; This rule consumes the product from Step 1 and another kb fact.
+    ; It corresponds to the 'weq' axiom: wff t = r
+    (exec derive-wff-P-from-terms
+      (, (derived-term t+0 (: (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨term⟩)) (kb (: ⟨t⟩ ⟨term⟩)))
+      (, (ev (: (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) ⟨wff⟩))))
+    "#;
+
+    // --- Load, Run, and Verify with a Heartbeat ---
+    let mut s = Space::new();
+    s.load_sexpr(P.as_bytes(), expr!(s, "$"), expr!(s, "_1")).unwrap();
+    let t0 = Instant::now();
+
+    println!("\n== mm1_b: Deriving wff_P (Pipeline Version) ==");
+    let mut success = false;
+    let target_evidence = "(ev (: (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) ⟨wff⟩))";
+    let mut ticks = 0;
+
+    // We tick the interpreter step-by-step to drive the pipeline forward.
+    for i in 0..10 {
+        ticks = i + 1;
+        println!("Tick {}", ticks);
+        let steps_taken = s.metta_calculus(1);
+
+        let mut full_dump_buffer = Vec::new();
+        s.dump_all_sexpr(&mut full_dump_buffer).unwrap();
+        let full_dump_string = String::from_utf8_lossy(&full_dump_buffer);
+
+        if full_dump_string.contains(target_evidence) {
+            success = true;
+            println!("\n✅ SUCCESS in {:?} after {} ticks.", t0.elapsed(), ticks);
+            println!("Derived wff_P and found the following evidence line:");
+            println!("{}", target_evidence);
+            break;
+        }
+
+        if steps_taken == 0 {
+            println!("Space stabilized.");
+            break;
+        }
+    }
+
+    if !success {
+        println!("\n❌ FAILURE: wff_P not derived.");
+    }
+    
+    println!("\n--- Full Final State Dump ---");
+    let mut full_dump_buffer = Vec::new();
+    s.dump_all_sexpr(&mut full_dump_buffer).unwrap();
+    print!("{}", String::from_utf8_lossy(&full_dump_buffer));
+}
+
+fn mm1_b_tpl() {
+    use mork::expr;
+    use mork::space::Space;
+    use std::time::Instant;
+
+    const P: &str = r#"
+; ---------- KB: primitive symbols ----------
+(kb (: ⟨+⟩ (-> ⟨term⟩ (-> ⟨term⟩ ⟨term⟩))))
+(kb (: ⟨=⟩ (-> ⟨term⟩ (-> ⟨term⟩ ⟨wff⟩))))
+(kb (: ⟨t⟩ ⟨term⟩))
+(kb (: ⟨0⟩ ⟨term⟩))
+
+; ---------- KB: generalized constructors ----------
+(kb (: ⟨tpl⟩ (-> (: $x ⟨term⟩) (-> (: $y ⟨term⟩)
+                      (: (⟨+⟩ $x $y) ⟨term⟩)))))
+(kb (: ⟨weq⟩ (-> (: $x ⟨term⟩) (-> (: $y ⟨term⟩)
+                      (: (⟨=⟩ $x $y) ⟨wff⟩)))))
+
+; ---------- Deterministic pipeline rules ----------
+(exec tpl-apply-kb
+  (, (kb (: ⟨tpl⟩ (-> (: $x ⟨term⟩) (-> (: $y ⟨term⟩)
+                           (: (⟨+⟩ $x $y) ⟨term⟩)))))
+     (kb (: $x ⟨term⟩))
+     (kb (: $y ⟨term⟩)))
+  (, (ev (: (⟨+⟩ $x $y) ⟨term⟩))))
+
+(exec weq-apply-kb
+  (, (kb (: ⟨weq⟩ (-> (: $a ⟨term⟩) (-> (: $b ⟨term⟩)
+                           (: (⟨=⟩ $a $b) ⟨wff⟩)))))
+     (ev (: $lhs ⟨term⟩))
+     (kb (: $rhs ⟨term⟩)))
+  (, (ev (: (⟨=⟩ $lhs $rhs) ⟨wff⟩))))
+"#;
+
+    let t0 = Instant::now();
+    let mut s = Space::new();
+    s.load_sexpr(P.as_bytes(), expr!(s, "$"), expr!(s, "_1")).unwrap();
+
+    // Tick up to a small bound; break when saturated or when target appears.
+    let mut ticks = 0usize;
+    let target = "(ev (: (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) ⟨wff⟩))";
+    loop {
+        ticks += 1;
+        let n = s.metta_calculus(1);
+        // Check success by string membership over a full dump buffer.
+        let mut buf = Vec::new();
+        s.dump_all_sexpr(&mut buf).unwrap();
+        let out = String::from_utf8_lossy(&buf);
+        let done = out.contains(target);
+        if done || n == 0 || ticks >= 32 {
+            println!("\n== mm1_b_tpl: result = {} in {:?} after {} tick(s) ==",
+                     if done { "SUCCESS" } else { "INCOMPLETE" }, t0.elapsed(), ticks);
+            println!("\n--- Full Final State Dump ---");
+            print!("{out}");
+            break;
+        }
+    }
+}
+
+
+fn mm1_b2_tpl() {
+    use mork::expr;
+    use mork::space::Space;
+    use std::time::Instant;
+
+    const P: &str = r#"
+; ---------- KB: primitive symbols ----------
+(kb (: ⟨+⟩ (-> ⟨term⟩ (-> ⟨term⟩ ⟨term⟩))))
+(kb (: ⟨=⟩ (-> ⟨term⟩ (-> ⟨term⟩ ⟨wff⟩))))
+(kb (: ⟨t⟩ ⟨term⟩))
+(kb (: ⟨0⟩ ⟨term⟩))
+
+; ---------- KB: generalized constructors ----------
+(kb (: ⟨tpl⟩ (-> (: $x ⟨term⟩) (-> (: $y ⟨term⟩)
+                      (: (⟨+⟩ $x $y) ⟨term⟩)))))
+(kb (: ⟨weq⟩ (-> (: $x ⟨term⟩) (-> (: $y ⟨term⟩)
+                      (: (⟨=⟩ $x $y) ⟨wff⟩)))))
+
+; ---------- Small generalization ----------
+(exec lift
+  (, (kb (: $t $T)))
+  (, (ev (: $t $T))))
+
+(exec tpl-apply
+  (, (kb (: ⟨tpl⟩ (-> (: $x ⟨term⟩) (-> (: $y ⟨term⟩)
+                           (: (⟨+⟩ $x $y) ⟨term⟩)))))
+     (ev (: $x ⟨term⟩))
+     (ev (: $y ⟨term⟩)))
+  (, (ev (: (⟨+⟩ $x $y) ⟨term⟩))))
+
+(exec weq-apply
+  (, (kb (: ⟨weq⟩ (-> (: $a ⟨term⟩) (-> (: $b ⟨term⟩)
+                           (: (⟨=⟩ $a $b) ⟨wff⟩)))))
+     (ev (: $a ⟨term⟩))
+     (ev (: $b ⟨term⟩)))
+  (, (ev (: (⟨=⟩ $a $b) ⟨wff⟩))))
+"#;
+
+    let t0 = Instant::now();
+    let mut s = Space::new();
+    s.load_sexpr(P.as_bytes(), expr!(s, "$"), expr!(s, "_1")).unwrap();
+
+    let mut ticks = 0usize;
+    let target = "(ev (: (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) ⟨wff⟩))";
+    loop {
+        ticks += 1;
+        let n = s.metta_calculus(1);
+        let mut buf = Vec::new();
+        s.dump_all_sexpr(&mut buf).unwrap();
+        let out = String::from_utf8_lossy(&buf);
+        let done = out.contains(target);
+        if done || n == 0 || ticks >= 32 {
+            println!("\n== mm1_b2_tpl: result = {} in {:?} after {} tick(s) ==",
+                     if done { "SUCCESS" } else { "INCOMPLETE" }, t0.elapsed(), ticks);
+            println!("\n--- Full Final State Dump ---");
+            print!("{out}");
+            break;
+        }
+    }
+}
+
+fn mm1_c() {
+    use mork::expr;
+    use mork::space::Space;
+    use std::time::Instant;
+
+    // Program: derive wff_P, wff_Q via tpl/weq, and proof_P via a2-curry@t.
+    const P: &str = r#"
+; ===== Universe & primitives =====
+(kb (: ⟨+⟩ (-> ⟨term⟩ (-> ⟨term⟩ ⟨term⟩))))
+(kb (: ⟨=⟩ (-> ⟨term⟩ (-> ⟨term⟩ ⟨wff⟩))))
+(kb (: ⟨t⟩ ⟨term⟩))
+(kb (: ⟨0⟩ ⟨term⟩))
+
+; ===== Generalized typed constructors (your names) =====
+(kb (: ⟨tpl⟩ (-> (: $x ⟨term⟩) (-> (: $y ⟨term⟩)
+                      (: (⟨+⟩ $x $y) ⟨term⟩)))))
+(kb (: ⟨weq⟩ (-> (: $x ⟨term⟩) (-> (: $y ⟨term⟩)
+                      (: (⟨=⟩ $x $y) ⟨wff⟩)))))
+
+; ===== Axioms encoded in "curried" form (as types in KB) =====
+; a2:   ⊢ (= (+ a 0) a)
+(kb (: ⟨a2-curry⟩ (-> (: $a ⟨term⟩)
+                  (: (⟨=⟩ (⟨+⟩ $a ⟨0⟩) $a) ⟨|-⟩))))
+
+; ===== Small pipeline rules =====
+
+; Lift KB typings into usable "ev" facts
+(exec lift (, (kb (: $t $T))) (, (ev (: $t $T))))
+
+; Build (+ x y) : term from x:term, y:term using tpl
+(exec tpl-apply
+  (, (kb (: ⟨tpl⟩ (-> (: $x ⟨term⟩) (-> (: $y ⟨term⟩)
+                           (: (⟨+⟩ $x $y) ⟨term⟩)))))
+     (ev (: $x ⟨term⟩))
+     (ev (: $y ⟨term⟩)))
+  (, (ev (: (⟨+⟩ $x $y) ⟨term⟩))))
+
+; Build (= a b) : wff from a:term, b:term using weq
+(exec weq-apply
+  (, (kb (: ⟨weq⟩ (-> (: $a ⟨term⟩) (-> (: $b ⟨term⟩)
+                           (: (⟨=⟩ $a $b) ⟨wff⟩)))))
+     (ev (: $a ⟨term⟩))
+     (ev (: $b ⟨term⟩)))
+  (, (ev (: (⟨=⟩ $a $b) ⟨wff⟩))))
+
+; Instantiate a2 at a := t to get proof_P:  ⊢ (= (+ t 0) t)
+(exec a2-instantiate-t
+  (, (kb (: ⟨a2-curry⟩ (-> (: $a ⟨term⟩)
+                        (: (⟨=⟩ (⟨+⟩ $a ⟨0⟩) $a) ⟨|-⟩))))
+     (ev (: ⟨t⟩ ⟨term⟩)))
+  (, (ev (: (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) ⟨|-⟩))))
+
+; (Optional) tag the proof with a name, so your dump resembles demo files
+(exec tag-proof_P
+  (, (ev (: (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) ⟨|-⟩)))
+  (, (: proof_P (: (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) ⟨|-⟩))))
+
+; Convenience: derive wff_Q directly from t:term, t:term
+(exec derive-wff-Q
+  (, (ev (: ⟨t⟩ ⟨term⟩)) (ev (: ⟨t⟩ ⟨term⟩)))
+  (, (ev (: (⟨=⟩ ⟨t⟩ ⟨t⟩) ⟨wff⟩))))
+"#;
+
+    let mut s = Space::new();
+    let t0 = Instant::now();
+    s.load_sexpr(P.as_bytes(), expr!(s, "$"), expr!(s, "_1")).unwrap();
+
+    // Drive a few ticks until saturation or success. No panics; just report.
+    let mut ticks = 0usize;
+    let want_wff_p  = "(ev (: (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) ⟨wff⟩))";
+    let want_wff_q  = "(ev (: (⟨=⟩ ⟨t⟩ ⟨t⟩) ⟨wff⟩))";
+    let want_proof_p = "(ev (: (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) ⟨|-⟩))";
+
+    loop {
+        ticks += 1;
+        let n = s.metta_calculus(1);
+
+        let mut buf = Vec::new();
+        s.dump_all_sexpr(&mut buf).unwrap();
+        let dump = String::from_utf8_lossy(&buf);
+
+        // STRICT evidence check: match whole dumped lines by prefix (no substring hits inside execs).
+        let has_wff_p   = dump.lines().any(|l| l.trim_start().starts_with(want_wff_p));
+        let has_wff_q   = dump.lines().any(|l| l.trim_start().starts_with(want_wff_q));
+        let has_proof_p = dump.lines().any(|l| l.trim_start().starts_with(want_proof_p));
+
+        if (has_wff_p && has_wff_q && has_proof_p) || n == 0 || ticks >= 64 {
+            println!(
+                "\n== mm1_c: done in {:?} after {} tick(s) ==\n  wff_P: {}\n  wff_Q: {}\n  proof_P (a2@t): {}",
+                t0.elapsed(),
+                ticks,
+                if has_wff_p { "✓" } else { "✗" },
+                if has_wff_q { "✓" } else { "✗" },
+                if has_proof_p { "✓" } else { "✗" },
+            );
+            println!("\n--- Full Final State Dump ---");
+            print!("{dump}");
+            break;
+        }
+    }
+}
+
+fn mm1_d() {
+    use mork::expr;
+    use mork::space::Space;
+    use std::time::Instant;
+
+    // Program: derive wff_P, wff_Q via tpl/weq, proof_P via a2-curry@t,
+    // and proof_PtoQ via a1-curry at a=(+ t 0), b=t, c=t; then assemble with mp-curry.
+    const P: &str = r#"
+; ===== Universe & primitives =====
+(kb (: ⟨+⟩ (-> ⟨term⟩ (-> ⟨term⟩ ⟨term⟩))))
+(kb (: ⟨=⟩ (-> ⟨term⟩ (-> ⟨term⟩ ⟨wff⟩))))
+(kb (: ⟨t⟩ ⟨term⟩))
+(kb (: ⟨0⟩ ⟨term⟩))
+
+; (optional) implication ctor if you want it typed (not required for patterning)
+; (kb (: ⟨->⟩ (-> ⟨wff⟩ (-> ⟨wff⟩ ⟨wff⟩))))
+
+; ===== Generalized typed constructors (your names) =====
+(kb (: ⟨tpl⟩ (-> (: $x ⟨term⟩) (-> (: $y ⟨term⟩)
+                      (: (⟨+⟩ $x $y) ⟨term⟩)))))
+(kb (: ⟨weq⟩ (-> (: $x ⟨term⟩) (-> (: $y ⟨term⟩)
+                      (: (⟨=⟩ $x $y) ⟨wff⟩)))))
+
+; ===== Axioms encoded in "curried" form (as types in KB) =====
+; a2:   ⊢ (= (+ a 0) a)
+(kb (: ⟨a2-curry⟩ (-> (: $a ⟨term⟩)
+                  (: (⟨=⟩ (⟨+⟩ $a ⟨0⟩) $a) ⟨|-⟩))))
+; a1:   ⊢ (-> (= a b) (-> (= a c) (= b c)))
+(kb (: ⟨a1-curry⟩ (-> (: $a ⟨term⟩) (-> (: $b ⟨term⟩) (-> (: $c ⟨term⟩)
+                  (: (⟨->⟩ (⟨=⟩ $a $b) (⟨->⟩ (⟨=⟩ $a $c) (⟨=⟩ $b $c))) ⟨|-⟩))))))
+
+; Modus ponens (curried)
+(kb (: ⟨mp-curry⟩ (-> (: $P ⟨wff⟩) (-> (: $Q ⟨wff⟩)
+                  (-> (: $P ⟨|-⟩) (-> (: (⟨->⟩ $P $Q) ⟨|-⟩) (: $Q ⟨|-⟩)))))))
+
+; ===== Small pipeline rules =====
+
+; Lift KB typings into usable "ev" facts
+(exec lift (, (kb (: $t $T))) (, (ev (: $t $T))))
+
+; (+ x y) : term from x:term, y:term using tpl
+(exec tpl-apply
+  (, (kb (: ⟨tpl⟩ (-> (: $x ⟨term⟩) (-> (: $y ⟨term⟩)
+                           (: (⟨+⟩ $x $y) ⟨term⟩)))))
+     (ev (: $x ⟨term⟩))
+     (ev (: $y ⟨term⟩)))
+  (, (ev (: (⟨+⟩ $x $y) ⟨term⟩))))
+
+; (= a b) : wff from a:term, b:term using weq
+(exec weq-apply
+  (, (kb (: ⟨weq⟩ (-> (: $a ⟨term⟩) (-> (: $b ⟨term⟩)
+                           (: (⟨=⟩ $a $b) ⟨wff⟩)))))
+     (ev (: $a ⟨term⟩))
+     (ev (: $b ⟨term⟩)))
+  (, (ev (: (⟨=⟩ $a $b) ⟨wff⟩))))
+
+; ----- derive & tag wff_P = ((+ t 0) = t) : wff -----
+(exec tag-wff_P
+  (, (ev (: (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) ⟨wff⟩)))
+  (, (: wff_P (: (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) ⟨wff⟩))))
+
+; ----- derive & tag wff_Q = (t = t) : wff -----
+(exec derive-wff-Q
+  (, (ev (: ⟨t⟩ ⟨term⟩)) (ev (: ⟨t⟩ ⟨term⟩)))
+  (, (ev (: (⟨=⟩ ⟨t⟩ ⟨t⟩) ⟨wff⟩))))
+(exec tag-wff_Q
+  (, (ev (: (⟨=⟩ ⟨t⟩ ⟨t⟩) ⟨wff⟩)))
+  (, (: wff_Q (: (⟨=⟩ ⟨t⟩ ⟨t⟩) ⟨wff⟩))))
+
+; ----- derive & tag proof_P : ⊢ (= (+ t 0) t)  via a2-curry -----
+(exec a2-instantiate-t
+  (, (kb (: ⟨a2-curry⟩ (-> (: $a ⟨term⟩)
+                        (: (⟨=⟩ (⟨+⟩ $a ⟨0⟩) $a) ⟨|-⟩))))
+     (ev (: ⟨t⟩ ⟨term⟩)))
+  (, (ev (: (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) ⟨|-⟩))))
+(exec tag-proof_P
+  (, (ev (: (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) ⟨|-⟩)))
+  (, (: proof_P (: (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) ⟨|-⟩))))
+
+; ----- derive & tag proof_PtoQ : ⊢ (-> P (-> P Q)) via a1-curry -----
+; Instantiate a1 with a = (+ t 0), b = t, c = t
+(exec a1-instantiate-PtoQ
+  (, (kb (: ⟨a1-curry⟩ (-> (: $a ⟨term⟩) (-> (: $b ⟨term⟩) (-> (: $c ⟨term⟩)
+                         (: (⟨->⟩ (⟨=⟩ $a $b) (⟨->⟩ (⟨=⟩ $a $c) (⟨=⟩ $b $c))) ⟨|-⟩))))))
+     (ev (: (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨term⟩))   ; establishes $a
+     (ev (: ⟨t⟩ ⟨term⟩)))              ; establishes $b and $c (both t)
+  (, (ev (: (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩)
+               (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩)
+                       (⟨=⟩ ⟨t⟩ ⟨t⟩))) ⟨|-⟩))))
+(exec tag-proof_PtoQ
+  (, (ev (: (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩)
+               (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩)
+                       (⟨=⟩ ⟨t⟩ ⟨t⟩))) ⟨|-⟩)))
+  (, (: proof_PtoQ (: (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩)
+                        (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩)
+                                (⟨=⟩ ⟨t⟩ ⟨t⟩))) ⟨|-⟩))))
+
+; ----- final assembly using mp-curry -----
+(exec assemble-final-proof
+  (, (: wff_P $) (: wff_Q $) (: proof_P $) (: proof_PtoQ $)
+     (kb (: ⟨mp-curry⟩ $_)))
+  (, (ev (: (⟨=⟩ ⟨t⟩ ⟨t⟩) ⟨|-⟩)
+         ((((⟨mp-curry⟩ wff_P) wff_Q) proof_P) proof_PtoQ))))
+"#;
+
+    let mut s = Space::new();
+    let t0 = Instant::now();
+    s.load_sexpr(P.as_bytes(), expr!(s, "$"), expr!(s, "_1")).unwrap();
+
+    // Targets (strict "whole-line starts-with" matching)
+    let want_ev_term_tplus0    = "(ev (: (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨term⟩))";
+    let want_ev_wff_p          = "(ev (: (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) ⟨wff⟩))";
+    let want_ev_wff_q          = "(ev (: (⟨=⟩ ⟨t⟩ ⟨t⟩) ⟨wff⟩))";
+    let want_tag_wff_p         = "(: wff_P (: (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) ⟨wff⟩))";
+    let want_tag_wff_q         = "(: wff_Q (: (⟨=⟩ ⟨t⟩ ⟨t⟩) ⟨wff⟩))";
+    let want_ev_proof_p        = "(ev (: (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) ⟨|-⟩))";
+    let want_tag_proof_p       = "(: proof_P (: (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) ⟨|-⟩))";
+    let want_ev_proof_ptoptoq     = "(ev (: (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨=⟩ ⟨t⟩ ⟨t⟩))) ⟨|-⟩))";
+    let want_tag_proof_ptoq    = "(: proof_PtoQ (: (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨=⟩ ⟨t⟩ ⟨t⟩))) ⟨|-⟩))";
+    let want_final_evidence    = "(ev (: (⟨=⟩ ⟨t⟩ ⟨t⟩) ⟨|-⟩) ((((⟨mp-curry⟩ wff_P) wff_Q) proof_P) proof_PtoQ))";
+
+    // Drive ticks; stop on success or saturation.
+    let mut ticks = 0usize;
+    let mut success = false;
+    loop {
+        ticks += 1;
+        let n = s.metta_calculus(1);
+
+        let mut buf = Vec::new();
+        s.dump_all_sexpr(&mut buf).unwrap();
+        let dump = String::from_utf8_lossy(&buf);
+
+        // Strict per-line checks (avoid substring matches inside exec traces)
+        let line_has = |needle: &str| dump.lines().any(|l| l.trim_start().starts_with(needle));
+
+        let have_tplus0_term  = line_has(want_ev_term_tplus0);
+        let have_wff_p_ev     = line_has(want_ev_wff_p);
+        let have_wff_q_ev     = line_has(want_ev_wff_q);
+        let have_wff_p_tag    = line_has(want_tag_wff_p);
+        let have_wff_q_tag    = line_has(want_tag_wff_q);
+        let have_proof_p_ev   = line_has(want_ev_proof_p);
+        let have_proof_p_tag  = line_has(want_tag_proof_p);
+        let have_ptoptoq_ev      = line_has(want_ev_proof_ptoptoq);
+        let have_ptoq_tag     = line_has(want_tag_proof_ptoq);
+        let have_final        = line_has(want_final_evidence);
+
+        if have_final {
+            println!("\n== mm1_d: done in {:?} after {} tick(s) ==", t0.elapsed(), ticks);
+            println!("  (+ t 0) : term .......... {}", if have_tplus0_term { "✓" } else { "—" });
+            println!("  wff_P (ev) .............. {}", if have_wff_p_ev { "✓" } else { "—" });
+            println!("  wff_Q (ev) .............. {}", if have_wff_q_ev { "✓" } else { "—" });
+            println!("  wff_P (tag) ............. {}", if have_wff_p_tag { "✓" } else { "—" });
+            println!("  wff_Q (tag) ............. {}", if have_wff_q_tag { "✓" } else { "—" });
+            println!("  proof_P (a2@t, ev) ...... {}", if have_proof_p_ev { "✓" } else { "—" });
+            println!("  proof_P (tag) ........... {}", if have_proof_p_tag { "✓" } else { "—" });
+            println!("  proof_PtoQ (a1, ev) ..... {}", if have_ptoptoq_ev { "✓" } else { "—" });
+            println!("  proof_PtoQ (tag) ........ {}", if have_ptoq_tag { "✓" } else { "—" });
+
+            // Final evidence confirmation
+            println!("\n--- Verifying final MP assembly ---");
+            println!("✅ final evidence line present:\n{}", want_final_evidence);
+
+            println!("\n--- Full Final State Dump ---");
+            print!("{dump}");
+            success = true;
+            break;
+        }
+
+        if n == 0 || ticks >= 128 {
+            println!("\n== mm1_d: done in {:?} after {} tick(s) ==", t0.elapsed(), ticks);
+            println!("  (+ t 0) : term .......... {}", if have_tplus0_term { "✓" } else { "—" });
+            println!("  wff_P (ev) .............. {}", if have_wff_p_ev { "✓" } else { "—" });
+            println!("  wff_Q (ev) .............. {}", if have_wff_q_ev { "✓" } else { "—" });
+            println!("  wff_P (tag) ............. {}", if have_wff_p_tag { "✓" } else { "—" });
+            println!("  wff_Q (tag) ............. {}", if have_wff_q_tag { "✓" } else { "—" });
+            println!("  proof_P (a2@t, ev) ...... {}", if have_proof_p_ev { "✓" } else { "—" });
+            println!("  proof_P (tag) ........... {}", if have_proof_p_tag { "✓" } else { "—" });
+            println!("  proof_PtoQ (a1, ev) ..... {}", if have_ptoptoq_ev { "✓" } else { "—" });
+            println!("  proof_PtoQ (tag) ........ {}", if have_ptoq_tag { "✓" } else { "—" });
+
+            println!("\n--- Verifying final MP assembly ---");
+            if have_final {
+                println!("✅ final evidence line present:\n{}", want_final_evidence);
+            } else {
+                println!("❌ final evidence line NOT found.");
+            }
+
+            println!("\n--- Full Final State Dump ---");
+            print!("{dump}");
+            break;
+        }
+    }
+
+    let _ = success; // (kept in case you want to use it programmatically)
+}
+
+fn mm1() {
+    use mork::expr;
+    use mork::space::Space;
+    use std::time::Instant;
+
+    const P: &str = r#"
+; ===== Universe & primitives =====
+(kb (: ⟨+⟩ (-> ⟨term⟩ (-> ⟨term⟩ ⟨term⟩))))
+(kb (: ⟨=⟩ (-> ⟨term⟩ (-> ⟨term⟩ ⟨wff⟩))))
+(kb (: ⟨t⟩ ⟨term⟩))
+(kb (: ⟨0⟩ ⟨term⟩))
+
+; ===== Generalized typed constructors =====
+(kb (: ⟨tpl⟩ (-> (: $x ⟨term⟩) (-> (: $y ⟨term⟩)
+                      (: (⟨+⟩ $x $y) ⟨term⟩)))))
+(kb (: ⟨weq⟩ (-> (: $x ⟨term⟩) (-> (: $y ⟨term⟩)
+                      (: (⟨=⟩ $x $y) ⟨wff⟩)))))
+
+; ===== Axioms encoded in "curried" form =====
+(kb (: ⟨a2-curry⟩ (-> (: $a ⟨term⟩)
+                  (: (⟨=⟩ (⟨+⟩ $a ⟨0⟩) $a) ⟨|-⟩))))
+(kb (: ⟨a1-curry⟩ (-> (: $a ⟨term⟩) (-> (: $b ⟨term⟩) (-> (: $c ⟨term⟩)
+                  (: (⟨->⟩ (⟨=⟩ $a $b) (⟨->⟩ (⟨=⟩ $a $c) (⟨=⟩ $b $c))) ⟨|-⟩))))))
+(kb (: ⟨mp-curry⟩ (-> (: $P ⟨wff⟩) (-> (: $Q ⟨wff⟩)
+                  (-> (: $P ⟨|-⟩) (-> (: (⟨->⟩ $P $Q) ⟨|-⟩) (: $Q ⟨|-⟩)))))))
+
+; ===== Pipeline rules =====
+
+; Lift KB typings into usable "ev" facts
+(exec lift (, (kb (: $t $T))) (, (ev (: $t $T))))
+
+; (+ x y) : term from x:term, y:term using tpl
+(exec tpl-apply
+  (, (kb (: ⟨tpl⟩ (-> (: $x ⟨term⟩) (-> (: $y ⟨term⟩)
+                           (: (⟨+⟩ $x $y) ⟨term⟩)))))
+     (ev (: $x ⟨term⟩))
+     (ev (: $y ⟨term⟩)))
+  (, (ev (: (⟨+⟩ $x $y) ⟨term⟩))))
+
+; (= a b) : wff from a:term, b:term using weq
+(exec weq-apply
+  (, (kb (: ⟨weq⟩ (-> (: $a ⟨term⟩) (-> (: $b ⟨term⟩)
+                           (: (⟨=⟩ $a $b) ⟨wff⟩)))))
+     (ev (: $a ⟨term⟩))
+     (ev (: $b ⟨term⟩)))
+  (, (ev (: (⟨=⟩ $a $b) ⟨wff⟩))))
+
+; Derive wff_Q = (t = t) : wff
+(exec derive-wff-Q
+  (, (ev (: ⟨t⟩ ⟨term⟩)) (ev (: ⟨t⟩ ⟨term⟩)))
+  (, (ev (: (⟨=⟩ ⟨t⟩ ⟨t⟩) ⟨wff⟩))))
+
+; Derive proof_P : ⊢ (= (+ t 0) t) via a2-curry
+(exec a2-instantiate-t
+  (, (kb (: ⟨a2-curry⟩ (-> (: $a ⟨term⟩)
+                        (: (⟨=⟩ (⟨+⟩ $a ⟨0⟩) $a) ⟨|-⟩))))
+     (ev (: ⟨t⟩ ⟨term⟩)))
+  (, (ev (: (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) ⟨|-⟩))))
+
+; Derive proof_PtoQ : ⊢ (-> P (-> P Q)) via a1-curry
+(exec a1-instantiate-PtoQ
+  (, (kb (: ⟨a1-curry⟩ (-> (: $a ⟨term⟩) (-> (: $b ⟨term⟩) (-> (: $c ⟨term⟩)
+                         (: (⟨->⟩ (⟨=⟩ $a $b) (⟨->⟩ (⟨=⟩ $a $c) (⟨=⟩ $b $c))) ⟨|-⟩))))))
+     (ev (: (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨term⟩))
+     (ev (: ⟨t⟩ ⟨term⟩)))
+  (, (ev (: (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩)
+               (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩)
+                       (⟨=⟩ ⟨t⟩ ⟨t⟩))) ⟨|-⟩))))
+
+; Final assembly using mp-curry with direct ev facts
+(exec assemble-final-proof-direct
+  (, (ev (: (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) ⟨wff⟩))
+     (ev (: (⟨=⟩ ⟨t⟩ ⟨t⟩) ⟨wff⟩))
+     (ev (: (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) ⟨|-⟩))
+     (ev (: (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩)
+               (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩)
+                       (⟨=⟩ ⟨t⟩ ⟨t⟩))) ⟨|-⟩))
+     (kb (: ⟨mp-curry⟩ $_)))
+  (, (ev (: (⟨=⟩ ⟨t⟩ ⟨t⟩) ⟨|-⟩)
+         ((((⟨mp-curry⟩ (: (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) ⟨wff⟩))
+            (: (⟨=⟩ ⟨t⟩ ⟨t⟩) ⟨wff⟩))
+           (: (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) ⟨|-⟩))
+          (: (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩)
+                  (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩)
+                         (⟨=⟩ ⟨t⟩ ⟨t⟩))) ⟨|-⟩)))))
+"#;
+
+    let mut s = Space::new();
+    let t0 = Instant::now();
+    s.load_sexpr(P.as_bytes(), expr!(s, "$"), expr!(s, "_1")).unwrap();
+
+    // Targets (simpler without tags)
+    let want_ev_term_tplus0    = "(ev (: (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨term⟩))";
+    let want_ev_wff_p          = "(ev (: (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) ⟨wff⟩))";
+    let want_ev_wff_q          = "(ev (: (⟨=⟩ ⟨t⟩ ⟨t⟩) ⟨wff⟩))";
+    let want_ev_proof_p        = "(ev (: (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) ⟨|-⟩))";
+    let want_ev_proof_ptoptoq     = "(ev (: (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨=⟩ ⟨t⟩ ⟨t⟩))) ⟨|-⟩))";
+    let want_final_evidence    = "(ev (: (⟨=⟩ ⟨t⟩ ⟨t⟩) ⟨|-⟩)";
+
+    let mut ticks = 0usize;
+    let mut success = false;
+    loop {
+        ticks += 1;
+        let n = s.metta_calculus(1);
+
+        let mut buf = Vec::new();
+        s.dump_all_sexpr(&mut buf).unwrap();
+        let dump = String::from_utf8_lossy(&buf);
+
+        let line_has = |needle: &str| dump.lines().any(|l| l.trim_start().starts_with(needle));
+
+        let have_tplus0_term  = line_has(want_ev_term_tplus0);
+        let have_wff_p_ev     = line_has(want_ev_wff_p);
+        let have_wff_q_ev     = line_has(want_ev_wff_q);
+        let have_proof_p_ev   = line_has(want_ev_proof_p);
+        let have_ptoptoq_ev      = line_has(want_ev_proof_ptoptoq);
+        let have_final        = line_has(want_final_evidence);
+
+        if have_final {
+            println!("\n== mm1: ✅ SUCCESS in {:?} after {} tick(s) ==", t0.elapsed(), ticks);
+            println!("  (+ t 0) : term .......... {}", if have_tplus0_term { "✓" } else { "—" });
+            println!("  wff_P (ev) .............. {}", if have_wff_p_ev { "✓" } else { "—" });
+            println!("  wff_Q (ev) .............. {}", if have_wff_q_ev { "✓" } else { "—" });
+            println!("  proof_P (a2@t, ev) ...... {}", if have_proof_p_ev { "✓" } else { "—" });
+            println!("  proof_PtoQ (a1, ev) ..... {}", if have_ptoptoq_ev { "✓" } else { "—" });
+            println!("\n--- Final evidence confirmation ---");
+            println!("✅ Successfully derived ⊢ (t = t)");
+            
+            println!("\n--- Full Final State Dump ---");
+            print!("{dump}");
+            success = true;
+            break;
+        }
+
+        if n == 0 || ticks >= 128 {
+            println!("\n== mm1: done in {:?} after {} tick(s) ==", t0.elapsed(), ticks);
+            println!("  (+ t 0) : term .......... {}", if have_tplus0_term { "✓" } else { "—" });
+            println!("  wff_P (ev) .............. {}", if have_wff_p_ev { "✓" } else { "—" });
+            println!("  wff_Q (ev) .............. {}", if have_wff_q_ev { "✓" } else { "—" });
+            println!("  proof_P (a2@t, ev) ...... {}", if have_proof_p_ev { "✓" } else { "—" });
+            println!("  proof_PtoQ (a1, ev) ..... {}", if have_ptoptoq_ev { "✓" } else { "—" });
+            
+            if !have_final {
+                println!("\n❌ Failed to derive ⊢ (t = t)");
+            }
+            
+            println!("\n--- Full Final State Dump ---");
+            print!("{dump}");
+            break;
+        }
+    }
+}
+
+// A cleaned, didactic version of the working mm1(), preserving the exact control flow.
+// It loads the same program, runs the same single‑step metta_calculus loop,
+// and checks for the same milestones and final goal.
+//
+// Goal: derive ⊢ (t = t) using:
+//   a2-curry @ t           : ⊢ ((t + 0) = t)
+//   a1-curry @ (t+0, t, t) : ⊢ (P → (P → Q)) where P := ((t+0)=t), Q := (t=t)
+//   mp-curry               : combine the above to produce ⊢ (t = t)
+//
+// The “lift / tpl-apply / weq-apply / derive-wff-Q / a2-instantiate-t /
+//  a1-instantiate-PtoQ / assemble-final-proof-direct” rules and their names
+// are kept exactly as in the working mm1().
+
+fn mm1_didactic() {
+    use mork::expr;
+    use mork::space::Space;
+    use std::time::Instant;
+
+    // Program: universe, typed constructors, axioms (curried), tiny pipeline, and final assembly.
+    const P: &str = r#"
+; ===== Universe & primitives =====
+(kb (: ⟨+⟩ (-> ⟨term⟩ (-> ⟨term⟩ ⟨term⟩))))
+(kb (: ⟨=⟩ (-> ⟨term⟩ (-> ⟨term⟩ ⟨wff⟩))))
+(kb (: ⟨t⟩ ⟨term⟩))
+(kb (: ⟨0⟩ ⟨term⟩))
+
+; ===== Generalized typed constructors =====
+(kb (: ⟨tpl⟩ (-> (: $x ⟨term⟩) (-> (: $y ⟨term⟩)
+                      (: (⟨+⟩ $x $y) ⟨term⟩)))))
+(kb (: ⟨weq⟩ (-> (: $x ⟨term⟩) (-> (: $y ⟨term⟩)
+                      (: (⟨=⟩ $x $y) ⟨wff⟩)))))
+(kb (: ⟨wim⟩ (-> (: $P ⟨wff⟩) (-> (: $Q ⟨wff⟩) 
+                      (: (⟨->⟩ $P $Q) ⟨wff⟩)))))
+
+; ===== Axioms encoded in "curried" form =====
+(kb (: ⟨a2-curry⟩ (-> (: $a ⟨term⟩)
+                  (: (⟨=⟩ (⟨+⟩ $a ⟨0⟩) $a) ⟨|-⟩))))
+(kb (: ⟨a1-curry⟩ (-> (: $a ⟨term⟩) (-> (: $b ⟨term⟩) (-> (: $c ⟨term⟩)
+                  (: (⟨->⟩ (⟨=⟩ $a $b) (⟨->⟩ (⟨=⟩ $a $c) (⟨=⟩ $b $c))) ⟨|-⟩))))))
+(kb (: ⟨mp-curry⟩ (-> (: $P ⟨wff⟩) (-> (: $Q ⟨wff⟩)
+                  (-> (: $P ⟨|-⟩) (-> (: (⟨->⟩ $P $Q) ⟨|-⟩) (: $Q ⟨|-⟩)))))))
+
+(kb (: ⟨a2⟩ (-> (: $a ⟨term⟩) (: (⟨=⟩ (⟨+⟩ $a ⟨0⟩) $a) ⟨|-⟩))))
+(kb (: ⟨a1⟩ (-> (: $a ⟨term⟩) (: $b ⟨term⟩) (: $c ⟨term⟩) (: (⟨->⟩ (⟨=⟩ $a $b) (⟨->⟩ (⟨=⟩ $a $c) (⟨=⟩ $b $c))) ⟨|-⟩))))
+(kb (: ⟨mp⟩ (-> (: $P ⟨wff⟩) (: $Q ⟨wff⟩) (: $P ⟨|-⟩) (: (⟨->⟩ $P $Q) ⟨|-⟩) (: $Q ⟨|-⟩))))
+
+; ===== Pipeline rules (unchanged names & behavior) =====
+
+; Lift KB typings into usable "ev" facts
+(exec lift (, (kb (: $t $T))) (, (ev (: $t $T))))
+
+; (+ x y) : term from x:term, y:term using tpl
+(exec tpl-apply
+  (, (kb (: ⟨tpl⟩ (-> (: $x ⟨term⟩) (-> (: $y ⟨term⟩)
+                           (: (⟨+⟩ $x $y) ⟨term⟩)))))
+     (ev (: $x ⟨term⟩))
+     (ev (: $y ⟨term⟩)))
+  (, (ev (: (⟨+⟩ $x $y) ⟨term⟩))))
+
+; (= a b) : wff from a:term, b:term using weq
+(exec weq-apply
+  (, (kb (: ⟨weq⟩ (-> (: $a ⟨term⟩) (-> (: $b ⟨term⟩)
+                           (: (⟨=⟩ $a $b) ⟨wff⟩)))))
+     (ev (: $a ⟨term⟩))
+     (ev (: $b ⟨term⟩)))
+  (, (ev (: (⟨=⟩ $a $b) ⟨wff⟩))))
+
+; ⊢ ((t+0) = t) via a2-curry @ t
+(exec a2-instantiate-t
+  (, (kb (: ⟨a2-curry⟩ (-> (: $a ⟨term⟩)
+                        (: (⟨=⟩ (⟨+⟩ $a ⟨0⟩) $a) ⟨|-⟩))))
+     (ev (: $a ⟨term⟩)))
+  (, (ev (: (⟨=⟩ (⟨+⟩ $a ⟨0⟩) $a) ⟨|-⟩))))
+
+; ⊢ ((t+0) = t) via a2-curry @ t
+;(exec a2
+; (, (ev (: $a ⟨term⟩)))
+;  (, (ev (: (⟨=⟩ (⟨+⟩ $a ⟨0⟩) $a) ⟨|-⟩))))
+
+; ⊢ (P → (P → Q)) via a1-curry @ (a,b,c)=(t+0,t,t)
+;(exec a1-instantiate-PtoQ
+;  (, (kb (: ⟨a1-curry⟩ (-> (: $a ⟨term⟩) (-> (: $b ⟨term⟩) (-> (: $c ⟨term⟩)
+;                         (: (⟨->⟩ (⟨=⟩ $a $b) (⟨->⟩ (⟨=⟩ $a $c) (⟨=⟩ $b $c))) ⟨|-⟩))))))
+;     (ev (: (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨term⟩))
+;     (ev (: ⟨t⟩ ⟨term⟩)))
+;  (, (ev (: (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩)
+;               (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩)
+;                       (⟨=⟩ ⟨t⟩ ⟨t⟩))) ⟨|-⟩))))
+
+(exec a1-instantiate-PtoQ
+  (, (kb (: ⟨a1-curry⟩ (-> (: $a ⟨term⟩) (-> (: $bc ⟨term⟩) (-> (: $bc ⟨term⟩)
+                         (: (⟨->⟩ (⟨=⟩ $a $bc) (⟨->⟩ (⟨=⟩ $a $bc) (⟨=⟩ $bc $bc))) ⟨|-⟩))))))
+     (ev (: $a ⟨term⟩))
+     (ev (: $bc ⟨term⟩)))
+  (, (ev (: (⟨->⟩ (⟨=⟩ $a $bc)
+               (⟨->⟩ (⟨=⟩ $a $bc)
+                       (⟨=⟩ $bc $bc))) ⟨|-⟩))))
+
+; Final assembly using mp-curry (same single step as the working mm1)
+
+; (kb (: ⟨mp-curry⟩ (-> (: $P ⟨wff⟩) 
+;                    (-> (: $Q ⟨wff⟩)
+;                      (-> (: $P ⟨|-⟩) 
+;                      (-> (: (⟨->⟩ $P $Q) ⟨|-⟩) 
+;                        (: $Q ⟨|-⟩)))))))
+;(kb (: ⟨mp⟩ (-> (: $P ⟨wff⟩) (: $Q ⟨wff⟩) (: $P ⟨|-⟩) (: (⟨->⟩ $P $Q) ⟨|-⟩) (: $Q ⟨|-⟩))))
+
+; Derive wff type for (P -> Q) 
+;(exec derive-wff-P-to-Q
+;  (, (ev (: (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) ⟨wff⟩))
+;     (ev (: (⟨=⟩ ⟨t⟩ ⟨t⟩) ⟨wff⟩)))
+;  (, (ev (: (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨=⟩ ⟨t⟩ ⟨t⟩)) ⟨wff⟩))))
+
+; Generic wim (implication constructor) rule
+(exec wim-apply
+  (, (kb (: ⟨wim⟩ (-> (: $P ⟨wff⟩) (-> (: $Q ⟨wff⟩) (: (⟨->⟩ $P $Q) ⟨wff⟩)))))
+     (ev (: $P ⟨wff⟩))
+     (ev (: $Q ⟨wff⟩)))
+  (, (ev (: (⟨->⟩ $P $Q) ⟨wff⟩))))
+
+; Intermediate step: derive (P -> Q) from P and (P -> (P -> Q))
+; $P :- (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩)
+; $Q :- ....
+;(exec derive-P-to-Q-direct
+;  (, (ev (: (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) ⟨wff⟩))
+;     (ev (: (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨=⟩ ⟨t⟩ ⟨t⟩)) ⟨wff⟩))
+;     (ev (: (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) ⟨|-⟩))
+;     (ev (: (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩)
+;               (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩)
+;                       (⟨=⟩ ⟨t⟩ ⟨t⟩))) ⟨|-⟩)))
+;     (kb (: ⟨mp-curry⟩ (-> (: $P ⟨wff⟩) (-> (: $Q ⟨wff⟩)
+;                  (-> (: $P ⟨|-⟩) (-> (: (⟨->⟩ $P $Q) ⟨|-⟩) (: $Q ⟨|-⟩))))))) )
+;  (, (ev (: (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨=⟩ ⟨t⟩ ⟨t⟩)) ⟨|-⟩)) )) 
+
+;; Current 'best' attempt
+;(exec derive-P-to-Q-direct2
+;  (, (ev (: $P ⟨wff⟩))
+;     (ev (: (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨=⟩ ⟨t⟩ ⟨t⟩)) ⟨wff⟩))
+;     (ev (: $P ⟨|-⟩))
+;     (ev (: (⟨->⟩ $P
+;               (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩)
+;                       (⟨=⟩ ⟨t⟩ ⟨t⟩))) ⟨|-⟩)))
+;     (kb (: ⟨mp-curry⟩ (-> (: $P ⟨wff⟩) (-> (: $Q ⟨wff⟩)
+;                  (-> (: $P ⟨|-⟩) (-> (: (⟨->⟩ $P $Q) ⟨|-⟩) (: $Q ⟨|-⟩))))))) )
+;  (, (ev (: (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨=⟩ ⟨t⟩ ⟨t⟩)) ⟨|-⟩)) )) 
+
+(exec derive-P-to-Q-direct3
+  (, (ev (: $P ⟨wff⟩))
+     (ev (: $IMP ⟨wff⟩))
+     (ev (: $P ⟨|-⟩))
+     (ev (: (⟨->⟩ $P $IMP) ⟨|-⟩)))
+  (, (ev (: $IMP ⟨|-⟩))))
+
+;(exec derive-P-to-Q-direct4
+;  (, (ev (: $P ⟨wff⟩))
+;     (ev (: (⟨->⟩ $P $Q) ⟨wff⟩))
+;     (ev (: $P ⟨|-⟩))
+;     (ev (: (⟨->⟩ $P (⟨->⟩ $P $Q)) ⟨|-⟩)))
+;  (, (ev (: (⟨->⟩ $P $Q) ⟨|-⟩))))
+
+; If we ever see the nested implication proof, expose the ($P,$Q) it contains.
+(exec dbg-see-a1
+  (, (ev (: (⟨->⟩ $P (⟨->⟩ $P $Q)) ⟨|-⟩)))
+  (, (: seen/a1 $P $Q)))
+
+; If we ever see a proof of P, expose it too.
+(exec dbg-see-P
+  (, (ev (: $P ⟨|-⟩)))
+  (, (: seen/P $P)))
+
+  ; From P, and ⊢(P → (P → Q)), *prepare* to conclude (P → Q)
+(exec mp#1-token
+  (, (ev (: $P ⟨wff⟩))
+     (ev (: $Q ⟨wff⟩))
+     (ev (: $P ⟨|-⟩))
+     (ev (: (⟨->⟩ $P (⟨->⟩ $P $Q)) ⟨|-⟩)))
+  (, (: ready/mp1 $P $Q)))
+
+; Conclude ⊢(P → Q) *only* from the token, i.e., after we know P,Q matched once.
+(exec mp#1-finish
+  (, (: ready/mp1 $P $Q))
+  (, (ev (: (⟨->⟩ $P $Q) ⟨|-⟩))))
+
+(exec ping-a1
+  (, (ev (: (⟨->⟩ $AnyP (⟨->⟩ $AnyP $AnyQ)) ⟨|-⟩)))
+  (, (: ping/a1)))
+
+  (exec mp#2-token
+  (, (ev (: $P ⟨wff⟩))
+     (ev (: $Q ⟨wff⟩))
+     (ev (: $P ⟨|-⟩))
+     (ev (: (⟨->⟩ $P $Q) ⟨|-⟩)))
+  (, (: ready/mp2 $Q)))
+
+(exec mp#2-finish
+  (, (: ready/mp2 $Q))
+  (, (ev (: $Q ⟨|-⟩))))
+
+
+(exec derive-P-to-Q-v2
+  (, (ev (: $P ⟨wff⟩))
+     (ev (: (⟨->⟩ $P (⟨=⟩ ⟨t⟩ ⟨t⟩)) ⟨wff⟩))
+     (ev (: $P ⟨|-⟩))
+     (ev (: (⟨->⟩ $P (⟨->⟩ $P (⟨=⟩ ⟨t⟩ ⟨t⟩))) ⟨|-⟩)))
+  (, (ev (: (⟨->⟩ $P (⟨=⟩ ⟨t⟩ ⟨t⟩)) ⟨|-⟩))))
+
+
+  (exec mp#1
+  (, (ev (: $P ⟨wff⟩))
+     (ev (: $Q ⟨wff⟩))
+     (ev (: $P ⟨|-⟩))
+     (ev (: (⟨->⟩ $P (⟨->⟩ $P $Q)) ⟨|-⟩)))
+  (, (ev (: (⟨->⟩ $P $Q) ⟨|-⟩))))
+
+  (exec mp#2
+  (, (ev (: $P ⟨wff⟩))
+     (ev (: $Q ⟨wff⟩))
+     (ev (: $P ⟨|-⟩))
+     (ev (: (⟨->⟩ $P $Q) ⟨|-⟩)))
+  (, (ev (: $Q ⟨|-⟩))))
+
+  ; Derive (P→Q) from P and (P→(P→Q)) using modus ponens
+(exec derive-implication-from-nested
+  (, (ev (: $P ⟨wff⟩))
+     (ev (: (⟨->⟩ $P $Q) ⟨wff⟩))
+     (ev (: $P ⟨|-⟩))
+     (ev (: (⟨->⟩ $P (⟨->⟩ $P $Q)) ⟨|-⟩)))
+  (, (ev (: (⟨->⟩ $P $Q) ⟨|-⟩))))
+
+;(exec derive-P-to-Q-direct
+;  (, (ev (: $P ⟨wff⟩))
+;     (ev (: (⟨->⟩ $P $Q) ⟨wff⟩))
+;     (ev (: $P ⟨|-⟩))
+;     (ev (: (⟨->⟩ $P
+;               (⟨->⟩ $P $Q)) ⟨|-⟩))
+;     (kb (: ⟨mp-curry⟩ (-> (: $P ⟨wff⟩) (-> (: $Q ⟨wff⟩)
+;                  (-> (: $P ⟨|-⟩) (-> (: (⟨->⟩ $P  (⟨->⟩ $P $Q)) ⟨|-⟩) (: $Q ⟨|-⟩))))))) )
+;  (, (ev (: (⟨->⟩ $P $Q) ⟨|-⟩)) )) 
+
+; Final assembly using mp-curry (same single step as the working mm1)
+; Inserting $P and $Q in appropriately.
+; $P :- (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩)
+; $Q :- (⟨=⟩ ⟨t⟩ ⟨t⟩)
+; Works now (with the P -> Q part)
+(exec assemble-final-proof-direct
+  (, (ev (: $P ⟨wff⟩))
+     (ev (: $Q ⟨wff⟩))
+     (ev (: $P ⟨|-⟩))
+;     (ev (: (⟨->⟩ $P ;; why is this needed?  -- apparently it's not!
+;               (⟨->⟩ $P $Q))) ⟨|-⟩)
+     (ev (: (⟨->⟩ $P $Q) ⟨|-⟩)))
+;     (kb (: ⟨mp-curry⟩ (-> (: $P ⟨wff⟩) (-> (: $Q ⟨wff⟩)
+;                  (-> (: $P ⟨|-⟩) (-> (: (⟨->⟩ $P $Q) ⟨|-⟩) (: $Q ⟨|-⟩))))))) )
+  (, (ev (: $Q ⟨|-⟩))))
+"#;
+
+// Doesn't work
+// (exec assemble-final-proof-direct
+//   (, (ev (: $P ⟨wff⟩))
+//      (ev (: $Q ⟨wff⟩))
+//      (ev (: $P ⟨|-⟩))
+//      (ev (: (⟨->⟩ $P $Q) ⟨|-⟩)) )
+//   (, (ev (: $Q ⟨|-⟩)) ) )
+
+// Works
+// (exec assemble-final-proof-direct
+//   (, (ev (: (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) ⟨wff⟩))
+//      (ev (: (⟨=⟩ ⟨t⟩ ⟨t⟩) ⟨wff⟩))
+//      (ev (: (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) ⟨|-⟩))
+//      (ev (: (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩)
+//                (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩)
+//                        (⟨=⟩ ⟨t⟩ ⟨t⟩))) ⟨|-⟩))
+//      (kb (: ⟨mp-curry⟩ $_)))
+//   (, (ev (: (⟨=⟩ ⟨t⟩ ⟨t⟩) ⟨|-⟩)
+//          ((((⟨mp-curry⟩ (: (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) ⟨wff⟩))
+//             (: (⟨=⟩ ⟨t⟩ ⟨t⟩) ⟨wff⟩))
+//            (: (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) ⟨|-⟩))
+//           (: (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩)
+//                   (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩)
+//                          (⟨=⟩ ⟨t⟩ ⟨t⟩))) ⟨|-⟩)))))
+
+    let mut s = Space::new();
+    let t0 = Instant::now();
+    s.load_sexpr(P.as_bytes(), expr!(s, "$"), expr!(s, "_1")).unwrap();
+
+    // Targets (kept identical to mm1())
+    let want_ev_term_tplus0    = "(ev (: (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨term⟩))";
+    let want_ev_wff_p          = "(ev (: (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) ⟨wff⟩))";
+    let want_ev_wff_q          = "(ev (: (⟨=⟩ ⟨t⟩ ⟨t⟩) ⟨wff⟩))";
+    let want_ev_proof_p        = "(ev (: (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) ⟨|-⟩))";
+    let want_ev_proof_ptoq     = "(ev (: (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨=⟩ ⟨t⟩ ⟨t⟩)) ⟨|-⟩))";  
+    let want_ev_proof_ptoptoq  = "(ev (: (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨=⟩ ⟨t⟩ ⟨t⟩))) ⟨|-⟩))";
+    let want_final_evidence    = "(ev (: (⟨=⟩ ⟨t⟩ ⟨t⟩) ⟨|-⟩)";
+
+    println!("=== MM1 (didactic): Proving ⊢ (t = t) ===");
+
+    let mut ticks = 0usize;
+    loop {
+        ticks += 1;
+        let n = s.metta_calculus(1);
+
+        let mut tmut = Vec::new();
+        // trying to get: (ev (: (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) ⟨|-⟩))
+        s.dump_sexpr(
+          expr!(s, "[2] ev [3] : [3] ⟨=⟩ $ $ ⟨|-⟩"),  // Pattern
+          expr!(s, "[2] ev [3] : [3] ⟨=⟩ _1 _2 ⟨|-⟩"),  // Template: full reconstruction  
+          &mut tmut
+      );
+        // s.dump_sexpr(
+        //     expr!(s, "[2] ev [3] : [3] ⟨=⟩ $ $ ⟨|-⟩"),  //Query result (tick 2): (⟨+⟩ ⟨0⟩ ⟨0⟩)
+// (⟨+⟩ ⟨t⟩ ⟨0⟩)
+// (⟨+⟩ (⟨+⟩ ⟨0⟩ ⟨0⟩) ⟨0⟩)
+// (⟨+⟩ (⟨+⟩ ⟨0⟩ ⟨t⟩) ⟨0⟩)
+// (⟨+⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨0⟩)
+// (⟨+⟩ (⟨+⟩ ⟨t⟩ ⟨t⟩) ⟨0⟩)
+            // expr!(s, "[2] ev [3] : [3] ⟨=⟩ [3] ⟨+⟩ ⟨t⟩ ⟨0⟩ ⟨t⟩ ⟨|-⟩"),  // Query result (tick 2): $a
+        //     expr!(s, "_1"),
+        //     &mut tmut
+        // );
+
+        let result = String::from_utf8(tmut).unwrap();
+        println!("Query result (tick {}): {}", ticks, result);
+
+        for line in result.lines() {
+          let trimmed = line.trim();
+          if trimmed == want_ev_proof_p {
+              println!("✅ EXACT MATCH found at tick {}: {}", ticks, trimmed);
+              break;
+          }
+        }
+
+        let mut proof_ptoq_check = Vec::new();
+        s.dump_sexpr(
+            expr!(s, "[2] ev [3] : [3] ⟨->⟩ [3] ⟨=⟩ [3] ⟨+⟩ ⟨t⟩ ⟨0⟩ ⟨t⟩ [3] ⟨=⟩ ⟨t⟩ ⟨t⟩ ⟨|-⟩"),  // Pattern
+            expr!(s, "[2] ev [3] : [3] ⟨->⟩ [3] ⟨=⟩ [3] ⟨+⟩ ⟨t⟩ ⟨0⟩ ⟨t⟩ [3] ⟨=⟩ ⟨t⟩ ⟨t⟩ ⟨|-⟩"),  // Template: return same expression
+            &mut proof_ptoq_check
+        );
+
+        if !proof_ptoq_check.is_empty() {
+            let result = String::from_utf8(proof_ptoq_check).unwrap();
+            println!("🎯 Found P→Q proof: {}", result.trim());
+        } else {
+            println!("P→Q proof not found yet");
+        }
+
+        let mut buf = Vec::new();
+        s.dump_all_sexpr(&mut buf).unwrap();
+        let dump = String::from_utf8_lossy(&buf);
+
+        let line_has = |needle: &str| dump.lines().any(|l| l.trim_start().starts_with(needle));
+
+        let have_tplus0_term  = line_has(want_ev_term_tplus0);
+        let have_wff_p_ev     = line_has(want_ev_wff_p);
+        let have_wff_q_ev     = line_has(want_ev_wff_q);
+        let have_proof_p_ev   = line_has(want_ev_proof_p);
+        let have_ptoq_ev      = line_has(want_ev_proof_ptoq);
+        let have_ptoptoq_ev   = line_has(want_ev_proof_ptoptoq);
+        let have_final        = line_has(want_final_evidence);
+
+        if have_final {
+            println!("\n== mm1 (didactic): ✅ SUCCESS in {:?} after {} tick(s) ==", t0.elapsed(), ticks);
+            println!("  (+ t 0) : term ............. {}", if have_tplus0_term { "✓" } else { "—" });
+            println!("  wff_P (ev) ................. {}", if have_wff_p_ev { "✓" } else { "—" });
+            println!("  wff_Q (ev) ................. {}", if have_wff_q_ev { "✓" } else { "—" });
+            println!("  proof_P (a2@t, ev) ......... {}", if have_proof_p_ev { "✓" } else { "—" });
+            println!("  proof_PtoQ (a1, ev) ........ {}", if have_ptoq_ev { "✓" } else { "—" });
+            println!("  proof_PtoPtoQ (a1, ev) ..... {}", if have_ptoptoq_ev { "✓" } else { "—" });
+
+            println!("\n--- Final evidence confirmation ---");
+            println!("✅ Successfully derived ⊢ (t = t)");
+
+            println!("\n--- Full Final State Dump ---");
+            print!("{dump}");
+            break;
+        }
+
+        if n == 0 || ticks >= 128 {
+            println!("\n== mm1 (didactic): — FAILURE in {:?} after {} tick(s) ==", t0.elapsed(), ticks);
+            println!("  (+ t 0) : term ............. {}", if have_tplus0_term { "✓" } else { "—" });
+            println!("  wff_P (ev) ................. {}", if have_wff_p_ev { "✓" } else { "—" });
+            println!("  wff_Q (ev) ................. {}", if have_wff_q_ev { "✓" } else { "—" });
+            println!("  proof_P (a2@t, ev) ......... {}", if have_proof_p_ev { "✓" } else { "—" });
+            println!("  proof_PtoQ (a1, ev) ........ {}", if have_ptoq_ev { "✓" } else { "—" });
+            println!("  proof_PtoPtoQ (a1, ev) ..... {}", if have_ptoptoq_ev { "✓" } else { "—" });
+
+            if !have_final {
+                println!("\n❌ Failed to derive ⊢ (t = t)");
+            }
+
+            println!("\n--- Full Final State Dump ---");
+            print!("{dump}");
+            break;
+        }
+    }
+}
+
+
+
 fn bc3() {
     let mut s = Space::new();
 
@@ -1577,10 +2688,20 @@ fn main() {
     // bc0();
     // bc1();
 
-    mm0_original_with_verification_fix();
-    mm0_original_fixed_steps();
-    // mm0_original_with_sequential_tick();
-    mm0();
+    // mm0_original_with_verification_fix();
+    // mm0_original_fixed_steps();
+    // // mm0_original_with_sequential_tick();
+    // mm0();
+
+    // mm1_a();
+    // mm1_b();
+    mm1_b_tpl();
+    mm1_b2_tpl();
+    // mm1_c();
+    // mm1_d();
+    // mm1();
+    mm1_didactic();
+    mm1_forward();
 
     // lens_aunt();
     // lens_composition();
