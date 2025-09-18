@@ -1709,9 +1709,237 @@ fn json_upaths<IPath: AsRef<std::path::Path>, OPath : AsRef<std::path::Path>>(js
     // written 15969490 in 17441 ms
 }
 
+/// Based on Anneline's instantiation of PDDL domains
+fn pddl_ts<IPath: AsRef<std::path::Path>>(ts_path: IPath) {
+    let mut s = Space::new();
+    for mde in std::fs::read_dir(ts_path).unwrap() {
+        let de = mde.unwrap();
+        let file_name = de.file_name();
+        let name = file_name.to_str().unwrap();
+        let metta_file = std::fs::File::open(de.path()).unwrap();
+        let metta_mmap = unsafe { memmap2::Mmap::map(&metta_file).unwrap() };
+        s.load_sexpr(&*metta_mmap, expr!(s, "$"), expr!(s, format!("[3] U {} _1", &name[..name.len()-6]).as_str())).unwrap();
+    }
+
+    let SPACE = r#"
+    (exec (action 0) (, (U $d (transition $s (drop $obj $room $gripper) $t))
+                        (U $d (value (carry $obj $gripper) T $s))
+                        (U $d (value (at-robby $room) T $s))
+                        (U $d (value (at $obj $room) T $t))
+                        (U $d (value (free $gripper) T $t))
+                        (U $d (value (carry $obj) F $t)))
+                     (, ((C 0) $d ($s $obj $room $gripper $t))))
+
+    (exec (action 1) (, (U $d (transition $s (move $from $to) $t))
+                        (U $d (value (at-robby $from) T $s))
+                        (U $d (value (at-robby $from) F $t))
+                        (U $d (value (at-robby $to) T $t)))
+                     (, ((C 1) $d ($s $from $to $t))))
+
+    (exec (action 2) (, (U $d (transition $s (pick $obj $room $gripper) $t))
+                        (U $d (value (at $obj $room) T $s))
+                        (U $d (value (at-robby $room) T $s))
+                        (U $d (value (free $gripper) T $s))
+                        (U $d (value (carry $obj $gripper) T $t))
+                        (U $d (value (free $gripper) F $t))
+                        (U $d (value (at $obj $room) F $t)))
+                     (, ((C 2) $d ($s $obj $room $gripper $t))))
+    "#;
+    s.load_all_sexpr(SPACE.as_bytes()).unwrap();
+
+    s.metta_calculus(3);
+
+    let mut v = vec![];
+    // s.dump_all_sexpr(&mut v).unwrap();
+    // s.dump_sexpr(expr!(s, "[3] U p-3-0 $"), expr!(s, "_1"), &mut v);
+    s.dump_sexpr(expr!(s, "[3] [2] C $ p-3-0 $"), expr!(s, "[2] _1 _2"), &mut v);
+    let res = String::from_utf8(v).unwrap();
+
+    println!("result: {res}");
+    /*
+       WIP
+     */
+}
+
+fn stv_roman() {
+    let mut s = Space::new();
+    let SPACE = r#"
+    (exec (step (0 cpu))
+      (, (goal (CPU $f $arg $res)) (fun ($f $arg ($b1 $b2) $res)) (fun $b1) (fun $b2))
+      (, (ev $res)))
+
+    (fun (mp-formula ((STV $sa $ca) (STV $sb $cb)) ((mul ($sa $sb) $so) (mul ($ca $cb) $co)) (STV $so $co)))
+
+    (goal (CPU mp-formula ((STV 0.5 0.5) (STV 0.5 0.5)) $res))
+    "#;
+    s.load_all_sexpr(SPACE.as_bytes()).unwrap();
+    // let mut math_expr_buf = vec![];
+    // std::fs::File::open("/home/adam/Downloads/math_relations.metta").unwrap().read_to_end(&mut math_expr_buf).unwrap();
+    // s.load_sexpr(&math_expr_buf[..], expr!(s, "$"), expr!(s, "_1")).unwrap();
+    s.load_sexpr("(fun (mul (0.5 0.5) 0.2))".as_bytes(), expr!(s, "$"), expr!(s, "_1")).unwrap();
+
+    s.metta_calculus(1);
+
+    let mut v = vec![];
+    s.dump_sexpr(expr!(s, "[2] ev $"), expr!(s, "_1"), &mut v);
+    let res = String::from_utf8(v).unwrap();
+    println!("result: {res}");
+}
+
+fn exponential(max_steps: usize) {
+    let mut s = Space::new();
+
+    const SPACE_EXPRS: &str = r#"
+((step app)
+ (, (num $1) )
+ (, (num (M $1))
+    (num (W $1)) ))
+
+((step app)
+ (, (num (M $1))
+    (num (W $1)) )
+ (, (num (C $1)) ))
+
+(num Z)
+
+(exec metta
+      (, ((step $x) $p0 $t0)
+         (exec metta $p1 $t1) )
+      (, (exec $x $p0 $t0)
+         (exec metta $p1 $t1) ))
+"#;
+
+    s.load_all_sexpr(SPACE_EXPRS.as_bytes()).unwrap();
+
+    let mut t0 = Instant::now();
+    let steps = s.metta_calculus(max_steps);
+    println!("elapsed {} steps {} size {}", t0.elapsed().as_millis(), steps, s.btm.val_count());
+}
+
+fn exponential_fringe(steps: usize) {
+    let mut s = Space::new();
+
+    const SPACE_EXPRS: &str = r#"
+((step meet $k)
+ (, (num $k $1) (succ $k $sk) )
+ (, (num $sk (M $1))
+    (num $sk (W $1)) ))
+
+((step join $k)
+ (, (num $k (M $1)) (succ $k $sk)
+    (num $k (W $1)) )
+ (, (num $sk (C $1)) ))
+
+(num 0 Z)
+
+(exec (metta 0)
+      (, (exec (metta $k) $p1 $t1) (succ $k $sk)
+         ((step $x $k) $p0 $t0) )
+      (, (exec (0 $x) $p0 $t0)
+         (exec (metta $sk) $p1 $t1) ))
+"#;
+
+    let mut SUCCS: String = (0..steps).map(|x| format!("(succ {x} {})\n", x+1)).collect();
+
+    s.load_all_sexpr(SPACE_EXPRS.as_bytes()).unwrap();
+    s.load_all_sexpr(SUCCS.as_bytes()).unwrap();
+
+    let mut t0 = Instant::now();
+    let steps = s.metta_calculus(1000000000000000);
+    println!("elapsed {} steps {} size {}", t0.elapsed().as_millis(), steps, s.btm.val_count());
+
+    // let mut v = vec![];
+    // s.dump_all_sexpr(&mut v).unwrap();
+    // let res = String::from_utf8(v).unwrap();
+    //
+    // println!("result: {res}");
+}
+
+fn linear_fringe_alternating(steps: usize) {
+    let mut s = Space::new();
+
+    const SPACE_EXPRS: &str = r#"
+((step meet $k)
+ (, (num $k $1) )
+ (, (tojoin $k (M $1))
+    (tojoin $k (W $1)) ))
+
+((step join $k)
+ (, (tojoin $k (M $1)) (succ $k $sk)
+    (tojoin $k (W $1)) )
+ (, (num $sk (C $1)) ))
+
+(num 0 Z)
+
+(exec (metta 0)
+      (, (exec (metta $k) $p1 $t1) (succ $k $sk)
+         ((step meet $k) $p0 $t0) ((step join $k) $p2 $t2) )
+      (, (exec (0 meet) $p0 $t0) (exec (1 join) $p2 $t2)
+         (exec (metta $sk) $p1 $t1) ))
+"#;
+
+    let mut SUCCS: String = (0..steps).map(|x| format!("(succ {x} {})\n", x+1)).collect();
+
+    s.load_all_sexpr(SPACE_EXPRS.as_bytes()).unwrap();
+    s.load_all_sexpr(SUCCS.as_bytes()).unwrap();
+
+    let mut t0 = Instant::now();
+    let steps = s.metta_calculus(1000000000000000);
+    println!("elapsed {} steps {} size {}", t0.elapsed().as_millis(), steps, s.btm.val_count());
+
+    // let mut v = vec![];
+    // s.dump_all_sexpr(&mut v).unwrap();
+    // let res = String::from_utf8(v).unwrap();
+    //
+    // println!("result: {res}");
+}
+
+
+fn linear_alternating(steps: usize) {
+    let mut s = Space::new();
+
+    const SPACE_EXPRS: &str = r#"
+((step meet)
+ (, (num $1) )
+ (, (tojoin (M $1))
+    (tojoin (W $1)) ))
+
+((step join)
+ (, (tojoin (M $1))
+    (tojoin (W $1)) )
+ (, (num (C $1)) ))
+
+(num Z)
+
+(exec (metta 0)
+      (, (exec (metta $k) $p1 $t1) (succ $k $sk)
+         ((step meet) $p0 $t0) ((step join) $p2 $t2) )
+      (, (exec (0 meet) $p0 $t0) (exec (1 join) $p2 $t2)
+         (exec (metta $sk) $p1 $t1) ))
+"#;
+
+    let mut SUCCS: String = (0..steps).map(|x| format!("(succ {x} {})\n", x+1)).collect();
+
+    s.load_all_sexpr(SPACE_EXPRS.as_bytes()).unwrap();
+    s.load_all_sexpr(SUCCS.as_bytes()).unwrap();
+
+    let mut t0 = Instant::now();
+    let steps = s.metta_calculus(1000000000000000);
+    println!("elapsed {} steps {} size {}", t0.elapsed().as_millis(), steps, s.btm.val_count());
+
+    // let mut v = vec![];
+    // s.dump_all_sexpr(&mut v).unwrap();
+    // let res = String::from_utf8(v).unwrap();
+    //
+    // println!("result: {res}");
+}
+
 
 fn main() {
     env_logger::init();
+
+    // pddl_ts("/home/adam/Projects/ThesisPython/cache/gripper-strips/transition_systems/");
+    stv_roman();
 
     // lookup();
     // positive();
@@ -1749,6 +1977,11 @@ fn main() {
     // bench_clique_no_unify(200, 3600, 5);
     // bench_finite_domain(10_000);
     // process_calculus_bench(1000, 200, 200);
+
+    // exponential(32);
+    // exponential_fringe(15);
+    // linear_fringe_alternating(15);
+    // linear_alternating(15);
 
     // #[cfg(all(feature = "nightly"))]
     // json_upaths_smoke();
