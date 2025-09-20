@@ -1538,11 +1538,11 @@ fn mm1_forward() {
   (kb (: ⟨t⟩ ⟨term⟩))
   (kb (: ⟨0⟩ ⟨term⟩))
 
-  (kb (: ⟨tpl⟩ (-> (: $x ⟨term⟩) (-> (: $y ⟨term⟩)
+  (kb (: ⟨tpl-curry⟩ (-> (: $x ⟨term⟩) (-> (: $y ⟨term⟩)
                         (: (⟨+⟩ $x $y) ⟨term⟩)))))
-  (kb (: ⟨weq⟩ (-> (: $x ⟨term⟩) (-> (: $y ⟨term⟩)
+  (kb (: ⟨weq-curry⟩ (-> (: $x ⟨term⟩) (-> (: $y ⟨term⟩)
                         (: (⟨=⟩ $x $y) ⟨wff⟩)))))
-  (kb (: ⟨wim⟩ (-> (: $P ⟨wff⟩) (-> (: $Q ⟨wff⟩)
+  (kb (: ⟨wim-curry⟩ (-> (: $P ⟨wff⟩) (-> (: $Q ⟨wff⟩)
                         (: (⟨->⟩ $P $Q) ⟨wff⟩)))))
 
   (kb (: ⟨a2-curry⟩ (-> (: $a ⟨term⟩)
@@ -1552,58 +1552,159 @@ fn mm1_forward() {
   (kb (: ⟨mp-curry⟩ (-> (: $P ⟨wff⟩) (-> (: $Q ⟨wff⟩)
                     (-> (: $P ⟨|-⟩) (-> (: (⟨->⟩ $P $Q) ⟨|-⟩) (: $Q ⟨|-⟩)))))))
 
+  (kb (: ⟨tpl⟩ (-> (: $x ⟨term⟩) (: $y ⟨term⟩) (: (⟨+⟩ $x $y) ⟨term⟩))))
+  (kb (: ⟨weq⟩ (-> (: $x ⟨term⟩) (: $y ⟨term⟩) (: (⟨=⟩ $x $y) ⟨wff⟩))))
+  (kb (: ⟨wim⟩ (-> (: $P ⟨wff⟩) (: $Q ⟨wff⟩) (: (⟨->⟩ $P $Q) ⟨wff⟩))))
   (kb (: ⟨a2⟩ (-> (: $a ⟨term⟩) (: (⟨=⟩ (⟨+⟩ $a ⟨0⟩) $a) ⟨|-⟩))))
   (kb (: ⟨a1⟩ (-> (: $a ⟨term⟩) (: $b ⟨term⟩) (: $c ⟨term⟩) (: (⟨->⟩ (⟨=⟩ $a $b) (⟨->⟩ (⟨=⟩ $a $c) (⟨=⟩ $b $c))) ⟨|-⟩))))
   (kb (: ⟨mp⟩ (-> (: $P ⟨wff⟩) (: $Q ⟨wff⟩) (: $P ⟨|-⟩) (: (⟨->⟩ $P $Q) ⟨|-⟩) (: $Q ⟨|-⟩))))
 
   (exec (0 lift) (, (kb (: $t $T))) (, (ev (: $t $T))))
 
-  ;; tpl
-  (exec (1 introduce-addition-term)
-    (, (ev (: $x ⟨term⟩))
-      (ev (: $y ⟨term⟩)))
-    (, (ev (: (⟨+⟩ $x $y) ⟨term⟩))))
+  ;; Works in ~ 34ms
+  ;; For unary rules like a2
+  (exec (0 lift-unary-rule)
+    (, (kb (: $name (-> (: $x $T1) (: $result $T2)))))
+    (, (exec (1 $name)
+        (, (ev (: $x $T1)))
+        (, (ev (: $result $T2))))))
 
-  ;; weq
-  (exec (1 introduce-equality-formula)
-    (, (ev (: $a ⟨term⟩))
-      (ev (: $b ⟨term⟩)))
-    (, (ev (: (⟨=⟩ $a $b) ⟨wff⟩))))
+  ;; for tpl, weq, wim
+  (exec (0 lift-binary-rule) 
+  (, (kb (: $name (-> (: $x $T1) (: $y $T2) (: $result $T3)))))
+  (, (exec (1 $name)
+       (, (ev (: $x $T1)) 
+          (ev (: $y $T2)))
+       (, (ev (: $result $T3))))))
 
-  ;; wim
-  (exec (1 introduce-implication-formula)
-    (, (ev (: $P ⟨wff⟩))
-      (ev (: $Q ⟨wff⟩)))
-    (, (ev (: (⟨->⟩ $P $Q) ⟨wff⟩))))
+    ;; For ternary rules like a1
+  (exec (0 lift-ternary-rule)
+    (, (kb (: $name (-> (: $a $T1) (: $b $T2) (: $c $T3) (: $result $T4)))))
+    (, (exec (2 $name)
+        (, (ev (: $a $T1))
+            (ev (: $b $T2))
+            (ev (: $c $T3)))
+        (, (ev (: $result $T4))))))
 
-  ;; a2
-  (exec (1 apply-additive-identity)
-    (, (ev (: $a ⟨term⟩)))
-    (, (ev (: (⟨=⟩ (⟨+⟩ $a ⟨0⟩) $a) ⟨|-⟩))))
+  ;; Works in 6s with one mp rule
+  ;; For mp (4-ary)
+  ;(exec (0 lift-quaternary-rule)
+  ;  (, (kb (: $name (-> (: $a $T1) (: $b $T2) (: $c $T3) (: $d $T4) (: $result $T5)))))
+  ;  (, (exec (8 $name)
+  ;       (, (ev (: $a $T1))
+  ;          (ev (: $b $T2))
+  ;          (ev (: $c $T3))
+  ;          (ev (: $d $T4)))
+  ;       (, (ev (: $result $T5))))))
+
+  ;; Having two of these makes it ~ 15s
+  ;; For mp (4-ary)
+  ;(exec (0 lift-quaternary-rule)
+  ;  (, (kb (: $name (-> (: $a $T1) (: $b $T2) (: $c $T3) (: $d $T4) (: $result $T5)))))
+  ;  (, (exec (9 $name)
+  ;       (, (ev (: $a $T1))
+  ;          (ev (: $b $T2))
+  ;          (ev (: $c $T3))
+  ;          (ev (: $d $T4)))
+  ;       (, (ev (: $result $T5))))))
+
+
+    ;; WORKS in ~ 1ms
+    ;; Because I don't need to go through the evs and generate a bunch of other stuff?
+    ;; tpl
+    ;(exec (1 introduce-addition-term)
+    ;  (, (kb (: ⟨tpl-curry⟩ (-> (: $x ⟨term⟩) (-> (: $y ⟨term⟩)
+    ;                      (: (⟨+⟩ $x $y) ⟨term⟩))))))
+    ;  (, (ev (: (⟨+⟩ $x $y) ⟨term⟩))))
+
+    ;; weq
+    ;(exec (1 introduce-equality-formula)
+    ;  (, (kb (: ⟨weq-curry⟩ (-> (: $x ⟨term⟩) (-> (: $y ⟨term⟩)
+    ;                      (: (⟨=⟩ $x $y) ⟨wff⟩))))))
+    ;  (, (ev (: (⟨=⟩ $x $y) ⟨wff⟩))))
+
+    ;; wim
+    ;(exec (1 introduce-implication-formula)
+    ;  (, (kb (: ⟨wim-curry⟩ (-> (: $P ⟨wff⟩) (-> (: $Q ⟨wff⟩)
+    ;                      (: (⟨->⟩ $P $Q) ⟨wff⟩))))))
+     ;(, (ev (: (⟨->⟩ $P $Q) ⟨wff⟩))))
+
+  ; For reasons beyond my understanding, the ev statement is required.
+  (exec (3 mp)
+    (, (kb (: ⟨mp⟩ (-> (: $P ⟨wff⟩) (: $Q ⟨wff⟩)
+                        (: $P ⟨|-⟩) (: (⟨->⟩ $P $Q) ⟨|-⟩) (: $Q ⟨|-⟩))))
+      (ev (: (⟨->⟩ $P $Q) ⟨|-⟩)))
+    (, (ev (: $Q ⟨|-⟩))))
+
+  (exec (4 mp)
+    (, (kb (: ⟨mp⟩ (-> (: $P ⟨wff⟩) (: $Q ⟨wff⟩)
+                        (: $P ⟨|-⟩) (: (⟨->⟩ $P $Q) ⟨|-⟩) (: $Q ⟨|-⟩))))
+      (ev (: (⟨->⟩ $P $Q) ⟨|-⟩)))
+    (, (ev (: $Q ⟨|-⟩))))
+
+    ;; WORKS in ~ 36ms
+    ;; tpl
+  ;  (exec (1 introduce-addition-term)
+  ;    (, (ev (: $x ⟨term⟩))
+  ;      (ev (: $y ⟨term⟩)))
+  ;    (, (ev (: (⟨+⟩ $x $y) ⟨term⟩))))
+
+    ;; weq
+  ;  (exec (1 introduce-equality-formula)
+  ;    (, (ev (: $a ⟨term⟩))
+  ;      (ev (: $b ⟨term⟩)))
+  ;    (, (ev (: (⟨=⟩ $a $b) ⟨wff⟩))))
+
+    ;; wim
+  ;  (exec (1 introduce-implication-formula)
+  ;    (, (ev (: $P ⟨wff⟩))
+  ;      (ev (: $Q ⟨wff⟩)))
+  ;    (, (ev (: (⟨->⟩ $P $Q) ⟨wff⟩))))
 
   ;; a1
-  (exec (1 apply-equality-transitivity)
-    (, (ev (: $a ⟨term⟩))
-      (ev (: $b ⟨term⟩))
-      (ev (: $c ⟨term⟩)))
-    (, (ev (: (⟨->⟩ (⟨=⟩ $a $b)
-                (⟨->⟩ (⟨=⟩ $a $c)
-                        (⟨=⟩ $b $c))) ⟨|-⟩))))
-                   
-  (exec (2 mp)
-    (, (ev (: $P ⟨wff⟩))
-      (ev (: $P ⟨|-⟩))
-      (ev (: (⟨->⟩ $P $Q) ⟨|-⟩))
-      (ev (: $Q ⟨wff⟩)))
-    (, (ev (: $Q ⟨|-⟩))))
+  ;(exec (1 apply-equality-transitivity)
+  ;  (, (ev (: $a ⟨term⟩))
+  ;     (ev (: $b ⟨term⟩))
+  ;     (ev (: $c ⟨term⟩)))
+  ;  (, (ev (: (⟨->⟩ (⟨=⟩ $a $b)
+  ;              (⟨->⟩ (⟨=⟩ $a $c)
+  ;                      (⟨=⟩ $b $c))) ⟨|-⟩))))
 
-  (exec (3 mp)
-    (, (ev (: $P ⟨wff⟩))
-      (ev (: $P ⟨|-⟩))
-      (ev (: (⟨->⟩ $P $Q) ⟨|-⟩))
-      (ev (: $Q ⟨wff⟩)))
-    (, (ev (: $Q ⟨|-⟩))))
-  "#;
+    ;; a2
+  ;  (exec (1 apply-additive-identity)
+  ;    (, (ev (: $a ⟨term⟩)))
+  ;    (, (ev (: (⟨=⟩ (⟨+⟩ $a ⟨0⟩) $a) ⟨|-⟩))))
+
+  ; 28ms 
+  ;(exec (3 mp)
+  ;  (, (ev (: (⟨->⟩ $P $Q) ⟨|-⟩))
+  ;    (ev (: $P ⟨|-⟩))
+  ;    (ev (: $P ⟨wff⟩))
+  ;    (ev (: $Q ⟨wff⟩)))
+  ;  (, (ev (: $Q ⟨|-⟩))))
+
+  ;(exec (4 mp)
+  ;  (, (ev (: (⟨->⟩ $P $Q) ⟨|-⟩))
+  ;    (ev (: $P ⟨|-⟩))
+  ;    (ev (: $P ⟨wff⟩))
+  ;    (ev (: $Q ⟨wff⟩)))
+  ;  (, (ev (: $Q ⟨|-⟩))))
+
+  ; 36ms
+  ;  (exec (3 mp)
+  ;    (, (ev (: $P ⟨wff⟩))
+  ;      (ev (: $P ⟨|-⟩))
+  ;      (ev (: (⟨->⟩ $P $Q) ⟨|-⟩))
+  ;      (ev (: $Q ⟨wff⟩)))
+  ;    (, (ev (: $Q ⟨|-⟩))))
+
+  ;  (exec (4 mp)
+  ;    (, (ev (: $P ⟨wff⟩))
+  ;      (ev (: $P ⟨|-⟩))
+  ;      (ev (: (⟨->⟩ $P $Q) ⟨|-⟩))
+  ;      (ev (: $Q ⟨wff⟩)))
+  ;    (, (ev (: $Q ⟨|-⟩))))
+    "#;
 
 
     let mut s = Space::new();
@@ -1976,7 +2077,7 @@ fn main() {
     // mm0();
     // mm1_b_tpl();
     // mm1_b2_tpl();
-    mm1_forward();
+    // mm1_forward();
     // return;
 
     let args = Cli::parse();
@@ -1998,6 +2099,7 @@ fn main() {
                     "process_calculus" => { process_calculus_bench(1000, 200, 200); }
                     "exponential" => { exponential(32); }
                     "exponential_fringe" => { exponential_fringe(15); }
+                    "mm1_forward" => { mm1_forward(); }
                     s => { println!("bench not known: {s}") }
                 }
             }
