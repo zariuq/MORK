@@ -1533,72 +1533,77 @@ fn linear_alternating(steps: usize) {
 fn mm1_forward() {
     // Program: universe, typed constructors, axioms (curried), tiny pipeline, and final assembly.
     const P: &str = r#"
-(kb (: ⟨+⟩ (-> ⟨term⟩ (-> ⟨term⟩ ⟨term⟩))))
-(kb (: ⟨=⟩ (-> ⟨term⟩ (-> ⟨term⟩ ⟨wff⟩))))
-(kb (: ⟨t⟩ ⟨term⟩))
-(kb (: ⟨0⟩ ⟨term⟩))
+  (kb (: ⟨+⟩ (-> ⟨term⟩ (-> ⟨term⟩ ⟨term⟩))))
+  (kb (: ⟨=⟩ (-> ⟨term⟩ (-> ⟨term⟩ ⟨wff⟩))))
+  (kb (: ⟨t⟩ ⟨term⟩))
+  (kb (: ⟨0⟩ ⟨term⟩))
 
-(kb (: ⟨tpl⟩ (-> (: $x ⟨term⟩) (-> (: $y ⟨term⟩)
-                      (: (⟨+⟩ $x $y) ⟨term⟩)))))
-(kb (: ⟨weq⟩ (-> (: $x ⟨term⟩) (-> (: $y ⟨term⟩)
-                      (: (⟨=⟩ $x $y) ⟨wff⟩)))))
-(kb (: ⟨wim⟩ (-> (: $P ⟨wff⟩) (-> (: $Q ⟨wff⟩)
-                      (: (⟨->⟩ $P $Q) ⟨wff⟩)))))
+  (kb (: ⟨tpl⟩ (-> (: $x ⟨term⟩) (-> (: $y ⟨term⟩)
+                        (: (⟨+⟩ $x $y) ⟨term⟩)))))
+  (kb (: ⟨weq⟩ (-> (: $x ⟨term⟩) (-> (: $y ⟨term⟩)
+                        (: (⟨=⟩ $x $y) ⟨wff⟩)))))
+  (kb (: ⟨wim⟩ (-> (: $P ⟨wff⟩) (-> (: $Q ⟨wff⟩)
+                        (: (⟨->⟩ $P $Q) ⟨wff⟩)))))
 
-(kb (: ⟨a2-curry⟩ (-> (: $a ⟨term⟩)
-                  (: (⟨=⟩ (⟨+⟩ $a ⟨0⟩) $a) ⟨|-⟩))))
-(kb (: ⟨a1-curry⟩ (-> (: $a ⟨term⟩) (-> (: $b ⟨term⟩) (-> (: $c ⟨term⟩)
-                  (: (⟨->⟩ (⟨=⟩ $a $b) (⟨->⟩ (⟨=⟩ $a $c) (⟨=⟩ $b $c))) ⟨|-⟩))))))
-(kb (: ⟨mp-curry⟩ (-> (: $P ⟨wff⟩) (-> (: $Q ⟨wff⟩)
-                  (-> (: $P ⟨|-⟩) (-> (: (⟨->⟩ $P $Q) ⟨|-⟩) (: $Q ⟨|-⟩)))))))
+  (kb (: ⟨a2-curry⟩ (-> (: $a ⟨term⟩)
+                    (: (⟨=⟩ (⟨+⟩ $a ⟨0⟩) $a) ⟨|-⟩))))
+  (kb (: ⟨a1-curry⟩ (-> (: $a ⟨term⟩) (-> (: $b ⟨term⟩) (-> (: $c ⟨term⟩)
+                    (: (⟨->⟩ (⟨=⟩ $a $b) (⟨->⟩ (⟨=⟩ $a $c) (⟨=⟩ $b $c))) ⟨|-⟩))))))
+  (kb (: ⟨mp-curry⟩ (-> (: $P ⟨wff⟩) (-> (: $Q ⟨wff⟩)
+                    (-> (: $P ⟨|-⟩) (-> (: (⟨->⟩ $P $Q) ⟨|-⟩) (: $Q ⟨|-⟩)))))))
 
-(kb (: ⟨a2⟩ (-> (: $a ⟨term⟩) (: (⟨=⟩ (⟨+⟩ $a ⟨0⟩) $a) ⟨|-⟩))))
-(kb (: ⟨a1⟩ (-> (: $a ⟨term⟩) (: $b ⟨term⟩) (: $c ⟨term⟩) (: (⟨->⟩ (⟨=⟩ $a $b) (⟨->⟩ (⟨=⟩ $a $c) (⟨=⟩ $b $c))) ⟨|-⟩))))
-(kb (: ⟨mp⟩ (-> (: $P ⟨wff⟩) (: $Q ⟨wff⟩) (: $P ⟨|-⟩) (: (⟨->⟩ $P $Q) ⟨|-⟩) (: $Q ⟨|-⟩))))
+  (kb (: ⟨a2⟩ (-> (: $a ⟨term⟩) (: (⟨=⟩ (⟨+⟩ $a ⟨0⟩) $a) ⟨|-⟩))))
+  (kb (: ⟨a1⟩ (-> (: $a ⟨term⟩) (: $b ⟨term⟩) (: $c ⟨term⟩) (: (⟨->⟩ (⟨=⟩ $a $b) (⟨->⟩ (⟨=⟩ $a $c) (⟨=⟩ $b $c))) ⟨|-⟩))))
+  (kb (: ⟨mp⟩ (-> (: $P ⟨wff⟩) (: $Q ⟨wff⟩) (: $P ⟨|-⟩) (: (⟨->⟩ $P $Q) ⟨|-⟩) (: $Q ⟨|-⟩))))
 
-(exec (0 lift) (, (kb (: $t $T))) (, (ev (: $t $T))))
+  (exec (0 lift) (, (kb (: $t $T))) (, (ev (: $t $T))))
 
-(exec (1 tpl-apply)
-  (, (ev (: $x ⟨term⟩))
-     (ev (: $y ⟨term⟩)))
-  (, (ev (: (⟨+⟩ $x $y) ⟨term⟩))))
+  ;; tpl
+  (exec (1 introduce-addition-term)
+    (, (ev (: $x ⟨term⟩))
+      (ev (: $y ⟨term⟩)))
+    (, (ev (: (⟨+⟩ $x $y) ⟨term⟩))))
 
-(exec (1 weq-apply)
-  (, (ev (: $a ⟨term⟩))
-     (ev (: $b ⟨term⟩)))
-  (, (ev (: (⟨=⟩ $a $b) ⟨wff⟩))))
+  ;; weq
+  (exec (1 introduce-equality-formula)
+    (, (ev (: $a ⟨term⟩))
+      (ev (: $b ⟨term⟩)))
+    (, (ev (: (⟨=⟩ $a $b) ⟨wff⟩))))
 
-(exec (1 wim-apply)
-  (, (ev (: $P ⟨wff⟩))
-     (ev (: $Q ⟨wff⟩)))
-  (, (ev (: (⟨->⟩ $P $Q) ⟨wff⟩))))
+  ;; wim
+  (exec (1 introduce-implication-formula)
+    (, (ev (: $P ⟨wff⟩))
+      (ev (: $Q ⟨wff⟩)))
+    (, (ev (: (⟨->⟩ $P $Q) ⟨wff⟩))))
 
-(exec (1 a2-instantiate-t)
-  (, (ev (: $a ⟨term⟩)))
-  (, (ev (: (⟨=⟩ (⟨+⟩ $a ⟨0⟩) $a) ⟨|-⟩))))
+  ;; a2
+  (exec (1 apply-additive-identity)
+    (, (ev (: $a ⟨term⟩)))
+    (, (ev (: (⟨=⟩ (⟨+⟩ $a ⟨0⟩) $a) ⟨|-⟩))))
 
-(exec (1 a1-instantiate-PtoQ)
-  (, (ev (: $a ⟨term⟩))
-     (ev (: $b ⟨term⟩))
-     (ev (: $c ⟨term⟩)))
-  (, (ev (: (⟨->⟩ (⟨=⟩ $a $b)
-               (⟨->⟩ (⟨=⟩ $a $c)
-                       (⟨=⟩ $b $c))) ⟨|-⟩))))
+  ;; a1
+  (exec (1 apply-equality-transitivity)
+    (, (ev (: $a ⟨term⟩))
+      (ev (: $b ⟨term⟩))
+      (ev (: $c ⟨term⟩)))
+    (, (ev (: (⟨->⟩ (⟨=⟩ $a $b)
+                (⟨->⟩ (⟨=⟩ $a $c)
+                        (⟨=⟩ $b $c))) ⟨|-⟩))))
+                   
+  (exec (2 mp)
+    (, (ev (: $P ⟨wff⟩))
+      (ev (: $P ⟨|-⟩))
+      (ev (: (⟨->⟩ $P $Q) ⟨|-⟩))
+      (ev (: $Q ⟨wff⟩)))
+    (, (ev (: $Q ⟨|-⟩))))
 
-(exec (2 derive-P-to-Q-direct3)
-  (, (ev (: $P ⟨wff⟩))
-     (ev (: $P ⟨|-⟩))
-     (ev (: (⟨->⟩ $P $IMP) ⟨|-⟩))
-     (ev (: $IMP ⟨wff⟩)))
-  (, (ev (: $IMP ⟨|-⟩))))
-
-(exec (3 assemble-final-proof-direct)
-  (, (ev (: $P ⟨wff⟩))
-     (ev (: $P ⟨|-⟩))
-     (ev (: (⟨->⟩ $P $Q) ⟨|-⟩))
-     (ev (: $Q ⟨wff⟩)))
-  (, (ev (: $Q ⟨|-⟩))))
-"#;
+  (exec (3 mp)
+    (, (ev (: $P ⟨wff⟩))
+      (ev (: $P ⟨|-⟩))
+      (ev (: (⟨->⟩ $P $Q) ⟨|-⟩))
+      (ev (: $Q ⟨wff⟩)))
+    (, (ev (: $Q ⟨|-⟩))))
+  "#;
 
 
     let mut s = Space::new();
@@ -1966,7 +1971,7 @@ fn main() {
     // mm0();
     // mm1_b_tpl();
     // mm1_b2_tpl();
-    // mm1_forward();
+    mm1_forward();
     // return;
 
     let args = Cli::parse();
