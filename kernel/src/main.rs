@@ -748,6 +748,11 @@ fn bc2() {
 
     println!("proof of 𝜒: {res}");
     assert!(res.contains("(@ ax-mp (@ ax-mp mp2b.1 mp2b.2) mp2b.3)\n"));
+    println!("\n--- Full Final State Dump ---");
+    let mut buf_dump = Vec::new();
+    s.dump_all_sexpr(&mut buf_dump).unwrap();
+    let dump = String::from_utf8_lossy(&buf_dump);
+    print!("{dump}");
 }
 
 fn bc3() {
@@ -1530,61 +1535,115 @@ fn linear_alternating(steps: usize) {
     // println!("result: {res}");
 }
 
-fn mm1_forward() {
+
+fn mm2_bc() {
     // Program: universe, typed constructors, axioms (curried), tiny pipeline, and final assembly.
     const P: &str = r#"
-  (kb (: ⟨+⟩ (-> ⟨term⟩ (-> ⟨term⟩ ⟨term⟩))))
-  (kb (: ⟨=⟩ (-> ⟨term⟩ (-> ⟨term⟩ ⟨wff⟩))))
+  (kb (: ⟨+⟩ (-> ⟨term⟩ ⟨term⟩ ⟨term⟩))) ;; Nil-style wim
+  (kb (: ⟨=⟩ (-> ⟨term⟩ ⟨term⟩ ⟨wff⟩))) ;; weq
   (kb (: ⟨t⟩ ⟨term⟩))
   (kb (: ⟨0⟩ ⟨term⟩))
 
-  (kb (: ⟨tpl-curry⟩ (-> (: $x ⟨term⟩) (-> (: $y ⟨term⟩)
-                        (: (⟨+⟩ $x $y) ⟨term⟩)))))
-  (kb (: ⟨weq-curry⟩ (-> (: $x ⟨term⟩) (-> (: $y ⟨term⟩)
-                        (: (⟨=⟩ $x $y) ⟨wff⟩)))))
-  (kb (: ⟨wim-curry⟩ (-> (: $P ⟨wff⟩) (-> (: $Q ⟨wff⟩)
-                        (: (⟨->⟩ $P $Q) ⟨wff⟩)))))
-
-  (kb (: ⟨a2-curry⟩ (-> (: $a ⟨term⟩)
-                    (: (⟨=⟩ (⟨+⟩ $a ⟨0⟩) $a) ⟨|-⟩))))
-  (kb (: ⟨a1-curry⟩ (-> (: $a ⟨term⟩) (-> (: $b ⟨term⟩) (-> (: $c ⟨term⟩)
-                    (: (⟨->⟩ (⟨=⟩ $a $b) (⟨->⟩ (⟨=⟩ $a $c) (⟨=⟩ $b $c))) ⟨|-⟩))))))
-  (kb (: ⟨mp-curry⟩ (-> (: $P ⟨wff⟩) (-> (: $Q ⟨wff⟩)
-                    (-> (: $P ⟨|-⟩) (-> (: (⟨->⟩ $P $Q) ⟨|-⟩) (: $Q ⟨|-⟩)))))))
-
+  ;; curried versions not needed.
   (kb (: ⟨tpl⟩ (-> (: $x ⟨term⟩) (: $y ⟨term⟩) (: (⟨+⟩ $x $y) ⟨term⟩))))
   (kb (: ⟨weq⟩ (-> (: $x ⟨term⟩) (: $y ⟨term⟩) (: (⟨=⟩ $x $y) ⟨wff⟩))))
   (kb (: ⟨wim⟩ (-> (: $P ⟨wff⟩) (: $Q ⟨wff⟩) (: (⟨->⟩ $P $Q) ⟨wff⟩))))
   (kb (: ⟨a2⟩ (-> (: $a ⟨term⟩) (: (⟨=⟩ (⟨+⟩ $a ⟨0⟩) $a) ⟨|-⟩))))
-  (kb (: ⟨a1⟩ (-> (: $a ⟨term⟩) (: $b ⟨term⟩) (: $c ⟨term⟩) (: (⟨->⟩ (⟨=⟩ $a $b) (⟨->⟩ (⟨=⟩ $a $c) (⟨=⟩ $b $c))) ⟨|-⟩))))
+  (kb (: ⟨a1⟩ (-> (: $t ⟨term⟩) (: $r ⟨term⟩) (: $s ⟨term⟩) (: (⟨->⟩ (⟨=⟩ $t $r) (⟨->⟩ (⟨=⟩ $t $s) (⟨=⟩ $r $s))) ⟨|-⟩))))
   (kb (: ⟨mp⟩ (-> (: $P ⟨wff⟩) (: $Q ⟨wff⟩) (: $P ⟨|-⟩) (: (⟨->⟩ $P $Q) ⟨|-⟩) (: $Q ⟨|-⟩))))
 
-  (exec (0 lift) (, (kb (: $t $T))) (, (ev (: $t $T))))
+  ;; needed for bc?
+  ;(exec (0 lift) (, (kb (: $t $T))) (, (ev (: $t $T))))
+
+  (exec 0 strip-name (, (kb (: $name $rule))))
+
+  ;; There is evidence for the goal if it is in the kb?
+  ;; 'lift' above is equivalent to this, but this only does it for that which we're investigating, which is more 'efficient' (unless doing it in bulk is the efficient option, which could be best for a small kb -- to be tested!)
+  ((step (0 base))
+    (, (goal (: $proof $conclusion)) (kb (: $proof $conclusion)))
+    (, (ev (: $proof $conclusion) ) ))
+
+  ((step (1 abs))
+      (, (goal (: $proof $conclusion)))
+      (, (goal (: $lhs (-> $synth $conclusion)) ) ))
+
+  ((step (2 rev))
+    (, (ev (: $lhs (-> $a $r)))  (goal (: $k $r)) )
+    (, (goal (: $rhs $a) ) ))
+
+  ;((step (3 abs2))
+  ;  (, (goal (: $proof $conclusion)))
+  ;  (, (goal (: $lhs (-> $syntha $synthb $conclusion)) ) ))
+
+  ;((step (4 rev2))
+  ;  (, (ev (: $lhs (-> $a $b $r)))  (goal (: $k $r)) )
+  ;  (, (goal (: $ap $a)) (goal (: $bp $b)) ))
+
+  ;((step (5 app))
+  ;  (, (ev (: $lhs (-> $a $r)))  (ev (: $rhs $a))  )
+  ;  (, (ev (: (@ $lhs $rhs) $r) ) ))
+    
+  ;((step (6 app2))
+  ;  (, (ev (: $f (-> $a $b $r)))  (ev (: $ap $a)) (ev (: $bp $b))  )
+  ;  (, (ev (: (@ $f $ap $bp) $r) ) ))
+
+  ;((step (7 abs3))
+  ;(, (goal (: $proof $conclusion)))
+  ;(, (goal (: $lhs (-> $syntha $synthb $synthc $conclusion)) ) ))
+
+  ;((step (8 rev3))
+  ;  (, (ev (: $lhs (-> $a $b $c $r)))  (goal (: $k $r)) )
+  ;  (, (goal (: $ap $a)) (goal (: $bp $b)) (goal (: $cp $c)) ))
+
+  ;((step (9 app3))
+  ;  (, (ev (: $f (-> $a $b $c $r)))  (ev (: $ap $a)) (ev (: $bp $b)) (ev (: $cp $c))  )
+  ;  (, (ev (: (@ $f $ap $bp $cp) $r) ) ))
+
+  ;((step (10 abs4))
+  ;  (, (goal (: $proof $conclusion)))
+  ;  (, (goal (: $lhs (-> $syntha $synthb $synthc $synthd $conclusion)) ) ))
+
+  ;((step (11 rev4))
+  ;  (, (ev (: $lhs (-> $a $b $c $d $r)))  (goal (: $k $r)) )
+  ;  (, (goal (: $ap $a)) (goal (: $bp $b)) (goal (: $cp $c)) (goal (: $dp $d)) ))
+
+  ;((step (12 app4))
+  ;  (, (ev (: $f (-> $a $b $c $d $r)))  (ev (: $ap $a)) (ev (: $bp $b)) (ev (: $cp $c)) (ev (: $dp $d))  )
+  ;  (, (ev (: (@ $f $ap $bp $cp $dp) $r) ) ))
+
+  (exec bc
+      (, ((step $x) $premises0 $conclusions0)
+         (exec bc $premises1 $conclusions1) )
+      (, (exec $x $premises0 $conclusions0)
+         (exec bc $premises1 $conclusions1) ))
+
+  ; (goal (: (⟨=⟩ ⟨t⟩ ⟨t⟩) ⟨|-⟩))
+  (goal (: (⟨=⟩ ⟨0⟩ (⟨+⟩ ⟨t⟩ ⟨t⟩)) ⟨|-⟩))
 
   ;; Works in ~ 34ms
   ;; For unary rules like a2
-  (exec (0 lift-unary-rule)
-    (, (kb (: $name (-> (: $x $T1) (: $result $T2)))))
-    (, (exec (1 $name)
-        (, (ev (: $x $T1)))
-        (, (ev (: $result $T2))))))
+  ;(exec (0 lift-unary-rule)
+  ;  (, (kb (: $name (-> (: $x $T1) (: $result $T2)))))
+  ;  (, (exec (1 $name)
+  ;      (, (ev (: $x $T1)))
+  ;      (, (ev (: $result $T2))))))
 
   ;; for tpl, weq, wim
-  (exec (0 lift-binary-rule) 
-  (, (kb (: $name (-> (: $x $T1) (: $y $T2) (: $result $T3)))))
-  (, (exec (1 $name)
-       (, (ev (: $x $T1)) 
-          (ev (: $y $T2)))
-       (, (ev (: $result $T3))))))
+  ;(exec (0 lift-binary-rule) 
+  ;(, (kb (: $name (-> (: $x $T1) (: $y $T2) (: $result $T3)))))
+  ;(, (exec (1 $name)
+  ;     (, (ev (: $x $T1)) 
+  ;        (ev (: $y $T2)))
+  ;     (, (ev (: $result $T3))))))
 
     ;; For ternary rules like a1
-  (exec (0 lift-ternary-rule)
-    (, (kb (: $name (-> (: $a $T1) (: $b $T2) (: $c $T3) (: $result $T4)))))
-    (, (exec (2 $name)
-        (, (ev (: $a $T1))
-            (ev (: $b $T2))
-            (ev (: $c $T3)))
-        (, (ev (: $result $T4))))))
+  ;(exec (0 lift-ternary-rule)
+  ;  (, (kb (: $name (-> (: $a $T1) (: $b $T2) (: $c $T3) (: $result $T4)))))
+  ;  (, (exec (2 $name)
+  ;      (, (ev (: $a $T1))
+  ;          (ev (: $b $T2))
+  ;          (ev (: $c $T3)))
+  ;      (, (ev (: $result $T4))))))
 
   ;; Works in 6s with one mp rule
   ;; For mp (4-ary)
@@ -1630,17 +1689,17 @@ fn mm1_forward() {
      ;(, (ev (: (⟨->⟩ $P $Q) ⟨wff⟩))))
 
   ; For reasons beyond my understanding, the ev statement is required.
-  (exec (3 mp)
-    (, (kb (: ⟨mp⟩ (-> (: $P ⟨wff⟩) (: $Q ⟨wff⟩)
-                        (: $P ⟨|-⟩) (: (⟨->⟩ $P $Q) ⟨|-⟩) (: $Q ⟨|-⟩))))
-      (ev (: (⟨->⟩ $P $Q) ⟨|-⟩)))
-    (, (ev (: $Q ⟨|-⟩))))
+  ;(exec (3 mp)
+  ;  (, (kb (: ⟨mp⟩ (-> (: $P ⟨wff⟩) (: $Q ⟨wff⟩)
+  ;                     (: $P ⟨|-⟩) (: (⟨->⟩ $P $Q) ⟨|-⟩) (: $Q ⟨|-⟩))))
+  ;    (ev (: (⟨->⟩ $P $Q) ⟨|-⟩)))
+  ;  (, (ev (: $Q ⟨|-⟩))))
 
-  (exec (4 mp)
-    (, (kb (: ⟨mp⟩ (-> (: $P ⟨wff⟩) (: $Q ⟨wff⟩)
-                        (: $P ⟨|-⟩) (: (⟨->⟩ $P $Q) ⟨|-⟩) (: $Q ⟨|-⟩))))
-      (ev (: (⟨->⟩ $P $Q) ⟨|-⟩)))
-    (, (ev (: $Q ⟨|-⟩))))
+  ;(exec (4 mp)
+  ;  (, (kb (: ⟨mp⟩ (-> (: $P ⟨wff⟩) (: $Q ⟨wff⟩)
+  ;                      (: $P ⟨|-⟩) (: (⟨->⟩ $P $Q) ⟨|-⟩) (: $Q ⟨|-⟩))))
+  ;    (ev (: (⟨->⟩ $P $Q) ⟨|-⟩)))
+  ; (, (ev (: $Q ⟨|-⟩))))
 
     ;; WORKS in ~ 36ms
     ;; tpl
@@ -1720,6 +1779,272 @@ fn mm1_forward() {
     let want_ev_proof_ptoptoq  = "(ev (: (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨=⟩ ⟨t⟩ ⟨t⟩))) ⟨|-⟩))";
     let want_final_evidence    = "(ev (: (⟨=⟩ ⟨t⟩ ⟨t⟩) ⟨|-⟩)";
 
+    println!("=== MM2 (bc): Proving ⊢ (t = t) ===");
+
+    let mut ticks = 0usize;
+    loop {
+        ticks += 1;
+        let t1 = Instant::now();
+        let n = s.metta_calculus(1);
+        println!("executing step {} ({}) took {} ms (unifications {}, writes {}, transitions {})", ticks, n, t1.elapsed().as_millis(), unsafe { unifications }, unsafe { writes }, unsafe { transitions });
+
+        // if n == 1 { continue } // comment out if you want the analysis at every step
+
+        println!("space size {}", s.btm.val_count());
+        let total_t = t0.elapsed();
+
+        let mut buf = Vec::new();
+        s.dump_all_sexpr(&mut buf).unwrap();
+        let dump = String::from_utf8_lossy(&buf);
+
+        let line_has = |needle: &str| dump.lines().any(|l| l.trim_start().starts_with(needle));
+
+        let have_tplus0_term  = line_has(want_ev_term_tplus0);
+        let have_wff_p_ev     = line_has(want_ev_wff_p);
+        let have_wff_q_ev     = line_has(want_ev_wff_q);
+        let have_proof_p_ev   = line_has(want_ev_proof_p);
+        let have_ptoq_ev      = line_has(want_ev_proof_ptoq);
+        let have_ptoptoq_ev   = line_has(want_ev_proof_ptoptoq);
+        let have_final        = line_has(want_final_evidence);
+
+        if have_final {
+            println!("\n== mm2 (bc): ✅ SUCCESS in {:?} after {} tick(s) ==", total_t, ticks);
+            println!("  (+ t 0) : term ............. {}", if have_tplus0_term { "✓" } else { "—" });
+            println!("  wff_P (ev) ................. {}", if have_wff_p_ev { "✓" } else { "—" });
+            println!("  wff_Q (ev) ................. {}", if have_wff_q_ev { "✓" } else { "—" });
+            println!("  proof_P (a2@t, ev) ......... {}", if have_proof_p_ev { "✓" } else { "—" });
+            println!("  proof_PtoQ (a1, ev) ........ {}", if have_ptoq_ev { "✓" } else { "—" });
+            println!("  proof_PtoPtoQ (a1, ev) ..... {}", if have_ptoptoq_ev { "✓" } else { "—" });
+
+            println!("\n--- Final evidence confirmation ---");
+            println!("✅ Successfully derived ⊢ (t = t)");
+
+            println!("\n--- Full Final State Dump ---");
+            print!("{dump}");
+            break;
+        }
+
+        if n == 0 || ticks >= 25 {
+            println!("\n== mm2 (bc): — FAILURE in {:?} after {} tick(s) ==", t0.elapsed(), ticks);
+            println!("  (+ t 0) : term ............. {}", if have_tplus0_term { "✓" } else { "—" });
+            println!("  wff_P (ev) ................. {}", if have_wff_p_ev { "✓" } else { "—" });
+            println!("  wff_Q (ev) ................. {}", if have_wff_q_ev { "✓" } else { "—" });
+            println!("  proof_P (a2@t, ev) ......... {}", if have_proof_p_ev { "✓" } else { "—" });
+            println!("  proof_PtoQ (a1, ev) ........ {}", if have_ptoq_ev { "✓" } else { "—" });
+            println!("  proof_PtoPtoQ (a1, ev) ..... {}", if have_ptoptoq_ev { "✓" } else { "—" });
+
+            if !have_final {
+                println!("\n❌ Failed to derive ⊢ (t = t)");
+            }
+
+            println!("\n--- Full Final State Dump ---");
+            print!("{dump}");
+            break;
+        }
+    }
+}
+
+// demo0.mm forward-pass (less vibe-coded)
+fn mm1_forward() {
+    // Program: universe, typed constructors, axioms (curried), tiny pipeline, and final assembly.
+    const P: &str = r#"
+  (kb (: ⟨+⟩ (-> ⟨term⟩ (-> ⟨term⟩ ⟨term⟩))))
+  (kb (: ⟨=⟩ (-> ⟨term⟩ (-> ⟨term⟩ ⟨wff⟩))))
+  (kb (: ⟨t⟩ ⟨term⟩))
+  (kb (: ⟨0⟩ ⟨term⟩))
+
+  ;(kb (: ⟨tpl-curry⟩ (-> (: $x ⟨term⟩) (-> (: $y ⟨term⟩)
+  ;                      (: (⟨+⟩ $x $y) ⟨term⟩)))))
+  ;(kb (: ⟨weq-curry⟩ (-> (: $x ⟨term⟩) (-> (: $y ⟨term⟩)
+  ;                      (: (⟨=⟩ $x $y) ⟨wff⟩)))))
+  ;(kb (: ⟨wim-curry⟩ (-> (: $P ⟨wff⟩) (-> (: $Q ⟨wff⟩)
+  ;                      (: (⟨->⟩ $P $Q) ⟨wff⟩)))))
+
+  ;(kb (: ⟨a2-curry⟩ (-> (: $a ⟨term⟩)
+  ;                  (: (⟨=⟩ (⟨+⟩ $a ⟨0⟩) $a) ⟨|-⟩))))
+  ;(kb (: ⟨a1-curry⟩ (-> (: $a ⟨term⟩) (-> (: $b ⟨term⟩) (-> (: $c ⟨term⟩)
+  ;                  (: (⟨->⟩ (⟨=⟩ $a $b) (⟨->⟩ (⟨=⟩ $a $c) (⟨=⟩ $b $c))) ⟨|-⟩))))))
+  ;(kb (: ⟨mp-curry⟩ (-> (: $P ⟨wff⟩) (-> (: $Q ⟨wff⟩)
+  ;                  (-> (: $P ⟨|-⟩) (-> (: (⟨->⟩ $P $Q) ⟨|-⟩) (: $Q ⟨|-⟩)))))))
+
+  (kb (: ⟨tpl⟩ (-> (: $x ⟨term⟩) (: $y ⟨term⟩) (: (⟨+⟩ $x $y) ⟨term⟩))))
+  (kb (: ⟨weq⟩ (-> (: $x ⟨term⟩) (: $y ⟨term⟩) (: (⟨=⟩ $x $y) ⟨wff⟩))))
+  (kb (: ⟨wim⟩ (-> (: $P ⟨wff⟩) (: $Q ⟨wff⟩) (: (⟨->⟩ $P $Q) ⟨wff⟩))))
+  (kb (: ⟨a2⟩ (-> (: $a ⟨term⟩) (: (⟨=⟩ (⟨+⟩ $a ⟨0⟩) $a) ⟨|-⟩))))
+  (kb (: ⟨a1⟩ (-> (: $t ⟨term⟩) (: $r ⟨term⟩) (: $s ⟨term⟩) (: (⟨->⟩ (⟨=⟩ $t $r) (⟨->⟩ (⟨=⟩ $t $s) (⟨=⟩ $r $s))) ⟨|-⟩))))
+  (kb (: ⟨mp⟩ (-> (: $P ⟨wff⟩) (: $Q ⟨wff⟩) (: $P ⟨|-⟩) (: (⟨->⟩ $P $Q) ⟨|-⟩) (: $Q ⟨|-⟩))))
+
+  (exec (0 lift) (, (kb (: $t $T))) (, (ev (: $t $T))))
+
+  ;; Works in ~ 34ms
+  ;; For unary rules like a2
+  (exec (0 lift-unary-rule)
+    (, (kb (: $name (-> (: $x $T1) (: $result $T2)))))
+    (, (exec (1 $name)
+        (, (ev (: $x $T1)))
+        (, (ev (: $result $T2))))))
+
+  ;; for tpl, weq, wim
+  (exec (0 lift-binary-rule) 
+  (, (kb (: $name (-> (: $x $T1) (: $y $T2) (: $result $T3)))))
+  (, (exec (1 $name)
+       (, (ev (: $x $T1)) 
+          (ev (: $y $T2)))
+       (, (ev (: $result $T3))))))
+
+    ;; For ternary rules like a1
+  (exec (0 lift-ternary-rule)
+    (, (kb (: $name (-> (: $a $T1) (: $b $T2) (: $c $T3) (: $result $T4)))))
+    (, (exec (2 $name)
+        (, (ev (: $a $T1))
+            (ev (: $b $T2))
+            (ev (: $c $T3)))
+        (, (ev (: $result $T4))))))
+
+  ;; Works in 6s with one mp rule
+  ;; For mp (4-ary)
+  ;(exec (0 lift-quaternary-rule)
+  ;  (, (kb (: $name (-> (: $a $T1) (: $b $T2) (: $c $T3) (: $d $T4) (: $result $T5)))))
+  ;  (, (exec (8 $name)
+  ;       (, (ev (: $a $T1))
+  ;          (ev (: $b $T2))
+  ;          (ev (: $c $T3))
+  ;          (ev (: $d $T4)))
+  ;       (, (ev (: $result $T5))))))
+
+  ;; Having two of these makes it ~ 15s
+  ;; For mp (4-ary)
+  ;(exec (0 lift-quaternary-rule)
+  ;  (, (kb (: $name (-> (: $a $T1) (: $b $T2) (: $c $T3) (: $d $T4) (: $result $T5)))))
+  ;  (, (exec (9 $name)
+  ;       (, (ev (: $a $T1))
+  ;          (ev (: $b $T2))
+  ;          (ev (: $c $T3))
+  ;          (ev (: $d $T4)))
+  ;       (, (ev (: $result $T5))))))
+
+
+    ;; (unknown) WORKS in ~ 1ms
+    ;; Because I don't need to go through the evs and generate a bunch of other stuff?
+    ;; If kb just matches w/o instantiating, again, I don't really get this.
+    ;; Perhaps it *does* generate unsound conclusions I didn't notice as the result was derived qucickly?
+    ;; tpl
+    ;(exec (1 introduce-addition-term)
+    ;  (, (kb (: ⟨tpl-curry⟩ (-> (: $x ⟨term⟩) (-> (: $y ⟨term⟩)
+    ;                      (: (⟨+⟩ $x $y) ⟨term⟩))))))
+    ;  (, (ev (: (⟨+⟩ $x $y) ⟨term⟩))))
+
+    ;; weq
+    ;(exec (1 introduce-equality-formula)
+    ;  (, (kb (: ⟨weq-curry⟩ (-> (: $x ⟨term⟩) (-> (: $y ⟨term⟩)
+    ;                      (: (⟨=⟩ $x $y) ⟨wff⟩))))))
+    ;  (, (ev (: (⟨=⟩ $x $y) ⟨wff⟩))))
+
+    ;; wim
+    ;(exec (1 introduce-implication-formula)
+    ;  (, (kb (: ⟨wim-curry⟩ (-> (: $P ⟨wff⟩) (-> (: $Q ⟨wff⟩)
+    ;                      (: (⟨->⟩ $P $Q) ⟨wff⟩))))))
+     ;(, (ev (: (⟨->⟩ $P $Q) ⟨wff⟩))))
+
+  ; For reasons beyond my understanding, the ev statement is required.
+  ; Ok, seems to have to do with the binding/matching of the kb statements.
+  ; now runs in circa 500ms
+  ; Without the two ev statements, apparently non-derived $P were being matched.
+  ; Probably because the kb rule matches the "rule" in the kb.., variable for variabl.
+  ; In essence, the inclusion of these is useless/harmful.
+  ;(exec (3 mp)
+  ;  (, (kb (: ⟨mp⟩ (-> (: $P ⟨wff⟩) (: $Q ⟨wff⟩)
+  ;                      (: $P ⟨|-⟩) (: (⟨->⟩ $P $Q) ⟨|-⟩) (: $Q ⟨|-⟩))))
+  ;    (ev (: $P ⟨|-⟩))
+  ;    (ev (: (⟨->⟩ $P $Q) ⟨|-⟩)))
+  ;  (, (ev (: $Q ⟨|-⟩))))
+
+  ;(exec (4 mp)
+  ;  (, (kb (: ⟨mp⟩ (-> (: $P ⟨wff⟩) (: $Q ⟨wff⟩)
+  ;                      (: $P ⟨|-⟩) (: (⟨->⟩ $P $Q) ⟨|-⟩) (: $Q ⟨|-⟩))))
+  ;    (ev (: $P ⟨|-⟩))
+  ;    (ev (: (⟨->⟩ $P $Q) ⟨|-⟩)))
+  ;  (, (ev (: $Q ⟨|-⟩))))
+
+    ;; WORKS in ~ 36ms
+    ;; tpl
+  ;  (exec (1 introduce-addition-term)
+  ;    (, (ev (: $x ⟨term⟩))
+  ;      (ev (: $y ⟨term⟩)))
+  ;    (, (ev (: (⟨+⟩ $x $y) ⟨term⟩))))
+
+    ;; weq
+  ;  (exec (1 introduce-equality-formula)
+  ;    (, (ev (: $a ⟨term⟩))
+  ;      (ev (: $b ⟨term⟩)))
+  ;    (, (ev (: (⟨=⟩ $a $b) ⟨wff⟩))))
+
+    ;; wim
+  ;  (exec (1 introduce-implication-formula)
+  ;    (, (ev (: $P ⟨wff⟩))
+  ;      (ev (: $Q ⟨wff⟩)))
+  ;    (, (ev (: (⟨->⟩ $P $Q) ⟨wff⟩))))
+
+  ;; a1
+  ;(exec (1 apply-equality-transitivity)
+  ;  (, (ev (: $a ⟨term⟩))
+  ;     (ev (: $b ⟨term⟩))
+  ;     (ev (: $c ⟨term⟩)))
+  ;  (, (ev (: (⟨->⟩ (⟨=⟩ $a $b)
+  ;              (⟨->⟩ (⟨=⟩ $a $c)
+  ;                      (⟨=⟩ $b $c))) ⟨|-⟩))))
+
+    ;; a2
+  ;  (exec (1 apply-additive-identity)
+  ;    (, (ev (: $a ⟨term⟩)))
+  ;    (, (ev (: (⟨=⟩ (⟨+⟩ $a ⟨0⟩) $a) ⟨|-⟩))))
+
+  ; 28ms
+  ; Breaks if I include the kb part, but seeing the above, whatever...
+  (exec (3 mp)
+    (, (ev (: (⟨->⟩ $P $Q) ⟨|-⟩))
+      (ev (: $P ⟨|-⟩))
+      (ev (: $P ⟨wff⟩))
+      (ev (: $Q ⟨wff⟩)))
+    (, (ev (: $Q ⟨|-⟩))))
+
+  (exec (4 mp)
+    (, (ev (: (⟨->⟩ $P $Q) ⟨|-⟩))
+      (ev (: $P ⟨|-⟩))
+      (ev (: $P ⟨wff⟩))
+      (ev (: $Q ⟨wff⟩)))
+    (, (ev (: $Q ⟨|-⟩))))
+
+  ; 36ms
+  ;  (exec (3 mp)
+  ;    (, (ev (: $P ⟨wff⟩))
+  ;      (ev (: $P ⟨|-⟩))
+  ;      (ev (: (⟨->⟩ $P $Q) ⟨|-⟩))
+  ;      (ev (: $Q ⟨wff⟩)))
+  ;    (, (ev (: $Q ⟨|-⟩))))
+
+  ;  (exec (4 mp)
+  ;    (, (ev (: $P ⟨wff⟩))
+  ;      (ev (: $P ⟨|-⟩))
+  ;      (ev (: (⟨->⟩ $P $Q) ⟨|-⟩))
+  ;      (ev (: $Q ⟨wff⟩)))
+  ;    (, (ev (: $Q ⟨|-⟩))))
+    "#;
+
+
+    let mut s = Space::new();
+    let t0 = Instant::now();
+    s.load_all_sexpr(P.as_bytes()).unwrap();
+
+    // Targets (kept identical to mm1())
+    let want_ev_term_tplus0    = "(ev (: (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨term⟩))";
+    let want_ev_wff_p          = "(ev (: (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) ⟨wff⟩))";
+    let want_ev_wff_q          = "(ev (: (⟨=⟩ ⟨t⟩ ⟨t⟩) ⟨wff⟩))";
+    let want_ev_proof_p        = "(ev (: (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) ⟨|-⟩))";
+    let want_ev_proof_ptoq     = "(ev (: (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨=⟩ ⟨t⟩ ⟨t⟩)) ⟨|-⟩))";
+    let want_ev_proof_ptoptoq  = "(ev (: (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨=⟩ ⟨t⟩ ⟨t⟩))) ⟨|-⟩))";
+    let want_final_evidence    = "(ev (: (⟨=⟩ ⟨t⟩ ⟨t⟩) ⟨|-⟩)";
+
     println!("=== MM1 (forward): Proving ⊢ (t = t) ===");
 
     let mut ticks = 0usize;
@@ -1729,7 +2054,7 @@ fn mm1_forward() {
         let n = s.metta_calculus(1);
         println!("executing step {} took {} ms (unifications {}, writes {}, transitions {})", ticks, t1.elapsed().as_millis(), unsafe { unifications }, unsafe { writes }, unsafe { transitions });
 
-        if n == 1 { continue } // comment out if you want the analysis at every step
+        // if n == 1 { continue } // comment out if you want the analysis at every step
 
         println!("space size {}", s.btm.val_count());
         let total_t = t0.elapsed();
@@ -1818,10 +2143,342 @@ fn mm1_forward() {
     }
 }
 
+fn mm1_forward_evidence() {
+    // Program: universe, typed constructors, axioms (curried), tiny pipeline, and final assembly.
+    const P: &str = r#"
+  (kb (: ⟨+⟩ (-> ⟨term⟩ (-> ⟨term⟩ ⟨term⟩))))
+  (kb (: ⟨=⟩ (-> ⟨term⟩ (-> ⟨term⟩ ⟨wff⟩))))
+  (kb (: ⟨t⟩ ⟨term⟩))
+  (kb (: ⟨0⟩ ⟨term⟩))
 
-// This new version of mm0 uses a robust "Data Pipeline" pattern that works
-// correctly with the manual ticking loop. Each step produces a unique data
-// atom that becomes the input for the next step in the pipeline.
+  (kb (: ⟨tpl⟩ (-> (: $x ⟨term⟩) (: $y ⟨term⟩) (: (⟨+⟩ $x $y) ⟨term⟩))))
+  (kb (: ⟨weq⟩ (-> (: $x ⟨term⟩) (: $y ⟨term⟩) (: (⟨=⟩ $x $y) ⟨wff⟩))))
+  (kb (: ⟨wim⟩ (-> (: $P ⟨wff⟩) (: $Q ⟨wff⟩) (: (⟨->⟩ $P $Q) ⟨wff⟩))))
+  (kb (: ⟨a2⟩ (-> (: $a ⟨term⟩) (: (⟨=⟩ (⟨+⟩ $a ⟨0⟩) $a) ⟨|-⟩))))
+  (kb (: ⟨a1⟩ (-> (: $t ⟨term⟩) (: $r ⟨term⟩) (: $s ⟨term⟩) (: (⟨->⟩ (⟨=⟩ $t $r) (⟨->⟩ (⟨=⟩ $t $s) (⟨=⟩ $r $s))) ⟨|-⟩))))
+  (kb (: ⟨mp⟩ (-> (: $P ⟨wff⟩) (: $Q ⟨wff⟩) (: $P ⟨|-⟩) (: (⟨->⟩ $P $Q) ⟨|-⟩) (: $Q ⟨|-⟩))))
+
+  (exec (0 lift) (, (kb (: $t $T))) (, (ev (: $t $T) (kb $t))))
+
+  ;; Works in ~ 34ms
+  ;; For unary rules like a2
+  (exec (0 lift-unary-rule)
+    (, (kb (: $name (-> (: $x $T1) (: $result $T2)))))
+    (, (exec (1 $name)
+        (, (ev (: $x $T1) $D ))
+        (, (ev (: $result $T2) ($D ($name $x) ) )))))
+
+  ;; for tpl, weq, wim
+  (exec (0 lift-binary-rule) 
+  (, (kb (: $name (-> (: $x $T1) (: $y $T2) (: $result $T3)))))
+  (, (exec (1 $name)
+       (, (ev (: $x $T1) $D1) 
+          (ev (: $y $T2) $D2))
+       (, (ev (: $result $T3) ($D1 $D2 ($name $x $y)))))))
+
+    ;; For ternary rules like a1
+  (exec (0 lift-ternary-rule)
+    (, (kb (: $name (-> (: $a $T1) (: $b $T2) (: $c $T3) (: $result $T4)))))
+    (, (exec (2 $name)
+        (, (ev (: $a $T1) $D1)
+            (ev (: $b $T2) $D2)
+            (ev (: $c $T3) $D3))
+        (, (ev (: $result $T4) ($D1 $D2 $D3 ($name $D1 $D2 $D3)))))))
+
+  ;; Works in 6s with one mp rule
+  ;; For mp (4-ary)
+  ;(exec (0 lift-quaternary-rule)
+  ;  (, (kb (: $name (-> (: $a $T1) (: $b $T2) (: $c $T3) (: $d $T4) (: $result $T5)))))
+  ;  (, (exec (8 $name)
+  ;       (, (ev (: $a $T1))
+  ;          (ev (: $b $T2))
+  ;          (ev (: $c $T3))
+  ;          (ev (: $d $T4)))
+  ;       (, (ev (: $result $T5))))))
+
+  ;; Having two of these makes it ~ 15s
+  ;; For mp (4-ary)
+  ;(exec (0 lift-quaternary-rule)
+  ;  (, (kb (: $name (-> (: $a $T1) (: $b $T2) (: $c $T3) (: $d $T4) (: $result $T5)))))
+  ;  (, (exec (9 $name)
+  ;       (, (ev (: $a $T1))
+  ;          (ev (: $b $T2))
+  ;          (ev (: $c $T3))
+  ;          (ev (: $d $T4)))
+  ;       (, (ev (: $result $T5))))))
+
+
+    ;; WORKS in ~ 1ms
+    ;; Because I don't need to go through the evs and generate a bunch of other stuff?
+    ;; tpl
+    ;(exec (1 introduce-addition-term)
+    ;  (, (kb (: ⟨tpl-curry⟩ (-> (: $x ⟨term⟩) (-> (: $y ⟨term⟩)
+    ;                      (: (⟨+⟩ $x $y) ⟨term⟩))))))
+    ;  (, (ev (: (⟨+⟩ $x $y) ⟨term⟩))))
+
+    ;; weq
+    ;(exec (1 introduce-equality-formula)
+    ;  (, (kb (: ⟨weq-curry⟩ (-> (: $x ⟨term⟩) (-> (: $y ⟨term⟩)
+    ;                      (: (⟨=⟩ $x $y) ⟨wff⟩))))))
+    ;  (, (ev (: (⟨=⟩ $x $y) ⟨wff⟩))))
+
+    ;; wim
+    ;(exec (1 introduce-implication-formula)
+    ;  (, (kb (: ⟨wim-curry⟩ (-> (: $P ⟨wff⟩) (-> (: $Q ⟨wff⟩)
+    ;                      (: (⟨->⟩ $P $Q) ⟨wff⟩))))))
+     ;(, (ev (: (⟨->⟩ $P $Q) ⟨wff⟩))))
+
+  ; For reasons beyond my understanding, the ev statement is required.
+  ;(exec (3 mp)
+  ;  (, (kb (: ⟨mp⟩ (-> (: $P ⟨wff⟩) (: $Q ⟨wff⟩)
+  ;                      (: $P ⟨|-⟩) (: (⟨->⟩ $P $Q) ⟨|-⟩) (: $Q ⟨|-⟩))))
+  ;    (ev (: (⟨->⟩ $P $Q) ⟨|-⟩)))
+  ;  (, (ev (: $Q ⟨|-⟩))))
+
+  ;(exec (4 mp)
+  ;  (, (kb (: ⟨mp⟩ (-> (: $P ⟨wff⟩) (: $Q ⟨wff⟩)
+  ;                      (: $P ⟨|-⟩) (: (⟨->⟩ $P $Q) ⟨|-⟩) (: $Q ⟨|-⟩))))
+  ;    (ev (: (⟨->⟩ $P $Q) ⟨|-⟩)))
+  ;  (, (ev (: $Q ⟨|-⟩))))
+
+    ;; WORKS in ~ 36ms
+    ;; tpl
+  ;  (exec (1 introduce-addition-term)
+  ;    (, (ev (: $x ⟨term⟩))
+  ;      (ev (: $y ⟨term⟩)))
+  ;    (, (ev (: (⟨+⟩ $x $y) ⟨term⟩))))
+
+    ;; weq
+  ;  (exec (1 introduce-equality-formula)
+  ;    (, (ev (: $a ⟨term⟩))
+  ;      (ev (: $b ⟨term⟩)))
+  ;    (, (ev (: (⟨=⟩ $a $b) ⟨wff⟩))))
+
+    ;; wim
+  ;  (exec (1 introduce-implication-formula)
+  ;    (, (ev (: $P ⟨wff⟩))
+  ;      (ev (: $Q ⟨wff⟩)))
+  ;    (, (ev (: (⟨->⟩ $P $Q) ⟨wff⟩))))
+
+  ;; a1
+  ;(exec (1 apply-equality-transitivity)
+  ;  (, (ev (: $a ⟨term⟩))
+  ;     (ev (: $b ⟨term⟩))
+  ;     (ev (: $c ⟨term⟩)))
+  ;  (, (ev (: (⟨->⟩ (⟨=⟩ $a $b)
+  ;              (⟨->⟩ (⟨=⟩ $a $c)
+  ;                      (⟨=⟩ $b $c))) ⟨|-⟩))))
+
+    ;; a2
+  ;  (exec (1 apply-additive-identity)
+  ;    (, (ev (: $a ⟨term⟩)))
+  ;    (, (ev (: (⟨=⟩ (⟨+⟩ $a ⟨0⟩) $a) ⟨|-⟩))))
+
+  ; 28ms 
+  (exec (3 mp)
+    (, (ev (: (⟨->⟩ $P $Q) ⟨|-⟩) $D4)
+      (ev (: $P ⟨|-⟩) $D3)
+      (ev (: $P ⟨wff⟩) $D1)
+      (ev (: $Q ⟨wff⟩) $D2))
+    (, (ev (: $Q ⟨|-⟩) ($D1 $D2 $D3 $D4 (⟨mp⟩ $P (⟨->⟩ $P $Q) )))))
+
+  (exec (4 mp)
+    (, (ev (: (⟨->⟩ $P $Q) ⟨|-⟩) $D4)
+      (ev (: $P ⟨|-⟩) $D3)
+      (ev (: $P ⟨wff⟩) $D1)
+      (ev (: $Q ⟨wff⟩) $D2))
+    (, (ev (: $Q ⟨|-⟩) ($D1 $D2 $D3 $D4 (⟨mp⟩ $P (⟨->⟩ $P $Q) )))))
+
+  ; 36ms
+  ;  (exec (3 mp)
+  ;    (, (ev (: $P ⟨wff⟩))
+  ;      (ev (: $P ⟨|-⟩))
+  ;      (ev (: (⟨->⟩ $P $Q) ⟨|-⟩))
+  ;      (ev (: $Q ⟨wff⟩)))
+  ;    (, (ev (: $Q ⟨|-⟩))))
+
+  ;  (exec (4 mp)
+  ;    (, (ev (: $P ⟨wff⟩))
+  ;      (ev (: $P ⟨|-⟩))
+  ;      (ev (: (⟨->⟩ $P $Q) ⟨|-⟩))
+  ;      (ev (: $Q ⟨wff⟩)))
+  ;    (, (ev (: $Q ⟨|-⟩))))
+    "#;
+
+
+    let mut s = Space::new();
+    let t0 = Instant::now();
+    s.load_all_sexpr(P.as_bytes()).unwrap();
+
+    // Targets (kept identical to mm1())
+    let want_ev_term_tplus0_prefix    = "(ev (: (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨term⟩)";
+    let want_ev_wff_p_prefix          = "(ev (: (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) ⟨wff⟩)";
+    let want_ev_wff_q_prefix          = "(ev (: (⟨=⟩ ⟨t⟩ ⟨t⟩) ⟨wff⟩)";
+    let want_ev_proof_p_prefix        = "(ev (: (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) ⟨|-⟩)";
+    let want_ev_proof_ptoq_prefix     = "(ev (: (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨=⟩ ⟨t⟩ ⟨t⟩)) ⟨|-⟩)";
+    let want_ev_proof_ptoptoq_prefix  = "(ev (: (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨=⟩ ⟨t⟩ ⟨t⟩))) ⟨|-⟩)";
+    let want_final_evidence_prefix    = "(ev (: (⟨=⟩ ⟨t⟩ ⟨t⟩) ⟨|-⟩)";
+
+     // Helper function to extract evidence from a line
+    fn extract_evidence(line: &str, prefix: &str) -> Option<String> {
+        let trimmed = line.trim();
+        if trimmed.starts_with(prefix) {
+            // Find the space after the prefix, then extract everything after it until the last )
+            if let Some(space_pos) = trimmed[prefix.len()..].find(' ') {
+                let evidence_start = prefix.len() + space_pos + 1;
+                if evidence_start < trimmed.len() {
+                    let evidence = &trimmed[evidence_start..];
+                    // Remove trailing ) if present
+                    let evidence = evidence.trim_end_matches(')');
+                    return Some(evidence.to_string());
+                }
+            }
+        }
+        None
+    }
+
+    // Helper function to check if a line matches a prefix pattern
+    fn line_matches_prefix(dump: &str, prefix: &str) -> (bool, Option<String>) {
+        for line in dump.lines() {
+            let trimmed = line.trim();
+            if trimmed.starts_with(prefix) {
+                let evidence = extract_evidence(line, prefix);
+                return (true, evidence);
+            }
+        }
+        (false, None)
+    }
+
+    // Helper function to pretty print evidence structure
+    fn pretty_print_evidence(evidence: &str, indent: usize) -> String {
+        let mut result = String::new();
+        let mut depth = 0;
+        let mut i = 0;
+        let chars: Vec<char> = evidence.chars().collect();
+        
+        while i < chars.len() {
+            match chars[i] {
+                '(' => {
+                    result.push('\n');
+                    result.push_str(&"  ".repeat(indent + depth));
+                    result.push('(');
+                    depth += 1;
+                }
+                ')' => {
+                    result.push(')');
+                    depth -= 1;
+                }
+                ' ' => {
+                    if depth > 0 {
+                        result.push(' ');
+                    }
+                }
+                c => {
+                    result.push(c);
+                }
+            }
+            i += 1;
+        } 
+        result
+    }
+
+    println!("=== MM1 (forward): Proving ⊢ (t = t) ===");
+
+    let mut ticks = 0usize;
+    let mut final_proof_evidence: Option<String> = None;
+    loop {
+        ticks += 1;
+        let t1 = Instant::now();
+        let n = s.metta_calculus(1);
+        println!("executing step {} took {} ms (unifications {}, writes {}, transitions {})", ticks, t1.elapsed().as_millis(), unsafe { unifications }, unsafe { writes }, unsafe { transitions });
+
+        // if n == 1 { continue } // comment out if you want the analysis at every step
+
+        println!("space size {}", s.btm.val_count());
+        let total_t = t0.elapsed();
+
+        let mut buf = Vec::new();
+        s.dump_all_sexpr(&mut buf).unwrap();
+        let dump = String::from_utf8_lossy(&buf);
+
+        let line_has = |needle: &str| dump.lines().any(|l| l.trim_start().starts_with(needle));
+
+        let (have_tplus0_term, _)  = line_matches_prefix(&dump, want_ev_term_tplus0_prefix);
+        let (have_wff_p_ev, _)     = line_matches_prefix(&dump, want_ev_wff_p_prefix);
+        let (have_wff_q_ev, _)     = line_matches_prefix(&dump, want_ev_wff_q_prefix);
+        let (have_proof_p_ev, _)   = line_matches_prefix(&dump, want_ev_proof_p_prefix);
+        let (have_ptoq_ev, _)      = line_matches_prefix(&dump, want_ev_proof_ptoq_prefix);
+        let (have_ptoptoq_ev, _)   = line_matches_prefix(&dump, want_ev_proof_ptoptoq_prefix);
+        let (have_final, final_evidence) = line_matches_prefix(&dump, want_final_evidence_prefix);
+
+        // Store the final proof evidence when we find it
+        if have_final && final_proof_evidence.is_none() {
+            final_proof_evidence = final_evidence;
+        }
+
+        if have_final {
+            println!("\n== mm1 (forward): ✅ SUCCESS in {:?} after {} tick(s) ==", total_t, ticks);
+            println!("  (+ t 0) : term ............. {}", if have_tplus0_term { "✓" } else { "—" });
+            println!("  wff_P (ev) ................. {}", if have_wff_p_ev { "✓" } else { "—" });
+            println!("  wff_Q (ev) ................. {}", if have_wff_q_ev { "✓" } else { "—" });
+            println!("  proof_P (a2@t, ev) ......... {}", if have_proof_p_ev { "✓" } else { "—" });
+            println!("  proof_PtoQ (a1, ev) ........ {}", if have_ptoq_ev { "✓" } else { "—" });
+            println!("  proof_PtoPtoQ (a1, ev) ..... {}", if have_ptoptoq_ev { "✓" } else { "—" });
+
+            println!("\n--- Final evidence confirmation ---");
+            println!("✅ Successfully derived ⊢ (t = t)");
+
+            // Display the proof structure
+            if let Some(evidence) = &final_proof_evidence {
+                println!("\n--- PROOF STRUCTURE ---");
+                println!("Final theorem: (⟨=⟩ ⟨t⟩ ⟨t⟩) ⟨|-⟩");
+                println!("Evidence trace:");
+                println!("{}", pretty_print_evidence(evidence, 1));
+                
+                println!("\n--- PROOF ANALYSIS ---");
+                // Count the proof steps
+                let mp_count = evidence.matches("⟨mp⟩").count();
+                let a1_count = evidence.matches("⟨a1⟩").count();
+                let a2_count = evidence.matches("⟨a2⟩").count();
+                let tpl_count = evidence.matches("⟨tpl⟩").count();
+                let weq_count = evidence.matches("⟨weq⟩").count();
+                let kb_count = evidence.matches("kb").count();
+                
+                println!("Proof statistics:");
+                println!("  - Modus Ponens (mp): {}", mp_count);
+                println!("  - Transitivity (a1): {}", a1_count);
+                println!("  - Identity (a2): {}", a2_count);
+                println!("  - Term construction (tpl): {}", tpl_count);
+                println!("  - Equality formation (weq): {}", weq_count);
+                println!("  - Knowledge base facts (kb): {}", kb_count);
+            }
+
+            println!("\n--- Full Final State Dump ---");
+            print!("{dump}");
+            break;
+        }
+
+        if n == 0 || ticks >= 10 {
+            println!("\n== mm1 (forward): — FAILURE in {:?} after {} tick(s) ==", t0.elapsed(), ticks);
+            println!("  (+ t 0) : term ............. {}", if have_tplus0_term { "✓" } else { "—" });
+            println!("  wff_P (ev) ................. {}", if have_wff_p_ev { "✓" } else { "—" });
+            println!("  wff_Q (ev) ................. {}", if have_wff_q_ev { "✓" } else { "—" });
+            println!("  proof_P (a2@t, ev) ......... {}", if have_proof_p_ev { "✓" } else { "—" });
+            println!("  proof_PtoQ (a1, ev) ........ {}", if have_ptoq_ev { "✓" } else { "—" });
+            println!("  proof_PtoPtoQ (a1, ev) ..... {}", if have_ptoptoq_ev { "✓" } else { "—" });
+
+            if !have_final {
+                println!("\n❌ Failed to derive ⊢ (t = t)");
+            }
+
+            println!("\n--- Full Final State Dump ---");
+            print!("{dump}");
+            break;
+        }
+    }
+}
+
+// Vibe-coding demo0.mm
 fn mm0() {
     use std::time::Instant;
     use mork::space::Space;
@@ -1898,40 +2555,40 @@ fn mm0() {
     println!("----------------------------------------------------------");
 }
 
-
+// Vibe-coding demo0.mm
 fn mm1_b_tpl() {
     use mork::expr;
     use mork::space::Space;
     use std::time::Instant;
 
     const P: &str = r#"
-; ---------- KB: primitive symbols ----------
-(kb (: ⟨+⟩ (-> ⟨term⟩ (-> ⟨term⟩ ⟨term⟩))))
-(kb (: ⟨=⟩ (-> ⟨term⟩ (-> ⟨term⟩ ⟨wff⟩))))
-(kb (: ⟨t⟩ ⟨term⟩))
-(kb (: ⟨0⟩ ⟨term⟩))
+  ; ---------- KB: primitive symbols ----------
+  (kb (: ⟨+⟩ (-> ⟨term⟩ (-> ⟨term⟩ ⟨term⟩))))
+  (kb (: ⟨=⟩ (-> ⟨term⟩ (-> ⟨term⟩ ⟨wff⟩))))
+  (kb (: ⟨t⟩ ⟨term⟩))
+  (kb (: ⟨0⟩ ⟨term⟩))
 
-; ---------- KB: generalized constructors ----------
-(kb (: ⟨tpl⟩ (-> (: $x ⟨term⟩) (-> (: $y ⟨term⟩)
-                      (: (⟨+⟩ $x $y) ⟨term⟩)))))
-(kb (: ⟨weq⟩ (-> (: $x ⟨term⟩) (-> (: $y ⟨term⟩)
-                      (: (⟨=⟩ $x $y) ⟨wff⟩)))))
+  ; ---------- KB: generalized constructors ----------
+  (kb (: ⟨tpl⟩ (-> (: $x ⟨term⟩) (-> (: $y ⟨term⟩)
+                        (: (⟨+⟩ $x $y) ⟨term⟩)))))
+  (kb (: ⟨weq⟩ (-> (: $x ⟨term⟩) (-> (: $y ⟨term⟩)
+                        (: (⟨=⟩ $x $y) ⟨wff⟩)))))
 
-; ---------- Deterministic pipeline rules ----------
-(exec tpl-apply-kb
-  (, (kb (: ⟨tpl⟩ (-> (: $x ⟨term⟩) (-> (: $y ⟨term⟩)
-                           (: (⟨+⟩ $x $y) ⟨term⟩)))))
-     (kb (: $x ⟨term⟩))
-     (kb (: $y ⟨term⟩)))
-  (, (ev (: (⟨+⟩ $x $y) ⟨term⟩))))
+  ; ---------- Deterministic pipeline rules ----------
+  (exec tpl-apply-kb
+    (, (kb (: ⟨tpl⟩ (-> (: $x ⟨term⟩) (-> (: $y ⟨term⟩)
+                            (: (⟨+⟩ $x $y) ⟨term⟩)))))
+      (kb (: $x ⟨term⟩))
+      (kb (: $y ⟨term⟩)))
+    (, (ev (: (⟨+⟩ $x $y) ⟨term⟩))))
 
-(exec weq-apply-kb
-  (, (kb (: ⟨weq⟩ (-> (: $a ⟨term⟩) (-> (: $b ⟨term⟩)
-                           (: (⟨=⟩ $a $b) ⟨wff⟩)))))
-     (ev (: $lhs ⟨term⟩))
-     (kb (: $rhs ⟨term⟩)))
-  (, (ev (: (⟨=⟩ $lhs $rhs) ⟨wff⟩))))
-"#;
+  (exec weq-apply-kb
+    (, (kb (: ⟨weq⟩ (-> (: $a ⟨term⟩) (-> (: $b ⟨term⟩)
+                            (: (⟨=⟩ $a $b) ⟨wff⟩)))))
+      (ev (: $lhs ⟨term⟩))
+      (kb (: $rhs ⟨term⟩)))
+    (, (ev (: (⟨=⟩ $lhs $rhs) ⟨wff⟩))))
+  "#;
 
     let t0 = Instant::now();
     let mut s = Space::new();
@@ -1958,44 +2615,44 @@ fn mm1_b_tpl() {
     }
 }
 
-
+// Vibe-coding demo0.mm
 fn mm1_b2_tpl() {
     use mork::expr;
     use mork::space::Space;
     use std::time::Instant;
 
     const P: &str = r#"
-; ---------- KB: primitive symbols ----------
-(kb (: ⟨+⟩ (-> ⟨term⟩ (-> ⟨term⟩ ⟨term⟩))))
-(kb (: ⟨=⟩ (-> ⟨term⟩ (-> ⟨term⟩ ⟨wff⟩))))
-(kb (: ⟨t⟩ ⟨term⟩))
-(kb (: ⟨0⟩ ⟨term⟩))
+  ; ---------- KB: primitive symbols ----------
+  (kb (: ⟨+⟩ (-> ⟨term⟩ (-> ⟨term⟩ ⟨term⟩))))
+  (kb (: ⟨=⟩ (-> ⟨term⟩ (-> ⟨term⟩ ⟨wff⟩))))
+  (kb (: ⟨t⟩ ⟨term⟩))
+  (kb (: ⟨0⟩ ⟨term⟩))
 
-; ---------- KB: generalized constructors ----------
-(kb (: ⟨tpl⟩ (-> (: $x ⟨term⟩) (-> (: $y ⟨term⟩)
-                      (: (⟨+⟩ $x $y) ⟨term⟩)))))
-(kb (: ⟨weq⟩ (-> (: $x ⟨term⟩) (-> (: $y ⟨term⟩)
-                      (: (⟨=⟩ $x $y) ⟨wff⟩)))))
+  ; ---------- KB: generalized constructors ----------
+  (kb (: ⟨tpl⟩ (-> (: $x ⟨term⟩) (-> (: $y ⟨term⟩)
+                        (: (⟨+⟩ $x $y) ⟨term⟩)))))
+  (kb (: ⟨weq⟩ (-> (: $x ⟨term⟩) (-> (: $y ⟨term⟩)
+                        (: (⟨=⟩ $x $y) ⟨wff⟩)))))
 
-; ---------- Small generalization ----------
-(exec lift
-  (, (kb (: $t $T)))
-  (, (ev (: $t $T))))
+  ; ---------- Small generalization ----------
+  (exec lift
+    (, (kb (: $t $T)))
+    (, (ev (: $t $T))))
 
-(exec tpl-apply
-  (, (kb (: ⟨tpl⟩ (-> (: $x ⟨term⟩) (-> (: $y ⟨term⟩)
-                           (: (⟨+⟩ $x $y) ⟨term⟩)))))
-     (ev (: $x ⟨term⟩))
-     (ev (: $y ⟨term⟩)))
-  (, (ev (: (⟨+⟩ $x $y) ⟨term⟩))))
+  (exec tpl-apply
+    (, (kb (: ⟨tpl⟩ (-> (: $x ⟨term⟩) (-> (: $y ⟨term⟩)
+                            (: (⟨+⟩ $x $y) ⟨term⟩)))))
+      (ev (: $x ⟨term⟩))
+      (ev (: $y ⟨term⟩)))
+    (, (ev (: (⟨+⟩ $x $y) ⟨term⟩))))
 
-(exec weq-apply
-  (, (kb (: ⟨weq⟩ (-> (: $a ⟨term⟩) (-> (: $b ⟨term⟩)
-                           (: (⟨=⟩ $a $b) ⟨wff⟩)))))
-     (ev (: $a ⟨term⟩))
-     (ev (: $b ⟨term⟩)))
-  (, (ev (: (⟨=⟩ $a $b) ⟨wff⟩))))
-"#;
+  (exec weq-apply
+    (, (kb (: ⟨weq⟩ (-> (: $a ⟨term⟩) (-> (: $b ⟨term⟩)
+                            (: (⟨=⟩ $a $b) ⟨wff⟩)))))
+      (ev (: $a ⟨term⟩))
+      (ev (: $b ⟨term⟩)))
+    (, (ev (: (⟨=⟩ $a $b) ⟨wff⟩))))
+  "#;
 
     let t0 = Instant::now();
     let mut s = Space::new();
@@ -2100,6 +2757,9 @@ fn main() {
                     "exponential" => { exponential(32); }
                     "exponential_fringe" => { exponential_fringe(15); }
                     "mm1_forward" => { mm1_forward(); }
+                    "mm1_forward_evidence" => { mm1_forward_evidence(); }
+                    "mm2_bc" => { mm2_bc(); }
+                    "bc2" => { bc2(); }
                     s => { println!("bench not known: {s}") }
                 }
             }
