@@ -1637,9 +1637,9 @@ fn mm2_bc() {
   (kb (: tt (: ⟨t⟩ ⟨term⟩)))
 
   (kb (: ⟨a2-curry⟩ (-> (: $a ⟨term⟩) (: (⟨=⟩ (⟨+⟩ $a ⟨0⟩) $a) ⟨|-⟩))))
-  (old kb (-> (: $a ⟨term⟩) (: (⟨=⟩ (⟨+⟩ $a ⟨0⟩) $a) ⟨|-⟩)))
+  ; (kb (-> (: $a ⟨term⟩) (: (⟨=⟩ (⟨+⟩ $a ⟨0⟩) $a) ⟨|-⟩)))
 
-  (comment curried versions not needed.  -- well, fuck, the bcs I copied ARE curried.)
+  ; (comment curried versions not needed.  -- well, fuck, the bcs I copied ARE curried.)
   (kb (: ⟨tpl⟩ (-> (: $x ⟨term⟩) (: $y ⟨term⟩) (: (⟨+⟩ $x $y) ⟨term⟩))))
   (kb (: ⟨weq⟩ (-> (: $x ⟨term⟩) (: $y ⟨term⟩) (: (⟨=⟩ $x $y) ⟨wff⟩))))
   (kb (: ⟨wim⟩ (-> (: $P ⟨wff⟩) (: $Q ⟨wff⟩) (: (⟨->⟩ $P $Q) ⟨wff⟩))))
@@ -1647,24 +1647,24 @@ fn mm2_bc() {
   (kb (: ⟨a1⟩ (-> (: $t ⟨term⟩) (: $r ⟨term⟩) (: $s ⟨term⟩) (: (⟨->⟩ (⟨=⟩ $t $r) (⟨->⟩ (⟨=⟩ $t $s) (⟨=⟩ $r $s))) ⟨|-⟩))))
   (kb (: ⟨mp⟩ (-> (: $P ⟨wff⟩) (: $Q ⟨wff⟩) (: $P ⟨|-⟩) (: (⟨->⟩ $P $Q) ⟨|-⟩) (: $Q ⟨|-⟩))))
 
-  (comment needed for bc?)
+  ; (comment needed for bc?)
   (exec (0 lift) (, (kb (: $t $T))) (, (ev (: $t $T))))
 
   (old exec (0 strip-name) (, (kb (: $name $rule))) (, (ev $rule)))  
 
-  (comment There is evidence for the goal if it is in the kb?
-   'lift' above is equivalent to this, but this only does it for that which we're investigating, which is more 'efficient' (unless doing it in bulk is the) efficient option, which could be best for a small kb -- to be tested!)
+  ; (comment There is evidence for the goal if it is in the kb?
+   ; 'lift' above is equivalent to this, but this only does it for that which we're investigating, which is more 'efficient' (unless doing it in bulk is the) efficient option, which could be best for a small kb -- to be tested!)
   ((step (0 base))
     (, (goal (: $proof $conclusion)) (kb (: $proof $conclusion)))
     (, 
       (ev (: $proof $conclusion)) 
       (debug base (: $proof $conclusion) found in kb)))
 
-  (old (step (1 abs-curry))
-      (, (goal (: $proof $conclusion)))
-      (, 
-        (goal (: $lhs (-> $synth $conclusion) )) 
-        (debug abs-curry (: $proof $conclusion) made (: $lhs (-> $synth $conclusion)))))
+  ; (old (step (1 abs-curry))
+      ; (, (goal (: $proof $conclusion)))
+      ; (, 
+        ; (goal (: $lhs (-> $synth $conclusion) )) 
+        ; (debug abs-curry (: $proof $conclusion) made (: $lhs (-> $synth $conclusion)))))
 
   ((step (1 abs-curry2))
       (, (goal (: $proof $conclusion)))
@@ -1672,38 +1672,55 @@ fn mm2_bc() {
         (goal (: $lhs (-> $synth (: $proof $conclusion)) )) 
         (debug abs-curry2 (: $proof $conclusion) made (: $lhs (-> $synth (: $proof $conclusion))))))
 
-  ((step (2 rev2-typed))
-    (, (ev (: $lhs (-> (: $arg1 $T1) (: $arg2 $T2) $R)))
-      (goal (: $_ $R)))
-    (, (goal (: $arg1 $T1))
-      (goal (: $arg2 $T2))
-      (debug rev2-typed need (: $arg1 $T1) and (: $arg2 $T2))))
+  ; ((step (2 rev2-typed))
+    ; (, (ev (: $lhs (-> (: $arg1 $T1) (: $arg2 $T2) $R)))
+      ; (goal (: $_ $R)))
+    ; (, (goal (: $arg1 $T1))
+      ; (goal (: $arg2 $T2))
+      ; (debug rev2-typed need (: $arg1 $T1) and (: $arg2 $T2))))
 
-  ((step (2 rev)) 
-    (, (ev (: $a (-> $b $c))) 
-       (goal $c)) 
-    (, (goal $b) 
-       (debug rev-cl (goal $c) made (goal $b) due to (ev (: $a (-> $b $c))))))
+  ; ((step (2 rev)) 
+    ; (, (ev (: $a (-> $b $c))) 
+       ; (goal $c)) 
+    ; (, (goal $b) 
+       ; (debug rev-cl (goal $c) made (goal $b) due to (ev (: $a (-> $b $c))))))
 
-  ((step (2 rev2)) 
-    (, (ev (: $name (-> (: $b1 $b2) $c (: $d1 $d2)))) 
-       (goal (: $d1 $d2))) 
-    (, (goal (: $b1 $b2)) 
-       (debug rev2-cl (goal (: $d1 $d2)) made (goal (: $b1 $b2)) due to (ev (: $name (-> (: $b1 $b2) $c (: $d1 $d2)))) )))
+  ; ((step (2 rev2)) 
+    ; (, (ev (: $name (-> (: $b1 $b2) $c (: $d1 $d2)))) 
+       ; (goal (: $d1 $d2))) 
+    ; (, (goal (: $b1 $b2)) 
+       ; (debug rev2-cl (goal (: $d1 $d2)) made (goal (: $b1 $b2)) due to (ev (: $name (-> (: $b1 $b2) $c (: $d1 $d2)))) )))
 
-  ((step (2 rev2)) 
-    (, (ev (: $name (-> (: $b1 $b2) (: $c1 $c2) (: $d1 $d2)))) 
-       (goal (: $d1 $d2))) 
+  ; ((step (2 rev2)) 
+    ; (, (ev (: $name (-> (: $b1 $b2) (: $c1 $c2) (: $d1 $d2)))) 
+       ; (goal (: $d1 $d2))) 
+    ; (, (goal (: $b1 $b2))
+       ; (goal (: $c1 $c2)) 
+       ; (debug rev2.0-cl (goal (: $d1 $d2)) made (goal (: $b1 $b2)) due to (ev (: $name (-> (: $b1 $b2) (: $c1 $c2) (: $d1 $d2)))) )))
+
+  ; 7 ticks --> space size 52
+  ; works to derive goal (debug completed ⟨weq⟩ for (: (⟨=⟩ ⟨t⟩ ⟨0⟩) ⟨wff⟩)) as (ev (: (⟨=⟩ ⟨t⟩ ⟨0⟩) ⟨wff⟩))
+  ((step (2 rev2))
+    (, (ev (: $name (-> (: $b1 $b2) (: $c1 $c2) (: $d1 $d2))))
+      (goal (: $d1 $d2)))
     (, (goal (: $b1 $b2))
-       (goal (: $c1 $c2)) ))
+      (goal (: $c1 $c2))
+      ; Generate a completion rule specific to this instantiation
+      (exec (4 complete-$name-$b1-$c1)
+        (, (ev (: $b1 $b2)) 
+            (ev (: $c1 $c2))
+            (ev (: $name (-> (: $b1 $b2) (: $c1 $c2) (: $d1 $d2)))))
+        (, (ev (: $d1 $d2))
+            (debug completed $name for (: $d1 $d2))))
+      (debug rev2-cl (goal (: $d1 $d2)) made (goal (: $b1 $b2)) due to (ev (: $name (-> (: $b1 $b2) (: $c1 $c2) (: $d1 $d2)))))))
 
-  (comment crashes for some reason)
-  (old (step (2 rev2)) 
-    (, (ev (: $name (-> (: $b1 $b2) (: $c1 $c2) (: $d1 $d2)))) 
-       (goal (: $d1 $d2))) 
-    (, (goal (: $b1 $b2))
-       (goal (: $c1 $c2)) 
-       (debug rev2-cl (goal (: $d1 $d2)) made (goal (: $b1 $b2)) due to (ev (: $name (-> (: $b1 $b2) (: $c1 $c2) (: $d1 $d2)))) )))
+  ; works -- but does many useless inferences.
+  ; 7 ticks --> space size 5631
+  ; ((step (3 app2-typed))
+  ; (, (ev (: $f (-> (: $a $T1) (: $b $T2) (: $r $R))))
+     ; (ev (: $a $T1))
+     ; (ev (: $b $T2)))
+  ; (, (ev (: $r $R))))
 
   (exec bc
       (, ((step $x) $premises0 $conclusions0)
@@ -1711,12 +1728,12 @@ fn mm2_bc() {
       (, (exec $x $premises0 $conclusions0)
          (exec bc $premises1 $conclusions1) ))
 
-  (old goal (: (⟨=⟩ ⟨t⟩ ⟨t⟩) ⟨|-⟩))
-  (comment a2:)
-  (old goal (: (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) ⟨|-⟩) )
-  (comment a1:)
-  (old goal (: (⟨->⟩ (⟨=⟩ ⟨t⟩ ⟨t⟩) (⟨->⟩ (⟨=⟩ ⟨t⟩ ⟨0⟩) (⟨=⟩ ⟨t⟩ ⟨0⟩))) ⟨|-⟩))
-  (comment weq:)
+  ; (goal (: (⟨=⟩ ⟨t⟩ ⟨t⟩) ⟨|-⟩))
+  ; (comment a2:)
+  ; (goal (: (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) ⟨|-⟩) )
+  ; (comment a1:)
+  ; (goal (: (⟨->⟩ (⟨=⟩ ⟨t⟩ ⟨t⟩) (⟨->⟩ (⟨=⟩ ⟨t⟩ ⟨0⟩) (⟨=⟩ ⟨t⟩ ⟨0⟩))) ⟨|-⟩))
+  ; (comment weq:)
   (goal (: (⟨=⟩ ⟨t⟩ ⟨0⟩) ⟨wff⟩))
     "#;
 
@@ -1756,7 +1773,6 @@ fn mm2_bc() {
 }
 
 // demo0.mm forward-pass (less vibe-coded)
-// NOTE: comments don't exist in mork, i.e. ;s
 fn mm1_forward() {
     // Program: universe, typed constructors, axioms (curried), tiny pipeline, and final assembly.
     const P: &str = r#"
@@ -2055,7 +2071,6 @@ fn mm1_forward() {
     }
 }
 
-// NOTE: comments don't exist in mork, i.e. ;s
 // Keeps evidence, i.e., the proof :)
 fn mm1_forward_evidence() {
     // Program: universe, typed constructors, axioms (curried), tiny pipeline, and final assembly.
@@ -2393,7 +2408,6 @@ fn mm1_forward_evidence() {
 }
 
 // Vibe-coding demo0.mm
-// NOTE: comments don't exist in mork, i.e. ;s
 fn mm0() {
     use std::time::Instant;
     use mork::space::Space;
@@ -2471,7 +2485,6 @@ fn mm0() {
 }
 
 // Vibe-coding demo0.mm
-// NOTE: comments don't exist in mork, i.e. ;s
 fn mm1_b_tpl() {
     use mork::expr;
     use mork::space::Space;
@@ -2532,7 +2545,6 @@ fn mm1_b_tpl() {
 }
 
 // Vibe-coding demo0.mm
-// NOTE: comments don't exist in mork, i.e. ;s
 fn mm1_b2_tpl() {
     use mork::expr;
     use mork::space::Space;
@@ -2652,7 +2664,9 @@ fn main() {
     // mm1_b_tpl();
     // mm1_b2_tpl();
     // mm1_forward();
+    // mm1_forward_evidence();
     // sink_odd_even_sort();
+    // mm2_bc();
     // return;
 
     let args = Cli::parse();
