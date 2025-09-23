@@ -1634,8 +1634,12 @@ fn mm2_bc() {
   (kb (: ⟨=⟩ (-> ⟨term⟩ ⟨term⟩ ⟨wff⟩))) ;; weq
   (kb (: ⟨t⟩ ⟨term⟩))
   (kb (: ⟨0⟩ ⟨term⟩))
+  (kb (: tt (: ⟨t⟩ ⟨term⟩)))
 
-  ;; curried versions not needed.
+  (kb (: ⟨a2-curry⟩ (-> (: $a ⟨term⟩) (: (⟨=⟩ (⟨+⟩ $a ⟨0⟩) $a) ⟨|-⟩))))
+  (old kb (-> (: $a ⟨term⟩) (: (⟨=⟩ (⟨+⟩ $a ⟨0⟩) $a) ⟨|-⟩)))
+
+  (comment curried versions not needed.  -- well, fuck, the bcs I copied ARE curried.)
   (kb (: ⟨tpl⟩ (-> (: $x ⟨term⟩) (: $y ⟨term⟩) (: (⟨+⟩ $x $y) ⟨term⟩))))
   (kb (: ⟨weq⟩ (-> (: $x ⟨term⟩) (: $y ⟨term⟩) (: (⟨=⟩ $x $y) ⟨wff⟩))))
   (kb (: ⟨wim⟩ (-> (: $P ⟨wff⟩) (: $Q ⟨wff⟩) (: (⟨->⟩ $P $Q) ⟨wff⟩))))
@@ -1643,64 +1647,63 @@ fn mm2_bc() {
   (kb (: ⟨a1⟩ (-> (: $t ⟨term⟩) (: $r ⟨term⟩) (: $s ⟨term⟩) (: (⟨->⟩ (⟨=⟩ $t $r) (⟨->⟩ (⟨=⟩ $t $s) (⟨=⟩ $r $s))) ⟨|-⟩))))
   (kb (: ⟨mp⟩ (-> (: $P ⟨wff⟩) (: $Q ⟨wff⟩) (: $P ⟨|-⟩) (: (⟨->⟩ $P $Q) ⟨|-⟩) (: $Q ⟨|-⟩))))
 
-  ;; needed for bc?
-  ;(exec (0 lift) (, (kb (: $t $T))) (, (ev (: $t $T))))
+  (comment needed for bc?)
+  (exec (0 lift) (, (kb (: $t $T))) (, (ev (: $t $T))))
 
-  (exec 0 strip-name (, (kb (: $name $rule))))
+  (old exec (0 strip-name) (, (kb (: $name $rule))) (, (ev $rule)))  
 
-  ;; There is evidence for the goal if it is in the kb?
-  ;; 'lift' above is equivalent to this, but this only does it for that which we're investigating, which is more 'efficient' (unless doing it in bulk is the efficient option, which could be best for a small kb -- to be tested!)
+  (comment There is evidence for the goal if it is in the kb?
+   'lift' above is equivalent to this, but this only does it for that which we're investigating, which is more 'efficient' (unless doing it in bulk is the) efficient option, which could be best for a small kb -- to be tested!)
   ((step (0 base))
     (, (goal (: $proof $conclusion)) (kb (: $proof $conclusion)))
-    (, (ev (: $proof $conclusion) ) ))
+    (, 
+      (ev (: $proof $conclusion)) 
+      (debug base (: $proof $conclusion) found in kb)))
 
-  ((step (1 abs))
+  (old (step (1 abs-curry))
       (, (goal (: $proof $conclusion)))
-      (, (goal (: $lhs (-> $synth $conclusion)) ) ))
+      (, 
+        (goal (: $lhs (-> $synth $conclusion) )) 
+        (debug abs-curry (: $proof $conclusion) made (: $lhs (-> $synth $conclusion)))))
 
-  ((step (2 rev))
-    (, (ev (: $lhs (-> $a $r)))  (goal (: $k $r)) )
-    (, (goal (: $rhs $a) ) ))
+  ((step (1 abs-curry2))
+      (, (goal (: $proof $conclusion)))
+      (, 
+        (goal (: $lhs (-> $synth (: $proof $conclusion)) )) 
+        (debug abs-curry2 (: $proof $conclusion) made (: $lhs (-> $synth (: $proof $conclusion))))))
 
-  ;((step (3 abs2))
-  ;  (, (goal (: $proof $conclusion)))
-  ;  (, (goal (: $lhs (-> $syntha $synthb $conclusion)) ) ))
+  ((step (2 rev2-typed))
+    (, (ev (: $lhs (-> (: $arg1 $T1) (: $arg2 $T2) $R)))
+      (goal (: $_ $R)))
+    (, (goal (: $arg1 $T1))
+      (goal (: $arg2 $T2))
+      (debug rev2-typed need (: $arg1 $T1) and (: $arg2 $T2))))
 
-  ;((step (4 rev2))
-  ;  (, (ev (: $lhs (-> $a $b $r)))  (goal (: $k $r)) )
-  ;  (, (goal (: $ap $a)) (goal (: $bp $b)) ))
+  ((step (2 rev)) 
+    (, (ev (: $a (-> $b $c))) 
+       (goal $c)) 
+    (, (goal $b) 
+       (debug rev-cl (goal $c) made (goal $b) due to (ev (: $a (-> $b $c))))))
 
-  ;((step (5 app))
-  ;  (, (ev (: $lhs (-> $a $r)))  (ev (: $rhs $a))  )
-  ;  (, (ev (: (@ $lhs $rhs) $r) ) ))
-    
-  ;((step (6 app2))
-  ;  (, (ev (: $f (-> $a $b $r)))  (ev (: $ap $a)) (ev (: $bp $b))  )
-  ;  (, (ev (: (@ $f $ap $bp) $r) ) ))
+  ((step (2 rev2)) 
+    (, (ev (: $name (-> (: $b1 $b2) $c (: $d1 $d2)))) 
+       (goal (: $d1 $d2))) 
+    (, (goal (: $b1 $b2)) 
+       (debug rev2-cl (goal (: $d1 $d2)) made (goal (: $b1 $b2)) due to (ev (: $name (-> (: $b1 $b2) $c (: $d1 $d2)))) )))
 
-  ;((step (7 abs3))
-  ;(, (goal (: $proof $conclusion)))
-  ;(, (goal (: $lhs (-> $syntha $synthb $synthc $conclusion)) ) ))
+  ((step (2 rev2)) 
+    (, (ev (: $name (-> (: $b1 $b2) (: $c1 $c2) (: $d1 $d2)))) 
+       (goal (: $d1 $d2))) 
+    (, (goal (: $b1 $b2))
+       (goal (: $c1 $c2)) ))
 
-  ;((step (8 rev3))
-  ;  (, (ev (: $lhs (-> $a $b $c $r)))  (goal (: $k $r)) )
-  ;  (, (goal (: $ap $a)) (goal (: $bp $b)) (goal (: $cp $c)) ))
-
-  ;((step (9 app3))
-  ;  (, (ev (: $f (-> $a $b $c $r)))  (ev (: $ap $a)) (ev (: $bp $b)) (ev (: $cp $c))  )
-  ;  (, (ev (: (@ $f $ap $bp $cp) $r) ) ))
-
-  ;((step (10 abs4))
-  ;  (, (goal (: $proof $conclusion)))
-  ;  (, (goal (: $lhs (-> $syntha $synthb $synthc $synthd $conclusion)) ) ))
-
-  ;((step (11 rev4))
-  ;  (, (ev (: $lhs (-> $a $b $c $d $r)))  (goal (: $k $r)) )
-  ;  (, (goal (: $ap $a)) (goal (: $bp $b)) (goal (: $cp $c)) (goal (: $dp $d)) ))
-
-  ;((step (12 app4))
-  ;  (, (ev (: $f (-> $a $b $c $d $r)))  (ev (: $ap $a)) (ev (: $bp $b)) (ev (: $cp $c)) (ev (: $dp $d))  )
-  ;  (, (ev (: (@ $f $ap $bp $cp $dp) $r) ) ))
+  (comment crashes for some reason)
+  (old (step (2 rev2)) 
+    (, (ev (: $name (-> (: $b1 $b2) (: $c1 $c2) (: $d1 $d2)))) 
+       (goal (: $d1 $d2))) 
+    (, (goal (: $b1 $b2))
+       (goal (: $c1 $c2)) 
+       (debug rev2-cl (goal (: $d1 $d2)) made (goal (: $b1 $b2)) due to (ev (: $name (-> (: $b1 $b2) (: $c1 $c2) (: $d1 $d2)))) )))
 
   (exec bc
       (, ((step $x) $premises0 $conclusions0)
@@ -1708,152 +1711,13 @@ fn mm2_bc() {
       (, (exec $x $premises0 $conclusions0)
          (exec bc $premises1 $conclusions1) ))
 
-  ; (goal (: (⟨=⟩ ⟨t⟩ ⟨t⟩) ⟨|-⟩))
-  (goal (: (⟨=⟩ ⟨0⟩ (⟨+⟩ ⟨t⟩ ⟨t⟩)) ⟨|-⟩))
-
-  ;; Works in ~ 34ms
-  ;; For unary rules like a2
-  ;(exec (0 lift-unary-rule)
-  ;  (, (kb (: $name (-> (: $x $T1) (: $result $T2)))))
-  ;  (, (exec (1 $name)
-  ;      (, (ev (: $x $T1)))
-  ;      (, (ev (: $result $T2))))))
-
-  ;; for tpl, weq, wim
-  ;(exec (0 lift-binary-rule) 
-  ;(, (kb (: $name (-> (: $x $T1) (: $y $T2) (: $result $T3)))))
-  ;(, (exec (1 $name)
-  ;     (, (ev (: $x $T1)) 
-  ;        (ev (: $y $T2)))
-  ;     (, (ev (: $result $T3))))))
-
-    ;; For ternary rules like a1
-  ;(exec (0 lift-ternary-rule)
-  ;  (, (kb (: $name (-> (: $a $T1) (: $b $T2) (: $c $T3) (: $result $T4)))))
-  ;  (, (exec (2 $name)
-  ;      (, (ev (: $a $T1))
-  ;          (ev (: $b $T2))
-  ;          (ev (: $c $T3)))
-  ;      (, (ev (: $result $T4))))))
-
-  ;; Works in 6s with one mp rule
-  ;; For mp (4-ary)
-  ;(exec (0 lift-quaternary-rule)
-  ;  (, (kb (: $name (-> (: $a $T1) (: $b $T2) (: $c $T3) (: $d $T4) (: $result $T5)))))
-  ;  (, (exec (8 $name)
-  ;       (, (ev (: $a $T1))
-  ;          (ev (: $b $T2))
-  ;          (ev (: $c $T3))
-  ;          (ev (: $d $T4)))
-  ;       (, (ev (: $result $T5))))))
-
-  ;; Having two of these makes it ~ 15s
-  ;; For mp (4-ary)
-  ;(exec (0 lift-quaternary-rule)
-  ;  (, (kb (: $name (-> (: $a $T1) (: $b $T2) (: $c $T3) (: $d $T4) (: $result $T5)))))
-  ;  (, (exec (9 $name)
-  ;       (, (ev (: $a $T1))
-  ;          (ev (: $b $T2))
-  ;          (ev (: $c $T3))
-  ;          (ev (: $d $T4)))
-  ;       (, (ev (: $result $T5))))))
-
-
-    ;; WORKS in ~ 1ms
-    ;; Because I don't need to go through the evs and generate a bunch of other stuff?
-    ;; tpl
-    ;(exec (1 introduce-addition-term)
-    ;  (, (kb (: ⟨tpl-curry⟩ (-> (: $x ⟨term⟩) (-> (: $y ⟨term⟩)
-    ;                      (: (⟨+⟩ $x $y) ⟨term⟩))))))
-    ;  (, (ev (: (⟨+⟩ $x $y) ⟨term⟩))))
-
-    ;; weq
-    ;(exec (1 introduce-equality-formula)
-    ;  (, (kb (: ⟨weq-curry⟩ (-> (: $x ⟨term⟩) (-> (: $y ⟨term⟩)
-    ;                      (: (⟨=⟩ $x $y) ⟨wff⟩))))))
-    ;  (, (ev (: (⟨=⟩ $x $y) ⟨wff⟩))))
-
-    ;; wim
-    ;(exec (1 introduce-implication-formula)
-    ;  (, (kb (: ⟨wim-curry⟩ (-> (: $P ⟨wff⟩) (-> (: $Q ⟨wff⟩)
-    ;                      (: (⟨->⟩ $P $Q) ⟨wff⟩))))))
-     ;(, (ev (: (⟨->⟩ $P $Q) ⟨wff⟩))))
-
-  ; For reasons beyond my understanding, the ev statement is required.
-  ;(exec (3 mp)
-  ;  (, (kb (: ⟨mp⟩ (-> (: $P ⟨wff⟩) (: $Q ⟨wff⟩)
-  ;                     (: $P ⟨|-⟩) (: (⟨->⟩ $P $Q) ⟨|-⟩) (: $Q ⟨|-⟩))))
-  ;    (ev (: (⟨->⟩ $P $Q) ⟨|-⟩)))
-  ;  (, (ev (: $Q ⟨|-⟩))))
-
-  ;(exec (4 mp)
-  ;  (, (kb (: ⟨mp⟩ (-> (: $P ⟨wff⟩) (: $Q ⟨wff⟩)
-  ;                      (: $P ⟨|-⟩) (: (⟨->⟩ $P $Q) ⟨|-⟩) (: $Q ⟨|-⟩))))
-  ;    (ev (: (⟨->⟩ $P $Q) ⟨|-⟩)))
-  ; (, (ev (: $Q ⟨|-⟩))))
-
-    ;; WORKS in ~ 36ms
-    ;; tpl
-  ;  (exec (1 introduce-addition-term)
-  ;    (, (ev (: $x ⟨term⟩))
-  ;      (ev (: $y ⟨term⟩)))
-  ;    (, (ev (: (⟨+⟩ $x $y) ⟨term⟩))))
-
-    ;; weq
-  ;  (exec (1 introduce-equality-formula)
-  ;    (, (ev (: $a ⟨term⟩))
-  ;      (ev (: $b ⟨term⟩)))
-  ;    (, (ev (: (⟨=⟩ $a $b) ⟨wff⟩))))
-
-    ;; wim
-  ;  (exec (1 introduce-implication-formula)
-  ;    (, (ev (: $P ⟨wff⟩))
-  ;      (ev (: $Q ⟨wff⟩)))
-  ;    (, (ev (: (⟨->⟩ $P $Q) ⟨wff⟩))))
-
-  ;; a1
-  ;(exec (1 apply-equality-transitivity)
-  ;  (, (ev (: $a ⟨term⟩))
-  ;     (ev (: $b ⟨term⟩))
-  ;     (ev (: $c ⟨term⟩)))
-  ;  (, (ev (: (⟨->⟩ (⟨=⟩ $a $b)
-  ;              (⟨->⟩ (⟨=⟩ $a $c)
-  ;                      (⟨=⟩ $b $c))) ⟨|-⟩))))
-
-    ;; a2
-  ;  (exec (1 apply-additive-identity)
-  ;    (, (ev (: $a ⟨term⟩)))
-  ;    (, (ev (: (⟨=⟩ (⟨+⟩ $a ⟨0⟩) $a) ⟨|-⟩))))
-
-  ; 28ms 
-  ;(exec (3 mp)
-  ;  (, (ev (: (⟨->⟩ $P $Q) ⟨|-⟩))
-  ;    (ev (: $P ⟨|-⟩))
-  ;    (ev (: $P ⟨wff⟩))
-  ;    (ev (: $Q ⟨wff⟩)))
-  ;  (, (ev (: $Q ⟨|-⟩))))
-
-  ;(exec (4 mp)
-  ;  (, (ev (: (⟨->⟩ $P $Q) ⟨|-⟩))
-  ;    (ev (: $P ⟨|-⟩))
-  ;    (ev (: $P ⟨wff⟩))
-  ;    (ev (: $Q ⟨wff⟩)))
-  ;  (, (ev (: $Q ⟨|-⟩))))
-
-  ; 36ms
-  ;  (exec (3 mp)
-  ;    (, (ev (: $P ⟨wff⟩))
-  ;      (ev (: $P ⟨|-⟩))
-  ;      (ev (: (⟨->⟩ $P $Q) ⟨|-⟩))
-  ;      (ev (: $Q ⟨wff⟩)))
-  ;    (, (ev (: $Q ⟨|-⟩))))
-
-  ;  (exec (4 mp)
-  ;    (, (ev (: $P ⟨wff⟩))
-  ;      (ev (: $P ⟨|-⟩))
-  ;      (ev (: (⟨->⟩ $P $Q) ⟨|-⟩))
-  ;      (ev (: $Q ⟨wff⟩)))
-  ;    (, (ev (: $Q ⟨|-⟩))))
+  (old goal (: (⟨=⟩ ⟨t⟩ ⟨t⟩) ⟨|-⟩))
+  (comment a2:)
+  (old goal (: (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) ⟨|-⟩) )
+  (comment a1:)
+  (old goal (: (⟨->⟩ (⟨=⟩ ⟨t⟩ ⟨t⟩) (⟨->⟩ (⟨=⟩ ⟨t⟩ ⟨0⟩) (⟨=⟩ ⟨t⟩ ⟨0⟩))) ⟨|-⟩))
+  (comment weq:)
+  (goal (: (⟨=⟩ ⟨t⟩ ⟨0⟩) ⟨wff⟩))
     "#;
 
 
@@ -1861,14 +1725,6 @@ fn mm2_bc() {
     let t0 = Instant::now();
     s.load_all_sexpr(P.as_bytes()).unwrap();
 
-    // Targets (kept identical to mm1())
-    let want_ev_term_tplus0    = "(ev (: (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨term⟩))";
-    let want_ev_wff_p          = "(ev (: (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) ⟨wff⟩))";
-    let want_ev_wff_q          = "(ev (: (⟨=⟩ ⟨t⟩ ⟨t⟩) ⟨wff⟩))";
-    let want_ev_proof_p        = "(ev (: (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) ⟨|-⟩))";
-    let want_ev_proof_ptoq     = "(ev (: (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨=⟩ ⟨t⟩ ⟨t⟩)) ⟨|-⟩))";
-    let want_ev_proof_ptoptoq  = "(ev (: (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨=⟩ ⟨t⟩ ⟨t⟩))) ⟨|-⟩))";
-    let want_final_evidence    = "(ev (: (⟨=⟩ ⟨t⟩ ⟨t⟩) ⟨|-⟩)";
 
     println!("=== MM2 (bc): Proving ⊢ (t = t) ===");
 
@@ -1888,45 +1744,9 @@ fn mm2_bc() {
         s.dump_all_sexpr(&mut buf).unwrap();
         let dump = String::from_utf8_lossy(&buf);
 
-        let line_has = |needle: &str| dump.lines().any(|l| l.trim_start().starts_with(needle));
 
-        let have_tplus0_term  = line_has(want_ev_term_tplus0);
-        let have_wff_p_ev     = line_has(want_ev_wff_p);
-        let have_wff_q_ev     = line_has(want_ev_wff_q);
-        let have_proof_p_ev   = line_has(want_ev_proof_p);
-        let have_ptoq_ev      = line_has(want_ev_proof_ptoq);
-        let have_ptoptoq_ev   = line_has(want_ev_proof_ptoptoq);
-        let have_final        = line_has(want_final_evidence);
-
-        if have_final {
-            println!("\n== mm2 (bc): ✅ SUCCESS in {:?} after {} tick(s) ==", total_t, ticks);
-            println!("  (+ t 0) : term ............. {}", if have_tplus0_term { "✓" } else { "—" });
-            println!("  wff_P (ev) ................. {}", if have_wff_p_ev { "✓" } else { "—" });
-            println!("  wff_Q (ev) ................. {}", if have_wff_q_ev { "✓" } else { "—" });
-            println!("  proof_P (a2@t, ev) ......... {}", if have_proof_p_ev { "✓" } else { "—" });
-            println!("  proof_PtoQ (a1, ev) ........ {}", if have_ptoq_ev { "✓" } else { "—" });
-            println!("  proof_PtoPtoQ (a1, ev) ..... {}", if have_ptoptoq_ev { "✓" } else { "—" });
-
-            println!("\n--- Final evidence confirmation ---");
-            println!("✅ Successfully derived ⊢ (t = t)");
-
-            println!("\n--- Full Final State Dump ---");
-            print!("{dump}");
-            break;
-        }
-
-        if n == 0 || ticks >= 25 {
-            println!("\n== mm2 (bc): — FAILURE in {:?} after {} tick(s) ==", t0.elapsed(), ticks);
-            println!("  (+ t 0) : term ............. {}", if have_tplus0_term { "✓" } else { "—" });
-            println!("  wff_P (ev) ................. {}", if have_wff_p_ev { "✓" } else { "—" });
-            println!("  wff_Q (ev) ................. {}", if have_wff_q_ev { "✓" } else { "—" });
-            println!("  proof_P (a2@t, ev) ......... {}", if have_proof_p_ev { "✓" } else { "—" });
-            println!("  proof_PtoQ (a1, ev) ........ {}", if have_ptoq_ev { "✓" } else { "—" });
-            println!("  proof_PtoPtoQ (a1, ev) ..... {}", if have_ptoptoq_ev { "✓" } else { "—" });
-
-            if !have_final {
-                println!("\n❌ Failed to derive ⊢ (t = t)");
-            }
+        if n == 0 || ticks >= 7 {
+            println!("\n== mm2 (bc): — ran for {:?} and {} tick(s) ==", t0.elapsed(), ticks);
 
             println!("\n--- Full Final State Dump ---");
             print!("{dump}");
@@ -1936,6 +1756,7 @@ fn mm2_bc() {
 }
 
 // demo0.mm forward-pass (less vibe-coded)
+// NOTE: comments don't exist in mork, i.e. ;s
 fn mm1_forward() {
     // Program: universe, typed constructors, axioms (curried), tiny pipeline, and final assembly.
     const P: &str = r#"
@@ -2234,6 +2055,8 @@ fn mm1_forward() {
     }
 }
 
+// NOTE: comments don't exist in mork, i.e. ;s
+// Keeps evidence, i.e., the proof :)
 fn mm1_forward_evidence() {
     // Program: universe, typed constructors, axioms (curried), tiny pipeline, and final assembly.
     const P: &str = r#"
@@ -2570,6 +2393,7 @@ fn mm1_forward_evidence() {
 }
 
 // Vibe-coding demo0.mm
+// NOTE: comments don't exist in mork, i.e. ;s
 fn mm0() {
     use std::time::Instant;
     use mork::space::Space;
@@ -2647,6 +2471,7 @@ fn mm0() {
 }
 
 // Vibe-coding demo0.mm
+// NOTE: comments don't exist in mork, i.e. ;s
 fn mm1_b_tpl() {
     use mork::expr;
     use mork::space::Space;
@@ -2707,6 +2532,7 @@ fn mm1_b_tpl() {
 }
 
 // Vibe-coding demo0.mm
+// NOTE: comments don't exist in mork, i.e. ;s
 fn mm1_b2_tpl() {
     use mork::expr;
     use mork::space::Space;
