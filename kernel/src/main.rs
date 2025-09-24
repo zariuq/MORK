@@ -1636,7 +1636,7 @@ fn mm2_bc() {
   (kb (: ⟨0⟩ ⟨term⟩))
   (kb (: tt (: ⟨t⟩ ⟨term⟩)))
 
-  (kb (: ⟨a2-curry⟩ (-> (: $a ⟨term⟩) (: (⟨=⟩ (⟨+⟩ $a ⟨0⟩) $a) ⟨|-⟩))))
+  ; (kb (: ⟨a2-curry⟩ (-> (: $a ⟨term⟩) (: (⟨=⟩ (⟨+⟩ $a ⟨0⟩) $a) ⟨|-⟩))))
   ; (kb (-> (: $a ⟨term⟩) (: (⟨=⟩ (⟨+⟩ $a ⟨0⟩) $a) ⟨|-⟩)))
 
   ; (comment curried versions not needed.  -- well, fuck, the bcs I copied ARE curried.)
@@ -1698,6 +1698,18 @@ fn mm2_bc() {
        ; (goal (: $c1 $c2)) 
        ; (debug rev2.0-cl (goal (: $d1 $d2)) made (goal (: $b1 $b2)) due to (ev (: $name (-> (: $b1 $b2) (: $c1 $c2) (: $d1 $d2)))) )))
 
+  ((step (2 rev1))
+    (, (ev (: $name (-> $a $b)))
+      (goal $b))
+    (, (goal $a)
+      ; Generate completion rule for this specific instantiation
+      (exec (4 app1)
+        (, (ev $a)
+            (ev (: $name (-> $a $b))))
+        (, (ev $b)
+            (debug completed ($name $a) for $b)))
+      (debug rev-cl (goal $b) made (goal $a) due to (ev (: $name (-> $a $b))))))
+
   ; 7 ticks --> space size 52
   ; works to derive goal (debug completed ⟨weq⟩ for (: (⟨=⟩ ⟨t⟩ ⟨0⟩) ⟨wff⟩)) as (ev (: (⟨=⟩ ⟨t⟩ ⟨0⟩) ⟨wff⟩))
   ((step (2 rev2))
@@ -1706,12 +1718,12 @@ fn mm2_bc() {
     (, (goal (: $b1 $b2))
       (goal (: $c1 $c2))
       ; Generate a completion rule specific to this instantiation
-      (exec (4 complete-$name-$b1-$c1)
+      (exec (4 app2)
         (, (ev (: $b1 $b2)) 
             (ev (: $c1 $c2))
             (ev (: $name (-> (: $b1 $b2) (: $c1 $c2) (: $d1 $d2)))))
         (, (ev (: $d1 $d2))
-            (debug completed $name for (: $d1 $d2))))
+            (debug completed ($name (: $b1 $b2) (: $c1 $c2)) for (: $d1 $d2))))
       (debug rev2-cl (goal (: $d1 $d2)) made (goal (: $b1 $b2)) due to (ev (: $name (-> (: $b1 $b2) (: $c1 $c2) (: $d1 $d2)))))))
 
   ; works -- but does many useless inferences.
@@ -1729,12 +1741,12 @@ fn mm2_bc() {
          (exec bc $premises1 $conclusions1) ))
 
   ; (goal (: (⟨=⟩ ⟨t⟩ ⟨t⟩) ⟨|-⟩))
-  ; (comment a2:)
-  ; (goal (: (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) ⟨|-⟩) )
+  ; (comment a2 is satisfied)
+  (goal (: (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) ⟨|-⟩) )
   ; (comment a1:)
   ; (goal (: (⟨->⟩ (⟨=⟩ ⟨t⟩ ⟨t⟩) (⟨->⟩ (⟨=⟩ ⟨t⟩ ⟨0⟩) (⟨=⟩ ⟨t⟩ ⟨0⟩))) ⟨|-⟩))
-  ; (comment weq:)
-  (goal (: (⟨=⟩ ⟨t⟩ ⟨0⟩) ⟨wff⟩))
+  ; (comment weq is satisfied)
+  ; (goal (: (⟨=⟩ ⟨t⟩ ⟨0⟩) ⟨wff⟩))
     "#;
 
 
