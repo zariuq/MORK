@@ -1996,6 +1996,186 @@ fn abstract_implication_goal_demo() {
     println!("unbounded search space!");
 }
 
+// I tested it.  No lifting is pretty much the same but runs longer.
+fn mm2_bc_v4_no_lifting() {
+    // MM2 Backward Chainer v4: Conservative refinement of working v3
+    const P: &str = r#"
+  ;; Type signatures for constructors
+  (kb (: ⟨+⟩ (-> ⟨term⟩ ⟨term⟩ ⟨term⟩)))  ;; Addition operator
+  (kb (: ⟨=⟩ (-> ⟨term⟩ ⟨term⟩ ⟨wff⟩)))   ;; Equality predicate
+  (kb (: ⟨t⟩ ⟨term⟩))                      ;; Constant t
+  (kb (: ⟨0⟩ ⟨term⟩))                      ;; Constant 0
+  
+  ;; Type constructors (used to build wffs and terms)
+  (kb (: ⟨tpl⟩ (-> (: $x ⟨term⟩) (: $y ⟨term⟩) (: (⟨+⟩ $x $y) ⟨term⟩))))
+  (kb (: ⟨weq⟩ (-> (: $x ⟨term⟩) (: $y ⟨term⟩) (: (⟨=⟩ $x $y) ⟨wff⟩))))
+  (kb (: ⟨wim⟩ (-> (: $P ⟨wff⟩) (: $Q ⟨wff⟩) (: (⟨->⟩ $P $Q) ⟨wff⟩))))
+  
+  ;; Axioms
+  (kb (: ⟨a2⟩ (-> (: $a ⟨term⟩) (: (⟨=⟩ (⟨+⟩ $a ⟨0⟩) $a) ⟨|-⟩))))  ;; a + 0 = a
+  (kb (: ⟨a1⟩ (-> (: $t ⟨term⟩) (: $r ⟨term⟩) (: $s ⟨term⟩) 
+                  (: (⟨->⟩ (⟨=⟩ $t $r) (⟨->⟩ (⟨=⟩ $t $s) (⟨=⟩ $r $s))) ⟨|-⟩))))
+  
+  ;; Modus Ponens inference rule
+  (kb (: ⟨mp⟩ (-> (: $P ⟨wff⟩) (: $Q ⟨wff⟩) (: $P ⟨|-⟩) (: (⟨->⟩ $P $Q) ⟨|-⟩) (: $Q ⟨|-⟩))))
+
+  ;; Priority 00: Initial lifting from KB to evidence
+  ; (exec (0000 lift-kb-to-ev) 
+    ; (, (kb (: $t $T))) 
+    ; (, (ev (: $t $T))))
+
+  ;; Priority 01: Direct KB lookup for goals
+  ((step (0100 lookup-in-kb))
+    (, (goal (: $proof $conclusion)) 
+       (kb (: $proof $conclusion)))
+    (, (ev (: $proof $conclusion))))
+
+  ;; Priority 02: Backward chain single-premise rules (axiom instantiation)
+  ((step (0200 rev1))
+    (, (kb (: $name (-> $a $b)))
+       (goal $b))
+    (, (goal $a)
+       (exec (02000 complete-rev1)
+         (, (ev $a))
+         (, (ev $b)))
+       (debug rev1 (goal $b) needs (goal $a))))
+
+  ;; Priority 03: Backward chain two-premise type constructors (weq, wim, tpl)
+  ((step (0300 rev2))
+    (, (kb (: $name (-> (: $b1 $b2) (: $c1 $c2) (: $d1 $d2))))
+       (goal (: $d1 $d2)))
+    (, (goal (: $b1 $b2))
+       (goal (: $c1 $c2))
+       (exec (03000 complete-rev2)
+         (, (ev (: $b1 $b2)) 
+            (ev (: $c1 $c2)))
+         (, (ev (: $d1 $d2))))
+       (debug rev2 (: $d1 $d2) needs (: $b1 $b2) and (: $c1 $c2))))
+
+  ;; Priority 04: Backward chain three-premise rules (a1)
+  ((step (0400 rev3))
+    (, (kb (: $name (-> (: $a $Ta) (: $b $Tb) (: $c $Tc) (: $result $Tr))))
+       (goal (: $result $Tr)))
+    (, (goal (: $a $Ta))
+       (goal (: $b $Tb))
+       (goal (: $c $Tc))
+       (exec (04000 complete-rev3)
+         (, (ev (: $a $Ta))
+            (ev (: $b $Tb))
+            (ev (: $c $Tc)))
+         (, (ev (: $result $Tr))))
+       (debug rev3 (: $result $Tr) needs three args)))
+
+  ;; Priority 05: Backward chain MP - keep the general version from v3
+  ((step (0501 rev4))
+    (, (kb (: $name (-> (: $a $Ta) (: $b $Tb) (: $c $Tc) (: $d $Td) (: $result $Tr))))
+       (goal (: $result $Tr)))
+    (, (goal (: $a $Ta))
+       (goal (: $b $Tb))
+       (goal (: $c $Tc))
+       (goal (: $d $Td))
+       (exec (05010 rev4)
+         (, (ev (: $a $Ta))
+            (ev (: $b $Tb))
+            (ev (: $c $Tc))
+            (ev (: $d $Td)))
+         (, (ev (: $result $Tr))))
+       (debug rev4 (: $result $Tr) needs four args)))
+
+  ;; Also not sure if it's needed. Hardcoded mp.  Blows up 2x and slows around tick 35->40.
+  ;; Priority 06: MP close - the version that worked in v3!
+  ((step (0600 mp-close))
+    (, (kb (: ⟨mp⟩
+              (-> (: $P ⟨wff⟩) (: $Q ⟨wff⟩)
+                  (: $P ⟨|-⟩) (: (⟨->⟩ $P $Q) ⟨|-⟩) (: $Q ⟨|-⟩))))
+       (ev (: $P ⟨|-⟩))
+       (ev (: (⟨->⟩ $P $Q) ⟨|-⟩))
+       (goal (: $Q ⟨|-⟩)))
+    (, (ev (: $Q ⟨|-⟩))
+       (debug mp-close -> (: $Q ⟨|-⟩))))
+
+  ;; Priority 09: Abstract currying - keep it but maybe with higher priority
+  ((step (0900 abs))
+      (, (goal (: $proof $conclusion)))
+      (, (goal (: $lhs (-> $synth (: $proof $conclusion))))
+         (debug abstract-curry exploring (: $proof $conclusion))))
+
+  ;; Not sure this is *needed* but serach space blows up 2x and slows around tick 35->40..  Basically a hard-coding of a1.
+  ;; Priority 10: Special case for reflexivity
+  ((step (1000 try-reflexivity-pattern))
+      (, (goal (: (⟨=⟩ $x $x) ⟨|-⟩)))
+      (, (goal (: $x ⟨term⟩))
+         (goal (: (⟨->⟩ (⟨=⟩ $x $x) (⟨->⟩ (⟨=⟩ $x $x) (⟨=⟩ $x $x))) ⟨|-⟩))
+         (goal (: (⟨=⟩ $x $x) ⟨wff⟩))
+         (debug trying-reflexivity-for $x)))
+
+  ;; Main backward chaining executor
+  (exec bc
+      (, ((step $x) $premises0 $conclusions0)
+         (exec bc $premises1 $conclusions1))
+      (, (exec $x $premises0 $conclusions0)
+         (exec bc $premises1 $conclusions1)))
+
+  ;; Goal: Prove t = t
+  (goal (: (⟨=⟩ ⟨t⟩ ⟨t⟩) ⟨|-⟩))
+    "#;
+
+    let mut s = Space::new();
+    let t0 = Instant::now();
+    s.load_all_sexpr(P.as_bytes()).unwrap();
+
+    println!("=== MM2 (bc v4): Proving ⊢ (t = t) ===");
+    println!("Conservative refinement: keeping abstract-curry and working MP-close");
+
+    let mut ticks = 0usize;
+    let multiplier = 5;
+    loop {
+        ticks += multiplier;
+        let t1 = Instant::now();
+        let n = s.metta_calculus(multiplier);
+        println!("executing step {} ({}) took {} ms (unifications {}, writes {}, transitions {})", 
+                ticks, n, t1.elapsed().as_millis(), 
+                unsafe { unifications }, unsafe { writes }, unsafe { transitions });
+
+        println!("space size {}", s.btm.val_count());
+
+        // Add diagnostics at key points
+         if ticks < 50 {
+          add_mm2_demo0_query_diagnostics(&mut s, ticks);
+        }
+
+        if n == 0 || ticks >= 50 {
+            println!("\n== mm2 (bc v4): ran for {:?} and {} tick(s) ==", t0.elapsed(), ticks);
+            
+            // Final diagnostics
+            add_mm2_demo0_query_diagnostics(&mut s, ticks);
+            add_mm2_demo0_diagnostics(&mut s, ticks);
+            
+            let mut buf = Vec::new();
+            s.dump_all_sexpr(&mut buf).unwrap();
+            let dump = String::from_utf8_lossy(&buf);
+            
+            // Check if proof is complete
+            if dump.contains("(ev (: (⟨=⟩ ⟨t⟩ ⟨t⟩) ⟨|-⟩))") {
+                println!("\n✅ PROOF COMPLETE!");
+            } else {
+                println!("\n❌ Proof incomplete");
+                // Show what's missing
+                println!("\nWhat's still needed:");
+                if !dump.contains("(ev (: (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨=⟩ ⟨t⟩ ⟨t⟩)) ⟨|-⟩))") {
+                    println!("  - P→Q proof (first MP)");
+                }
+                if !dump.contains("(ev (: (⟨=⟩ ⟨t⟩ ⟨t⟩) ⟨|-⟩))") {
+                    println!("  - Final Q proof (second MP)");
+                }
+            }
+            println!("\n--- Full Final State Dump ---");
+            print!("{dump}");
+            break;
+        }
+    }
+}
+
 fn mm2_bc_v4() {
     // MM2 Backward Chainer v4: Conservative refinement of working v3
     const P: &str = r#"
