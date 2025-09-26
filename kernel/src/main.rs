@@ -1960,6 +1960,264 @@ fn mm2_bc() {
     }
 }
 
+// Query-based approach using expr! macro with full terms displayed
+fn add_mm2_demo0_query_diagnostics(s: &mut Space, ticks: usize) {
+    println!("\n=== QUERY-BASED DIAGNOSTICS (tick {}) ===", ticks);
+    
+    // Query for (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) proof
+    let mut p_proof = Vec::new();
+    s.dump_sexpr(
+        expr!(s, "[2] ev [3] : [3] ⟨=⟩ [3] ⟨+⟩ ⟨t⟩ ⟨0⟩ ⟨t⟩ ⟨|-⟩"),
+        expr!(s, "[2] ev [3] : [3] ⟨=⟩ [3] ⟨+⟩ ⟨t⟩ ⟨0⟩ ⟨t⟩ ⟨|-⟩"),
+        &mut p_proof
+    );
+    
+    // Query for (⟨=⟩ ⟨t⟩ ⟨t⟩) proof (final goal)
+    let mut q_proof = Vec::new();
+    s.dump_sexpr(
+        expr!(s, "[2] ev [3] : [3] ⟨=⟩ ⟨t⟩ ⟨t⟩ ⟨|-⟩"),
+        expr!(s, "[2] ev [3] : [3] ⟨=⟩ ⟨t⟩ ⟨t⟩ ⟨|-⟩"),
+        &mut q_proof
+    );
+    
+    // Query for (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨=⟩ ⟨t⟩ ⟨t⟩)) proof
+    let mut ptoq_proof = Vec::new();
+    s.dump_sexpr(
+        expr!(s, "[2] ev [3] : [3] ⟨->⟩ [3] ⟨=⟩ [3] ⟨+⟩ ⟨t⟩ ⟨0⟩ ⟨t⟩ [3] ⟨=⟩ ⟨t⟩ ⟨t⟩ ⟨|-⟩"),
+        expr!(s, "[2] ev [3] : [3] ⟨->⟩ [3] ⟨=⟩ [3] ⟨+⟩ ⟨t⟩ ⟨0⟩ ⟨t⟩ [3] ⟨=⟩ ⟨t⟩ ⟨t⟩ ⟨|-⟩"),
+        &mut ptoq_proof
+    );
+    
+    // Query for (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨=⟩ ⟨t⟩ ⟨t⟩))) proof
+    let mut ptoptoq_proof = Vec::new();
+    s.dump_sexpr(
+        expr!(s, "[2] ev [3] : [3] ⟨->⟩ [3] ⟨=⟩ [3] ⟨+⟩ ⟨t⟩ ⟨0⟩ ⟨t⟩ [3] ⟨->⟩ [3] ⟨=⟩ [3] ⟨+⟩ ⟨t⟩ ⟨0⟩ ⟨t⟩ [3] ⟨=⟩ ⟨t⟩ ⟨t⟩ ⟨|-⟩"),
+        expr!(s, "[2] ev [3] : [3] ⟨->⟩ [3] ⟨=⟩ [3] ⟨+⟩ ⟨t⟩ ⟨0⟩ ⟨t⟩ [3] ⟨->⟩ [3] ⟨=⟩ [3] ⟨+⟩ ⟨t⟩ ⟨0⟩ ⟨t⟩ [3] ⟨=⟩ ⟨t⟩ ⟨t⟩ ⟨|-⟩"),
+        &mut ptoptoq_proof
+    );
+    
+    // Query for wffs
+    let mut p_wff = Vec::new();
+    s.dump_sexpr(
+        expr!(s, "[2] ev [3] : [3] ⟨=⟩ [3] ⟨+⟩ ⟨t⟩ ⟨0⟩ ⟨t⟩ ⟨wff⟩"),
+        expr!(s, "[2] ev [3] : [3] ⟨=⟩ [3] ⟨+⟩ ⟨t⟩ ⟨0⟩ ⟨t⟩ ⟨wff⟩"),
+        &mut p_wff
+    );
+    
+    let mut q_wff = Vec::new();
+    s.dump_sexpr(
+        expr!(s, "[2] ev [3] : [3] ⟨=⟩ ⟨t⟩ ⟨t⟩ ⟨wff⟩"),
+        expr!(s, "[2] ev [3] : [3] ⟨=⟩ ⟨t⟩ ⟨t⟩ ⟨wff⟩"),
+        &mut q_wff
+    );
+    
+    println!("QUERY RESULTS:");
+    println!("  (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) wff: {}", if !p_wff.is_empty() { "✓" } else { "❌" });
+    println!("  (⟨=⟩ ⟨t⟩ ⟨t⟩) wff: {}", if !q_wff.is_empty() { "✓" } else { "❌" });
+    println!("  ⊢ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩): {}", if !p_proof.is_empty() { "✓" } else { "❌" });
+    println!("  ⊢ (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨=⟩ ⟨t⟩ ⟨t⟩))): {}", if !ptoptoq_proof.is_empty() { "✓" } else { "❌" });
+    println!("  ⊢ (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨=⟩ ⟨t⟩ ⟨t⟩)): {}", if !ptoq_proof.is_empty() { "✓" } else { "❌" });
+    println!("  ⊢ (⟨=⟩ ⟨t⟩ ⟨t⟩) [FINAL]: {}", if !q_proof.is_empty() { "✅✅✅" } else { "❌" });
+    
+    if !q_proof.is_empty() {
+        println!("\n✅ PROOF COMPLETE: {}", String::from_utf8_lossy(&q_proof));
+    }
+}
+
+fn add_mm2_demo0_diagnostics(s: &mut Space, ticks: usize) {
+    println!("\n=== PROOF CONSTRUCTION DIAGNOSTICS (tick {}) ===", ticks);
+    
+    // Define what we're looking for (string matching approach)
+    let want_ev_term_t = "(ev (: ⟨t⟩ ⟨term⟩))";
+    let want_ev_term_0 = "(ev (: ⟨0⟩ ⟨term⟩))";
+    let want_ev_term_tplus0 = "(ev (: (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨term⟩))";
+    
+    // P := (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩)
+    let want_ev_wff_p = "(ev (: (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) ⟨wff⟩))";
+    let want_ev_proof_p = "(ev (: (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) ⟨|-⟩))";
+    
+    // Q := (⟨=⟩ ⟨t⟩ ⟨t⟩)
+    let want_ev_wff_q = "(ev (: (⟨=⟩ ⟨t⟩ ⟨t⟩) ⟨wff⟩))";
+    let want_final_evidence = "(ev (: (⟨=⟩ ⟨t⟩ ⟨t⟩) ⟨|-⟩))";
+    
+    // P -> Q
+    let want_ev_wff_ptoq = "(ev (: (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨=⟩ ⟨t⟩ ⟨t⟩)) ⟨wff⟩))";
+    let want_ev_proof_ptoq = "(ev (: (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨=⟩ ⟨t⟩ ⟨t⟩)) ⟨|-⟩))";
+    
+    // P -> (P -> Q)
+    let want_ev_wff_ptoptoq = "(ev (: (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨=⟩ ⟨t⟩ ⟨t⟩))) ⟨wff⟩))";
+    let want_ev_proof_ptoptoq = "(ev (: (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨=⟩ ⟨t⟩ ⟨t⟩))) ⟨|-⟩))";
+
+    // Get full dump for string matching
+    let mut buf = Vec::new();
+    s.dump_all_sexpr(&mut buf).unwrap();
+    let dump = String::from_utf8_lossy(&buf);
+    
+    // Helper to check if a line exists
+    let line_has = |needle: &str| dump.lines().any(|l| l.trim_start().starts_with(needle));
+    
+    // Check what we have (string matching)
+    println!("\n📊 ESSENTIAL INGREDIENTS STATUS:");
+    println!("────────────────────────────────");
+    
+    println!("TERMS:");
+    println!("  ⟨t⟩ : ⟨term⟩ .................. {}", if line_has(want_ev_term_t) { "✓" } else { "❌" });
+    println!("  ⟨0⟩ : ⟨term⟩ .................. {}", if line_has(want_ev_term_0) { "✓" } else { "❌" });
+    println!("  (⟨+⟩ ⟨t⟩ ⟨0⟩) : ⟨term⟩ ......... {}", if line_has(want_ev_term_tplus0) { "✓" } else { "❌" });
+    
+    println!("\nWFFs:");
+    println!("  P: (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) : ⟨wff⟩ . {}", if line_has(want_ev_wff_p) { "✓" } else { "❌" });
+    println!("  Q: (⟨=⟩ ⟨t⟩ ⟨t⟩) : ⟨wff⟩ .......... {}", if line_has(want_ev_wff_q) { "✓" } else { "❌" });
+    println!("  P→Q : ⟨wff⟩ ..................... {}", if line_has(want_ev_wff_ptoq) { "✓" } else { "❌" });
+    println!("  P→(P→Q) : ⟨wff⟩ ................ {}", if line_has(want_ev_wff_ptoptoq) { "✓" } else { "❌" });
+    
+    println!("\nPROOFS (⟨|-⟩):");
+    println!("  ⊢ P (from a2) .................. {}", if line_has(want_ev_proof_p) { "✓" } else { "❌" });
+    println!("  ⊢ P→(P→Q) (from a1) ............ {}", if line_has(want_ev_proof_ptoptoq) { "✓" } else { "❌" });
+    println!("  ⊢ P→Q (MP₁) .................... {}", if line_has(want_ev_proof_ptoq) { "✓" } else { "❌" });
+    println!("  ⊢ Q [FINAL GOAL] ............... {}", if line_has(want_final_evidence) { "✅✅✅" } else { "❌" });
+    
+    // Also check for goals that are pending
+    println!("\n🎯 ACTIVE GOALS:");
+    for line in dump.lines() {
+        if line.trim_start().starts_with("(goal ") {
+            println!("  {}", line.trim());
+        }
+    }
+    
+    if line_has(want_final_evidence) {
+        println!("\n🎊 SUCCESS! Proof of t=t completed!");
+    }
+}
+
+
+fn mm2_bc_v3() {
+    // MM2 Backward Chainer: Proving t = t via reflexivity
+    // Strategy: Use a1 and a2 axioms with two MP steps
+    const P: &str = r#"
+  ;; Type signatures for constructors
+  (kb (: ⟨+⟩ (-> ⟨term⟩ ⟨term⟩ ⟨term⟩)))  ;; Addition operator
+  (kb (: ⟨=⟩ (-> ⟨term⟩ ⟨term⟩ ⟨wff⟩)))   ;; Equality predicate
+  (kb (: ⟨t⟩ ⟨term⟩))                      ;; Constant t
+  (kb (: ⟨0⟩ ⟨term⟩))                      ;; Constant 0
+  (kb (: tt (: ⟨t⟩ ⟨term⟩)))               ;; Named proof that t is a term
+
+  ;; Type constructors (used to build wffs and terms)
+  (kb (: ⟨tpl⟩ (-> (: $x ⟨term⟩) (: $y ⟨term⟩) (: (⟨+⟩ $x $y) ⟨term⟩))))
+  (kb (: ⟨weq⟩ (-> (: $x ⟨term⟩) (: $y ⟨term⟩) (: (⟨=⟩ $x $y) ⟨wff⟩))))
+  (kb (: ⟨wim⟩ (-> (: $P ⟨wff⟩) (: $Q ⟨wff⟩) (: (⟨->⟩ $P $Q) ⟨wff⟩))))
+  
+  ;; Axioms
+  (kb (: ⟨a2⟩ (-> (: $a ⟨term⟩) (: (⟨=⟩ (⟨+⟩ $a ⟨0⟩) $a) ⟨|-⟩))))  ;; a + 0 = a
+  (kb (: ⟨a1⟩ (-> (: $t ⟨term⟩) (: $r ⟨term⟩) (: $s ⟨term⟩) 
+                  (: (⟨->⟩ (⟨=⟩ $t $r) (⟨->⟩ (⟨=⟩ $t $s) (⟨=⟩ $r $s))) ⟨|-⟩))))  ;; Transitivity
+  
+  ;; Modus Ponens inference rule
+  (kb (: ⟨mp⟩ (-> (: $P ⟨wff⟩) (: $Q ⟨wff⟩) (: $P ⟨|-⟩) (: (⟨->⟩ $P $Q) ⟨|-⟩) (: $Q ⟨|-⟩))))
+
+  ;; Priority 00: Initial lifting from KB to evidence
+  (exec (0000 lift-kb-to-ev) 
+    (, (kb (: $t $T))) 
+    (, (ev (: $t $T))))
+
+  ;; Priority 04b: Special MP for contracting P→(P→Q) with P to get P→Q
+  ; thread 'main' (1910560) panicked at kernel/src/space.rs:146:124:
+  ; index out of bounds: the len is 0 but the index is 0
+  ((step (0400 mp-contraction))
+    (, (goal (: (⟨->⟩ $P $Q) ⟨|-⟩))
+      (ev (: $P ⟨|-⟩))
+      (ev (: (⟨->⟩ $P (⟨->⟩ $P $Q)) ⟨|-⟩)))
+    (, (goal (: $P ⟨wff⟩))
+      (goal (: $Q ⟨wff⟩))
+      (exec (04000 complete-mp-contraction)
+        (, (ev (: $P ⟨wff⟩))
+            (ev (: $Q ⟨wff⟩))
+            (ev (: $P ⟨|-⟩))
+            (ev (: (⟨->⟩ $P (⟨->⟩ $P $Q)) ⟨|-⟩)))
+        (, (ev (: (⟨->⟩ $P $Q) ⟨|-⟩))
+            (debug mp-contraction completed (⟨->⟩ $P $Q))))
+      (debug mp-contraction trying to prove (⟨->⟩ $P $Q))))
+
+  ;; same error
+  ; ((step (0400 mp-contraction))
+    ; (, (goal (: (⟨->⟩ $P $Q) ⟨|-⟩))
+      ; (ev (: $P ⟨|-⟩))
+      ; (ev (: (⟨->⟩ $P (⟨->⟩ $P $Q)) ⟨|-⟩)))
+    ; (, (goal (: $P ⟨wff⟩))
+      ; (goal (: $Q ⟨wff⟩))
+      ; (exec (04000 complete-mp-contraction)
+        ; (, (ev (: $P ⟨wff⟩))
+            ; (ev (: $Q ⟨wff⟩))
+            ; (ev (: $P ⟨|-⟩))
+            ; (ev (: (⟨->⟩ $P (⟨->⟩ $P $Q)) ⟨|-⟩)))
+        ; (, (ev (: (⟨->⟩ $P $Q) ⟨|-⟩))))))
+
+  ;; Priority 05: Backward chain MP (most specific case)
+  ((step (0501 backchain-mp))
+    (, (ev (: $name (-> (: $a $Ta) (: $b $Tb) (: $c $Tc) (: $d $Td) (: $result $Tr))))
+       (goal (: $result $Tr)))
+    (, (goal (: $a $Ta))
+       (goal (: $b $Tb))
+       (goal (: $c $Tc))
+       (goal (: $d $Td))
+       (exec (05010 complete-mp)
+         (, (ev (: $a $Ta))
+            (ev (: $b $Tb))
+            (ev (: $c $Tc))
+            (ev (: $d $Td))
+            (ev (: $name (-> (: $a $Ta) (: $b $Tb) (: $c $Tc) (: $d $Td) (: $result $Tr)))))
+         (, (ev (: $result $Tr))
+            (debug completed-mp ($name args) -> (: $result $Tr))))
+       (debug backchain-mp (: $result $Tr) needs four args)))
+
+;; Remove the old 0501 rule and potentially 0600 if this works better
+
+
+
+  ;; Main backward chaining executor
+  (exec bc
+      (, ((step $x) $premises0 $conclusions0)
+         (exec bc $premises1 $conclusions1))
+      (, (exec $x $premises0 $conclusions0)
+         (exec bc $premises1 $conclusions1)))
+
+  ;; Goal: Prove t = t
+  (goal (: (⟨=⟩ ⟨t⟩ ⟨t⟩) ⟨|-⟩))
+    "#;
+
+
+    let mut s = Space::new();
+    let t0 = Instant::now();
+    s.load_all_sexpr(P.as_bytes()).unwrap();
+
+    println!("=== MM2 (bc v3): Proving ⊢ (t = t) ===");
+
+    let mut ticks = 0usize;
+    let multiplier = 5;
+    loop {
+        ticks += multiplier;
+        let t1 = Instant::now();
+        let n = s.metta_calculus(multiplier);
+        println!("executing step {} ({}) took {} ms (unifications {}, writes {}, transitions {})", 
+                ticks, n, t1.elapsed().as_millis(), 
+                unsafe { unifications }, unsafe { writes }, unsafe { transitions });
+
+        println!("space size {}", s.btm.val_count());
+
+        let mut buf = Vec::new();
+        s.dump_all_sexpr(&mut buf).unwrap();
+        let dump = String::from_utf8_lossy(&buf);
+
+        if n == 0 || ticks >= 50 {
+            println!("\n== mm2 (bc v3): — ran for {:?} and {} tick(s) ==", t0.elapsed(), ticks);
+            add_mm2_demo0_query_diagnostics(&mut s, ticks);
+            add_mm2_demo0_diagnostics(&mut s, ticks);
+            println!("\n--- Full Final State Dump ---");
+            print!("{dump}");
+            break;
+        }
+    }
+}
 
 use std::ffi::OsStr;
 use std::ffi::OsString;
@@ -2037,6 +2295,7 @@ fn main() {
                     "process_calculus" => { process_calculus_bench(1000, 200, 200); }
                     "exponential" => { exponential(32); }
                     "exponential_fringe" => { exponential_fringe(15); }
+                    "mm2_bc_v3" => { mm2_bc_v3(); }
                     s => { println!("bench not known: {s}") }
                 }
             }
