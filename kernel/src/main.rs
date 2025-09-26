@@ -1626,6 +1626,1045 @@ fn linear_alternating(steps: usize) {
     // println!("result: {res}");
 }
 
+// Query-based approach using expr! macro with full terms displayed
+fn add_mm2_demo0_query_diagnostics(s: &mut Space, ticks: usize) {
+    println!("\n=== QUERY-BASED DIAGNOSTICS (tick {}) ===", ticks);
+    
+    // Query for (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) proof
+    let mut p_proof = Vec::new();
+    s.dump_sexpr(
+        expr!(s, "[2] ev [3] : [3] ⟨=⟩ [3] ⟨+⟩ ⟨t⟩ ⟨0⟩ ⟨t⟩ ⟨|-⟩"),
+        expr!(s, "[2] ev [3] : [3] ⟨=⟩ [3] ⟨+⟩ ⟨t⟩ ⟨0⟩ ⟨t⟩ ⟨|-⟩"),
+        &mut p_proof
+    );
+    
+    // Query for (⟨=⟩ ⟨t⟩ ⟨t⟩) proof (final goal)
+    let mut q_proof = Vec::new();
+    s.dump_sexpr(
+        expr!(s, "[2] ev [3] : [3] ⟨=⟩ ⟨t⟩ ⟨t⟩ ⟨|-⟩"),
+        expr!(s, "[2] ev [3] : [3] ⟨=⟩ ⟨t⟩ ⟨t⟩ ⟨|-⟩"),
+        &mut q_proof
+    );
+    
+    // Query for (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨=⟩ ⟨t⟩ ⟨t⟩)) proof
+    let mut ptoq_proof = Vec::new();
+    s.dump_sexpr(
+        expr!(s, "[2] ev [3] : [3] ⟨->⟩ [3] ⟨=⟩ [3] ⟨+⟩ ⟨t⟩ ⟨0⟩ ⟨t⟩ [3] ⟨=⟩ ⟨t⟩ ⟨t⟩ ⟨|-⟩"),
+        expr!(s, "[2] ev [3] : [3] ⟨->⟩ [3] ⟨=⟩ [3] ⟨+⟩ ⟨t⟩ ⟨0⟩ ⟨t⟩ [3] ⟨=⟩ ⟨t⟩ ⟨t⟩ ⟨|-⟩"),
+        &mut ptoq_proof
+    );
+    
+    // Query for (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨=⟩ ⟨t⟩ ⟨t⟩))) proof
+    let mut ptoptoq_proof = Vec::new();
+    s.dump_sexpr(
+        expr!(s, "[2] ev [3] : [3] ⟨->⟩ [3] ⟨=⟩ [3] ⟨+⟩ ⟨t⟩ ⟨0⟩ ⟨t⟩ [3] ⟨->⟩ [3] ⟨=⟩ [3] ⟨+⟩ ⟨t⟩ ⟨0⟩ ⟨t⟩ [3] ⟨=⟩ ⟨t⟩ ⟨t⟩ ⟨|-⟩"),
+        expr!(s, "[2] ev [3] : [3] ⟨->⟩ [3] ⟨=⟩ [3] ⟨+⟩ ⟨t⟩ ⟨0⟩ ⟨t⟩ [3] ⟨->⟩ [3] ⟨=⟩ [3] ⟨+⟩ ⟨t⟩ ⟨0⟩ ⟨t⟩ [3] ⟨=⟩ ⟨t⟩ ⟨t⟩ ⟨|-⟩"),
+        &mut ptoptoq_proof
+    );
+    
+    // Query for wffs
+    let mut p_wff = Vec::new();
+    s.dump_sexpr(
+        expr!(s, "[2] ev [3] : [3] ⟨=⟩ [3] ⟨+⟩ ⟨t⟩ ⟨0⟩ ⟨t⟩ ⟨wff⟩"),
+        expr!(s, "[2] ev [3] : [3] ⟨=⟩ [3] ⟨+⟩ ⟨t⟩ ⟨0⟩ ⟨t⟩ ⟨wff⟩"),
+        &mut p_wff
+    );
+    
+    let mut q_wff = Vec::new();
+    s.dump_sexpr(
+        expr!(s, "[2] ev [3] : [3] ⟨=⟩ ⟨t⟩ ⟨t⟩ ⟨wff⟩"),
+        expr!(s, "[2] ev [3] : [3] ⟨=⟩ ⟨t⟩ ⟨t⟩ ⟨wff⟩"),
+        &mut q_wff
+    );
+    
+    println!("QUERY RESULTS:");
+    println!("  (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) wff: {}", if !p_wff.is_empty() { "✓" } else { "❌" });
+    println!("  (⟨=⟩ ⟨t⟩ ⟨t⟩) wff: {}", if !q_wff.is_empty() { "✓" } else { "❌" });
+    println!("  ⊢ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩): {}", if !p_proof.is_empty() { "✓" } else { "❌" });
+    println!("  ⊢ (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨=⟩ ⟨t⟩ ⟨t⟩))): {}", if !ptoptoq_proof.is_empty() { "✓" } else { "❌" });
+    println!("  ⊢ (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨=⟩ ⟨t⟩ ⟨t⟩)): {}", if !ptoq_proof.is_empty() { "✓" } else { "❌" });
+    println!("  ⊢ (⟨=⟩ ⟨t⟩ ⟨t⟩) [FINAL]: {}", if !q_proof.is_empty() { "✅✅✅" } else { "❌" });
+    
+    if !q_proof.is_empty() {
+        println!("\n✅ PROOF COMPLETE: {}", String::from_utf8_lossy(&q_proof));
+    }
+}
+
+fn add_mm2_demo0_diagnostics(s: &mut Space, ticks: usize) {
+    println!("\n=== PROOF CONSTRUCTION DIAGNOSTICS (tick {}) ===", ticks);
+    
+    // Define what we're looking for (string matching approach)
+    let want_ev_term_t = "(ev (: ⟨t⟩ ⟨term⟩))";
+    let want_ev_term_0 = "(ev (: ⟨0⟩ ⟨term⟩))";
+    let want_ev_term_tplus0 = "(ev (: (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨term⟩))";
+    
+    // P := (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩)
+    let want_ev_wff_p = "(ev (: (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) ⟨wff⟩))";
+    let want_ev_proof_p = "(ev (: (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) ⟨|-⟩))";
+    
+    // Q := (⟨=⟩ ⟨t⟩ ⟨t⟩)
+    let want_ev_wff_q = "(ev (: (⟨=⟩ ⟨t⟩ ⟨t⟩) ⟨wff⟩))";
+    let want_final_evidence = "(ev (: (⟨=⟩ ⟨t⟩ ⟨t⟩) ⟨|-⟩))";
+    
+    // P -> Q
+    let want_ev_wff_ptoq = "(ev (: (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨=⟩ ⟨t⟩ ⟨t⟩)) ⟨wff⟩))";
+    let want_ev_proof_ptoq = "(ev (: (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨=⟩ ⟨t⟩ ⟨t⟩)) ⟨|-⟩))";
+    
+    // P -> (P -> Q)
+    let want_ev_wff_ptoptoq = "(ev (: (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨=⟩ ⟨t⟩ ⟨t⟩))) ⟨wff⟩))";
+    let want_ev_proof_ptoptoq = "(ev (: (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨=⟩ ⟨t⟩ ⟨t⟩))) ⟨|-⟩))";
+
+    // Get full dump for string matching
+    let mut buf = Vec::new();
+    s.dump_all_sexpr(&mut buf).unwrap();
+    let dump = String::from_utf8_lossy(&buf);
+    
+    // Helper to check if a line exists
+    let line_has = |needle: &str| dump.lines().any(|l| l.trim_start().starts_with(needle));
+    
+    // Check what we have (string matching)
+    println!("\n📊 ESSENTIAL INGREDIENTS STATUS:");
+    println!("────────────────────────────────");
+    
+    println!("TERMS:");
+    println!("  ⟨t⟩ : ⟨term⟩ .................. {}", if line_has(want_ev_term_t) { "✓" } else { "❌" });
+    println!("  ⟨0⟩ : ⟨term⟩ .................. {}", if line_has(want_ev_term_0) { "✓" } else { "❌" });
+    println!("  (⟨+⟩ ⟨t⟩ ⟨0⟩) : ⟨term⟩ ......... {}", if line_has(want_ev_term_tplus0) { "✓" } else { "❌" });
+    
+    println!("\nWFFs:");
+    println!("  P: (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) : ⟨wff⟩ . {}", if line_has(want_ev_wff_p) { "✓" } else { "❌" });
+    println!("  Q: (⟨=⟩ ⟨t⟩ ⟨t⟩) : ⟨wff⟩ .......... {}", if line_has(want_ev_wff_q) { "✓" } else { "❌" });
+    println!("  P→Q : ⟨wff⟩ ..................... {}", if line_has(want_ev_wff_ptoq) { "✓" } else { "❌" });
+    println!("  P→(P→Q) : ⟨wff⟩ ................ {}", if line_has(want_ev_wff_ptoptoq) { "✓" } else { "❌" });
+    
+    println!("\nPROOFS (⟨|-⟩):");
+    println!("  ⊢ P (from a2) .................. {}", if line_has(want_ev_proof_p) { "✓" } else { "❌" });
+    println!("  ⊢ P→(P→Q) (from a1) ............ {}", if line_has(want_ev_proof_ptoptoq) { "✓" } else { "❌" });
+    println!("  ⊢ P→Q (MP₁) .................... {}", if line_has(want_ev_proof_ptoq) { "✓" } else { "❌" });
+    println!("  ⊢ Q [FINAL GOAL] ............... {}", if line_has(want_final_evidence) { "✅✅✅" } else { "❌" });
+    
+    // Also check for goals that are pending
+    println!("\n🎯 ACTIVE GOALS:");
+    for line in dump.lines() {
+        if line.trim_start().starts_with("(goal ") {
+            println!("  {}", line.trim());
+        }
+    }
+    
+    if line_has(want_final_evidence) {
+        println!("\n🎊 SUCCESS! Proof of t=t completed!");
+    }
+}
+
+
+fn abstract_curry_explosion_demo() {
+    const P: &str = r#"
+  ;; Basic terms and types
+  (kb (: ⟨t⟩ ⟨term⟩))
+  (kb (: ⟨0⟩ ⟨term⟩))
+  (kb (: ⟨=⟩ (-> ⟨term⟩ ⟨term⟩ ⟨wff⟩)))
+  
+  ;; Type constructors
+  (kb (: ⟨weq⟩ (-> (: $x ⟨term⟩) (: $y ⟨term⟩) (: (⟨=⟩ $x $y) ⟨wff⟩))))
+  (kb (: ⟨wim⟩ (-> (: $P ⟨wff⟩) (: $Q ⟨wff⟩) (: (⟨->⟩ $P $Q) ⟨wff⟩))))
+  
+  ;; Initial lifting
+  (exec (00 lift) 
+    (, (kb (: $t $T))) 
+    (, (ev (: $t $T))))
+
+  ;; Direct KB lookup
+  ((step (01 lookup))
+    (, (goal (: $proof $conclusion)) 
+       (kb (: $proof $conclusion)))
+    (, (ev (: $proof $conclusion))))
+
+  ;; The problematic abstract-curry rule
+  ((step (09 abstract-curry))
+    (, (goal (: $proof $conclusion)))
+    (, (goal (: $lhs (-> $synth (: $proof $conclusion))))
+       (debug abstract-curry created (goal (: $lhs (-> $synth (: $proof $conclusion)))) for (: $proof $conclusion))))
+
+  ;; Backward chain for 2-arg constructors 
+  ((step (03 backchain-2))
+    (, (ev (: $name (-> (: $b1 $b2) (: $c1 $c2) (: $d1 $d2))))
+       (goal (: $d1 $d2)))
+    (, (goal (: $b1 $b2))
+       (goal (: $c1 $c2))
+       (debug backchain-2 for (: $d1 $d2))))
+
+  ;; Main executor
+  (exec bc
+    (, ((step $x) $premises0 $conclusions0)
+       (exec bc $premises1 $conclusions1))
+    (, (exec $x $premises0 $conclusions0)
+       (exec bc $premises1 $conclusions1)))
+
+  ;; Start with a concrete goal
+  (goal (: (⟨=⟩ ⟨t⟩ ⟨t⟩) ⟨wff⟩))
+  (goal (: (⟨->⟩ (⟨=⟩ ⟨t⟩ ⟨0⟩) (⟨=⟩ ⟨0⟩ ⟨t⟩)) ⟨wff⟩))
+    "#;
+
+    let mut s = Space::new();
+    let t0 = Instant::now();
+    s.load_all_sexpr(P.as_bytes()).unwrap();
+
+    println!("=== Abstract Curry Explosion Demo ===");
+    println!("Starting with concrete goals:");
+    println!("  (: (⟨=⟩ ⟨t⟩ ⟨t⟩) ⟨wff⟩)");
+    println!("  (: (⟨->⟩ (⟨=⟩ ⟨t⟩ ⟨0⟩) (⟨=⟩ ⟨0⟩ ⟨t⟩)) ⟨wff⟩)");
+    println!("\n--- Watch how abstract goals multiply ---\n");
+
+    let mut ticks = 0usize;
+    let multiplier = 1;  // Run one tick at a time to see the progression
+    
+    for _ in 0..10 {  // Run for 10 ticks
+        ticks += multiplier;
+        let n = s.metta_calculus(multiplier);
+        
+        // Count and display goals
+        let mut buf = Vec::new();
+        s.dump_all_sexpr(&mut buf).unwrap();
+        let dump = String::from_utf8_lossy(&buf);
+        
+        let concrete_goals: Vec<&str> = dump.lines()
+            .filter(|l| l.starts_with("(goal ") && l.contains("⟨"))
+            .collect();
+        
+        let abstract_goals: Vec<&str> = dump.lines()
+            .filter(|l| l.starts_with("(goal ") && l.contains("$"))
+            .collect();
+        
+        println!("Tick {}: {} concrete goals, {} abstract goals", 
+                 ticks, concrete_goals.len(), abstract_goals.len());
+        
+        // Show first few abstract goals
+        if !abstract_goals.is_empty() {
+            println!("  Sample abstract goals:");
+            for goal in abstract_goals.iter().take(3) {
+                println!("    {}", goal);
+            }
+            if abstract_goals.len() > 3 {
+                println!("    ... and {} more", abstract_goals.len() - 3);
+            }
+        }
+        
+        if n == 0 || abstract_goals.len() > 50 {
+            println!("\n--- Stopping: too many abstract goals or no more rules ---");
+            break;
+        }
+    }
+    
+    println!("\n=== Final Analysis ===");
+    let mut buf = Vec::new();
+    s.dump_all_sexpr(&mut buf).unwrap();
+    let dump = String::from_utf8_lossy(&buf);
+    
+    println!("\n--- Full Final State Dump ---");
+    print!("{dump}");
+}
+
+fn abstract_implication_goal_demo() {
+    const P: &str = r#"
+  ;; Basic setup
+  (kb (: ⟨t⟩ ⟨term⟩))
+  (kb (: ⟨0⟩ ⟨term⟩))
+  (kb (: ⟨=⟩ (-> ⟨term⟩ ⟨term⟩ ⟨wff⟩)))
+  (kb (: ⟨+⟩ (-> ⟨term⟩ ⟨term⟩ ⟨term⟩)))
+  
+  ;; Type constructors
+  (kb (: ⟨wim⟩ (-> (: $P ⟨wff⟩) (: $Q ⟨wff⟩) (: (⟨->⟩ $P $Q) ⟨wff⟩))))
+  (kb (: ⟨weq⟩ (-> (: $x ⟨term⟩) (: $y ⟨term⟩) (: (⟨=⟩ $x $y) ⟨wff⟩))))
+  
+  ;; MP rule (the key culprit)
+  (kb (: ⟨mp⟩ (-> (: $P ⟨wff⟩) (: $Q ⟨wff⟩) (: $P ⟨|-⟩) (: (⟨->⟩ $P $Q) ⟨|-⟩) (: $Q ⟨|-⟩))))
+  
+  ;; Initial lifting
+  (exec (00 lift) 
+    (, (kb (: $t $T))) 
+    (, (ev (: $t $T))))
+
+  ;; Backward chain MP - THIS is where abstract goals come from
+  ((step (05 backchain-mp))
+    (, (ev (: ⟨mp⟩ (-> (: $P ⟨wff⟩) (: $Q ⟨wff⟩) (: $P ⟨|-⟩) (: (⟨->⟩ $P $Q) ⟨|-⟩) (: $Q ⟨|-⟩))))
+       (goal (: $Q ⟨|-⟩)))
+    (, (goal (: $P ⟨wff⟩))
+       (goal (: $Q ⟨wff⟩))
+       (goal (: $P ⟨|-⟩))
+       (goal (: (⟨->⟩ $P $Q) ⟨|-⟩))  ;; THIS creates the abstract implication goal!
+       (debug backchain-mp trying to prove $Q needs (⟨->⟩ $P $Q))))
+
+  ;; This rule then matches the abstract (⟨->⟩ $P $Q) ⟨|-⟩ goal
+  ((step (09 abstract-curry))
+    (, (goal (: $proof $conclusion)))
+    (, (goal (: $lhs (-> $synth (: $proof $conclusion))))
+       (debug abstract-curry for (: $proof $conclusion))))
+
+  ;; Main executor
+  (exec bc
+    (, ((step $x) $premises0 $conclusions0)
+       (exec bc $premises1 $conclusions1))
+    (, (exec $x $premises0 $conclusions0)
+       (exec bc $premises1 $conclusions1)))
+
+  ;; Start with a concrete goal like in your real proof
+  (goal (: (⟨=⟩ ⟨t⟩ ⟨t⟩) ⟨|-⟩))
+    "#;
+
+    let mut s = Space::new();
+    let t0 = Instant::now();
+    s.load_all_sexpr(P.as_bytes()).unwrap();
+
+    println!("=== How Abstract Implication Goals Arise ===");
+    println!("Starting goal: (: (⟨=⟩ ⟨t⟩ ⟨t⟩) ⟨|-⟩)");
+    println!("\n--- Execution trace ---\n");
+
+    let mut ticks = 0usize;
+    
+    for _ in 0..5 {
+        ticks += 1;
+        let n = s.metta_calculus(1);
+        
+        let mut buf = Vec::new();
+        s.dump_all_sexpr(&mut buf).unwrap();
+        let dump = String::from_utf8_lossy(&buf);
+        
+        println!("After tick {}:", ticks);
+        
+        // Show debug messages
+        for line in dump.lines() {
+            if line.starts_with("(debug ") {
+                println!("  {}", line);
+            }
+        }
+        
+        // Show new goals with implications
+        let implication_goals: Vec<&str> = dump.lines()
+            .filter(|l| l.starts_with("(goal ") && l.contains("⟨->⟩"))
+            .collect();
+        
+        if !implication_goals.is_empty() {
+            println!("  Implication goals:");
+            for goal in &implication_goals {
+                // Check if it has variables
+                if goal.contains("$") {
+                    println!("    {} ← ABSTRACT!", goal);
+                } else {
+                    println!("    {} ← concrete", goal);
+                }
+            }
+        }
+        
+        if n == 0 {
+            break;
+        }
+    }
+    
+    println!("\n=== Final State ===");
+    let mut buf = Vec::new();
+    s.dump_all_sexpr(&mut buf).unwrap();
+    let dump = String::from_utf8_lossy(&buf);
+    
+    // Count different types of goals
+    let mut abstract_impl = 0;
+    let mut concrete_impl = 0;
+    let mut other_abstract = 0;
+    
+    for line in dump.lines() {
+        if line.starts_with("(goal ") {
+            if line.contains("⟨->⟩") && line.contains("$") {
+                abstract_impl += 1;
+                if abstract_impl <= 3 {
+                    println!("Abstract implication goal: {}", line);
+                }
+            } else if line.contains("⟨->⟩") {
+                concrete_impl += 1;
+            } else if line.contains("$") {
+                other_abstract += 1;
+            }
+        }
+    }
+    
+    println!("\nSummary:");
+    println!("  Abstract implication goals (with $): {}", abstract_impl);
+    println!("  Concrete implication goals: {}", concrete_impl);
+    println!("  Other abstract goals: {}", other_abstract);
+    
+    println!("\nThe problem: When MP backward-chains to prove Q, it creates");
+    println!("a goal (: (⟨->⟩ $P $Q) ⟨|-⟩) where $P and $Q are unbound.");
+    println!("This matches ANYTHING of the form (⟨->⟩ X Y), creating an");
+    println!("unbounded search space!");
+}
+
+fn mm2_bc_v4() {
+    // MM2 Backward Chainer v4: Conservative refinement of working v3
+    const P: &str = r#"
+  ;; Type signatures for constructors
+  (kb (: ⟨+⟩ (-> ⟨term⟩ ⟨term⟩ ⟨term⟩)))  ;; Addition operator
+  (kb (: ⟨=⟩ (-> ⟨term⟩ ⟨term⟩ ⟨wff⟩)))   ;; Equality predicate
+  (kb (: ⟨t⟩ ⟨term⟩))                      ;; Constant t
+  (kb (: ⟨0⟩ ⟨term⟩))                      ;; Constant 0
+  
+  ;; Type constructors (used to build wffs and terms)
+  (kb (: ⟨tpl⟩ (-> (: $x ⟨term⟩) (: $y ⟨term⟩) (: (⟨+⟩ $x $y) ⟨term⟩))))
+  (kb (: ⟨weq⟩ (-> (: $x ⟨term⟩) (: $y ⟨term⟩) (: (⟨=⟩ $x $y) ⟨wff⟩))))
+  (kb (: ⟨wim⟩ (-> (: $P ⟨wff⟩) (: $Q ⟨wff⟩) (: (⟨->⟩ $P $Q) ⟨wff⟩))))
+  
+  ;; Axioms
+  (kb (: ⟨a2⟩ (-> (: $a ⟨term⟩) (: (⟨=⟩ (⟨+⟩ $a ⟨0⟩) $a) ⟨|-⟩))))  ;; a + 0 = a
+  (kb (: ⟨a1⟩ (-> (: $t ⟨term⟩) (: $r ⟨term⟩) (: $s ⟨term⟩) 
+                  (: (⟨->⟩ (⟨=⟩ $t $r) (⟨->⟩ (⟨=⟩ $t $s) (⟨=⟩ $r $s))) ⟨|-⟩))))
+  
+  ;; Modus Ponens inference rule
+  (kb (: ⟨mp⟩ (-> (: $P ⟨wff⟩) (: $Q ⟨wff⟩) (: $P ⟨|-⟩) (: (⟨->⟩ $P $Q) ⟨|-⟩) (: $Q ⟨|-⟩))))
+
+  ;; Priority 00: Initial lifting from KB to evidence
+  (exec (0000 lift-kb-to-ev) 
+    (, (kb (: $t $T))) 
+    (, (ev (: $t $T))))
+
+  ;; Priority 01: Direct KB lookup for goals
+  ((step (0100 lookup-in-kb))
+    (, (goal (: $proof $conclusion)) 
+       (kb (: $proof $conclusion)))
+    (, (ev (: $proof $conclusion))))
+
+  ;; Priority 02: Backward chain single-premise rules (axiom instantiation)
+  ((step (0200 rev1))
+    (, (ev (: $name (-> $a $b)))
+       (goal $b))
+    (, (goal $a)
+       (exec (02000 complete-rev1)
+         (, (ev $a)
+            (ev (: $name (-> $a $b))))
+         (, (ev $b)))
+       (debug rev1 (goal $b) needs (goal $a))))
+
+  ;; Priority 03: Backward chain two-premise type constructors (weq, wim, tpl)
+  ((step (0300 rev2))
+    (, (ev (: $name (-> (: $b1 $b2) (: $c1 $c2) (: $d1 $d2))))
+       (goal (: $d1 $d2)))
+    (, (goal (: $b1 $b2))
+       (goal (: $c1 $c2))
+       (exec (03000 complete-rev2)
+         (, (ev (: $b1 $b2)) 
+            (ev (: $c1 $c2))
+            (ev (: $name (-> (: $b1 $b2) (: $c1 $c2) (: $d1 $d2)))))
+         (, (ev (: $d1 $d2))))
+       (debug rev2 (: $d1 $d2) needs (: $b1 $b2) and (: $c1 $c2))))
+
+  ;; Priority 04: Backward chain three-premise rules (a1)
+  ((step (0400 rev3))
+    (, (ev (: $name (-> (: $a $Ta) (: $b $Tb) (: $c $Tc) (: $result $Tr))))
+       (goal (: $result $Tr)))
+    (, (goal (: $a $Ta))
+       (goal (: $b $Tb))
+       (goal (: $c $Tc))
+       (exec (04000 complete-rev3)
+         (, (ev (: $a $Ta))
+            (ev (: $b $Tb))
+            (ev (: $c $Tc))
+            (ev (: $name (-> (: $a $Ta) (: $b $Tb) (: $c $Tc) (: $result $Tr)))))
+         (, (ev (: $result $Tr))))
+       (debug rev3 (: $result $Tr) needs three args)))
+
+  ;; Priority 05: Backward chain MP - keep the general version from v3
+  ((step (0501 rev4))
+    (, (ev (: $name (-> (: $a $Ta) (: $b $Tb) (: $c $Tc) (: $d $Td) (: $result $Tr))))
+       (goal (: $result $Tr)))
+    (, (goal (: $a $Ta))
+       (goal (: $b $Tb))
+       (goal (: $c $Tc))
+       (goal (: $d $Td))
+       (exec (05010 rev4)
+         (, (ev (: $a $Ta))
+            (ev (: $b $Tb))
+            (ev (: $c $Tc))
+            (ev (: $d $Td))
+            (ev (: $name (-> (: $a $Ta) (: $b $Tb) (: $c $Tc) (: $d $Td) (: $result $Tr)))))
+         (, (ev (: $result $Tr))))
+       (debug rev4 (: $result $Tr) needs four args)))
+
+  ;; Also not sure if it's needed. Hardcoded mp.  Blows up 2x and slows around tick 35->40.
+  ;; Priority 06: MP close - the version that worked in v3!
+  ((step (0600 mp-close))
+    (, (ev (: ⟨mp⟩
+              (-> (: $P ⟨wff⟩) (: $Q ⟨wff⟩)
+                  (: $P ⟨|-⟩) (: (⟨->⟩ $P $Q) ⟨|-⟩) (: $Q ⟨|-⟩))))
+       (ev (: $P ⟨|-⟩))
+       (ev (: (⟨->⟩ $P $Q) ⟨|-⟩))
+       (goal (: $Q ⟨|-⟩)))
+    (, (ev (: $Q ⟨|-⟩))
+       (debug mp-close -> (: $Q ⟨|-⟩))))
+
+  ;; Priority 09: Abstract currying - keep it but maybe with higher priority
+  ((step (0900 abs))
+      (, (goal (: $proof $conclusion)))
+      (, (goal (: $lhs (-> $synth (: $proof $conclusion))))
+         (debug abstract-curry exploring (: $proof $conclusion))))
+
+  ;; Not sure this is *needed* but serach space blows up 2x and slows around tick 35->40..  Basically a hard-coding of a1.
+  ;; Priority 10: Special case for reflexivity
+  ((step (1000 try-reflexivity-pattern))
+      (, (goal (: (⟨=⟩ $x $x) ⟨|-⟩)))
+      (, (goal (: $x ⟨term⟩))
+         (goal (: (⟨->⟩ (⟨=⟩ $x $x) (⟨->⟩ (⟨=⟩ $x $x) (⟨=⟩ $x $x))) ⟨|-⟩))
+         (goal (: (⟨=⟩ $x $x) ⟨wff⟩))
+         (debug trying-reflexivity-for $x)))
+
+  ;; Main backward chaining executor
+  (exec bc
+      (, ((step $x) $premises0 $conclusions0)
+         (exec bc $premises1 $conclusions1))
+      (, (exec $x $premises0 $conclusions0)
+         (exec bc $premises1 $conclusions1)))
+
+  ;; Goal: Prove t = t
+  (goal (: (⟨=⟩ ⟨t⟩ ⟨t⟩) ⟨|-⟩))
+    "#;
+
+    let mut s = Space::new();
+    let t0 = Instant::now();
+    s.load_all_sexpr(P.as_bytes()).unwrap();
+
+    println!("=== MM2 (bc v4): Proving ⊢ (t = t) ===");
+    println!("Conservative refinement: keeping abstract-curry and working MP-close");
+
+    let mut ticks = 0usize;
+    let multiplier = 5;
+    loop {
+        ticks += multiplier;
+        let t1 = Instant::now();
+        let n = s.metta_calculus(multiplier);
+        println!("executing step {} ({}) took {} ms (unifications {}, writes {}, transitions {})", 
+                ticks, n, t1.elapsed().as_millis(), 
+                unsafe { unifications }, unsafe { writes }, unsafe { transitions });
+
+        println!("space size {}", s.btm.val_count());
+
+        // Add diagnostics at key points
+         if ticks < 50 {
+          add_mm2_demo0_query_diagnostics(&mut s, ticks);
+        }
+
+        if n == 0 || ticks >= 50 {
+            println!("\n== mm2 (bc v4): ran for {:?} and {} tick(s) ==", t0.elapsed(), ticks);
+            
+            // Final diagnostics
+            add_mm2_demo0_query_diagnostics(&mut s, ticks);
+            add_mm2_demo0_diagnostics(&mut s, ticks);
+            
+            let mut buf = Vec::new();
+            s.dump_all_sexpr(&mut buf).unwrap();
+            let dump = String::from_utf8_lossy(&buf);
+            
+            // Check if proof is complete
+            if dump.contains("(ev (: (⟨=⟩ ⟨t⟩ ⟨t⟩) ⟨|-⟩))") {
+                println!("\n✅ PROOF COMPLETE!");
+            } else {
+                println!("\n❌ Proof incomplete");
+                // Show what's missing
+                println!("\nWhat's still needed:");
+                if !dump.contains("(ev (: (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨=⟩ ⟨t⟩ ⟨t⟩)) ⟨|-⟩))") {
+                    println!("  - P→Q proof (first MP)");
+                }
+                if !dump.contains("(ev (: (⟨=⟩ ⟨t⟩ ⟨t⟩) ⟨|-⟩))") {
+                    println!("  - Final Q proof (second MP)");
+                }
+            }
+            println!("\n--- Full Final State Dump ---");
+            print!("{dump}");
+            break;
+        }
+    }
+}
+
+fn mm2_bc_v3() {
+    // MM2 Backward Chainer: Proving t = t via reflexivity
+    // Strategy: Use a1 and a2 axioms with two MP steps
+    const P: &str = r#"
+  ;; Type signatures for constructors
+  (kb (: ⟨+⟩ (-> ⟨term⟩ ⟨term⟩ ⟨term⟩)))  ;; Addition operator
+  (kb (: ⟨=⟩ (-> ⟨term⟩ ⟨term⟩ ⟨wff⟩)))   ;; Equality predicate
+  (kb (: ⟨t⟩ ⟨term⟩))                      ;; Constant t
+  (kb (: ⟨0⟩ ⟨term⟩))                      ;; Constant 0
+  (kb (: tt (: ⟨t⟩ ⟨term⟩)))               ;; Named proof that t is a term
+
+  ;; Type constructors (used to build wffs and terms)
+  (kb (: ⟨tpl⟩ (-> (: $x ⟨term⟩) (: $y ⟨term⟩) (: (⟨+⟩ $x $y) ⟨term⟩))))
+  (kb (: ⟨weq⟩ (-> (: $x ⟨term⟩) (: $y ⟨term⟩) (: (⟨=⟩ $x $y) ⟨wff⟩))))
+  (kb (: ⟨wim⟩ (-> (: $P ⟨wff⟩) (: $Q ⟨wff⟩) (: (⟨->⟩ $P $Q) ⟨wff⟩))))
+  
+  ;; Axioms
+  (kb (: ⟨a2⟩ (-> (: $a ⟨term⟩) (: (⟨=⟩ (⟨+⟩ $a ⟨0⟩) $a) ⟨|-⟩))))  ;; a + 0 = a
+  (kb (: ⟨a1⟩ (-> (: $t ⟨term⟩) (: $r ⟨term⟩) (: $s ⟨term⟩) 
+                  (: (⟨->⟩ (⟨=⟩ $t $r) (⟨->⟩ (⟨=⟩ $t $s) (⟨=⟩ $r $s))) ⟨|-⟩))))  ;; Transitivity
+  
+  ;; Modus Ponens inference rule
+  (kb (: ⟨mp⟩ (-> (: $P ⟨wff⟩) (: $Q ⟨wff⟩) (: $P ⟨|-⟩) (: (⟨->⟩ $P $Q) ⟨|-⟩) (: $Q ⟨|-⟩))))
+
+  ;; Priority 00: Initial lifting from KB to evidence
+  (exec (0000 lift-kb-to-ev) 
+    (, (kb (: $t $T))) 
+    (, (ev (: $t $T))))
+
+  ;; Priority 01: Direct KB lookup for goals
+  ((step (0100 lookup-in-kb))
+    (, (goal (: $proof $conclusion)) 
+       (kb (: $proof $conclusion)))
+    (, (ev (: $proof $conclusion)) 
+       (debug found-in-kb (: $proof $conclusion))))
+
+  ;; Priority 02: Backward chain single-premise rules (axiom instantiation)
+  ((step (0200 backchain-axiom))
+    (, (ev (: $name (-> $a $b)))
+       (goal $b))
+    (, (goal $a)
+       (exec (02000 complete-axiom)
+         (, (ev $a)
+            (ev (: $name (-> $a $b))))
+         (, (ev $b)
+            (debug completed-axiom ($name $a) -> $b)))
+       (debug backchain-axiom (goal $b) needs (goal $a))))
+
+  ;; Priority 03: Backward chain two-premise type constructors (weq, wim, tpl)
+  ((step (0300 backchain-constructor-2))
+    (, (ev (: $name (-> (: $b1 $b2) (: $c1 $c2) (: $d1 $d2))))
+       (goal (: $d1 $d2)))
+    (, (goal (: $b1 $b2))
+       (goal (: $c1 $c2))
+       (exec (03000 complete-constructor-2)
+         (, (ev (: $b1 $b2)) 
+            (ev (: $c1 $c2))
+            (ev (: $name (-> (: $b1 $b2) (: $c1 $c2) (: $d1 $d2)))))
+         (, (ev (: $d1 $d2))
+            (debug completed-constructor ($name (: $b1 $b2) (: $c1 $c2)) -> (: $d1 $d2))))
+       (debug backchain-constructor (: $d1 $d2) needs (: $b1 $b2) and (: $c1 $c2))))
+
+  ;; Priority 04: Backward chain three-premise rules (a1)
+  ((step (0400 backchain-a1))
+    (, (ev (: $name (-> (: $a $Ta) (: $b $Tb) (: $c $Tc) (: $result $Tr))))
+       (goal (: $result $Tr)))
+    (, (goal (: $a $Ta))
+       (goal (: $b $Tb))
+       (goal (: $c $Tc))
+       (exec (04000 complete-a1)
+         (, (ev (: $a $Ta))
+            (ev (: $b $Tb))
+            (ev (: $c $Tc))
+            (ev (: $name (-> (: $a $Ta) (: $b $Tb) (: $c $Tc) (: $result $Tr)))))
+         (, (ev (: $result $Tr))
+            (debug completed-a1 ($name (: $a $Ta) (: $b $Tb) (: $c $Tc)) -> (: $result $Tr))))
+       (debug backchain-a1 (: $result $Tr) needs three args)))
+
+  ;; Priority 04b: Special MP for contracting P→(P→Q) with P to get P→Q
+  ; thread 'main' (1910560) panicked at kernel/src/space.rs:146:124:
+  ; index out of bounds: the len is 0 but the index is 0
+  ; ((step (0400 mp-contraction))
+    ; (, (goal (: (⟨->⟩ $P $Q) ⟨|-⟩))
+      ; (ev (: $P ⟨|-⟩))
+      ; (ev (: (⟨->⟩ $P (⟨->⟩ $P $Q)) ⟨|-⟩)))
+    ; (, (goal (: $P ⟨wff⟩))
+      ; (goal (: $Q ⟨wff⟩))
+      ; (exec (04000 complete-mp-contraction)
+        ; (, (ev (: $P ⟨wff⟩))
+            ; (ev (: $Q ⟨wff⟩))
+            ; (ev (: $P ⟨|-⟩))
+            ; (ev (: (⟨->⟩ $P (⟨->⟩ $P $Q)) ⟨|-⟩)))
+        ; (, (ev (: (⟨->⟩ $P $Q) ⟨|-⟩))
+            ; (debug mp-contraction completed (⟨->⟩ $P $Q))))
+      ; (debug mp-contraction trying to prove (⟨->⟩ $P $Q))))
+
+  ;; same error
+  ; ((step (0400 mp-contraction))
+    ; (, (goal (: (⟨->⟩ $P $Q) ⟨|-⟩))
+      ; (ev (: $P ⟨|-⟩))
+      ; (ev (: (⟨->⟩ $P (⟨->⟩ $P $Q)) ⟨|-⟩)))
+    ; (, (goal (: $P ⟨wff⟩))
+      ; (goal (: $Q ⟨wff⟩))
+      ; (exec (04000 complete-mp-contraction)
+        ; (, (ev (: $P ⟨wff⟩))
+            ; (ev (: $Q ⟨wff⟩))
+            ; (ev (: $P ⟨|-⟩))
+            ; (ev (: (⟨->⟩ $P (⟨->⟩ $P $Q)) ⟨|-⟩)))
+        ; (, (ev (: (⟨->⟩ $P $Q) ⟨|-⟩))))))
+
+  ;; Split into simpler steps
+  ; ((step (0400 mp-contraction-setup))
+    ; (, (goal (: (⟨->⟩ $P $Q) ⟨|-⟩))
+      ; (ev (: $P ⟨|-⟩))
+      ; (ev (: (⟨->⟩ $P (⟨->⟩ $P $Q)) ⟨|-⟩)))
+    ; (, (goal (: $P ⟨wff⟩))
+      ; (goal (: $Q ⟨wff⟩))))
+
+  ; ((step (0401 mp-contraction-complete))
+    ; (, (goal (: (⟨->⟩ $P $Q) ⟨|-⟩))
+      ; (ev (: $P ⟨wff⟩))
+      ; (ev (: $Q ⟨wff⟩))
+      ; (ev (: $P ⟨|-⟩))
+      ; (ev (: (⟨->⟩ $P (⟨->⟩ $P $Q)) ⟨|-⟩)))
+    ; (, (ev (: (⟨->⟩ $P $Q) ⟨|-⟩))))
+
+  ;; Priority 04b: Forward MP for contraction case
+  ;; This does, in fact, work within 50 ticks!
+  ; ((step (0400 forward-mp-contraction))
+    ; (, (ev (: $P ⟨|-⟩))
+      ; (ev (: (⟨->⟩ $P (⟨->⟩ $P $Q)) ⟨|-⟩))
+      ; (ev (: $P ⟨wff⟩))
+      ; (ev (: $Q ⟨wff⟩)))
+    ; (, (ev (: (⟨->⟩ $P $Q) ⟨|-⟩))
+      ; (debug mp-contract derived (⟨->⟩ $P $Q))))
+
+  ;; Priority 05: Backward chain MP (most specific case)
+  ((step (0501 backchain-mp))
+    (, (ev (: $name (-> (: $a $Ta) (: $b $Tb) (: $c $Tc) (: $d $Td) (: $result $Tr))))
+       (goal (: $result $Tr)))
+    (, (goal (: $a $Ta))
+       (goal (: $b $Tb))
+       (goal (: $c $Tc))
+       (goal (: $d $Td))
+       (exec (05010 complete-mp)
+         (, (ev (: $a $Ta))
+            (ev (: $b $Tb))
+            (ev (: $c $Tc))
+            (ev (: $d $Td))
+            (ev (: $name (-> (: $a $Ta) (: $b $Tb) (: $c $Tc) (: $d $Td) (: $result $Tr)))))
+         (, (ev (: $result $Tr))
+            (debug completed-mp ($name args) -> (: $result $Tr))))
+       (debug backchain-mp (: $result $Tr) needs four args)))
+
+  ; ;; Priority 05: Constrained backward MP - only fire when we have P already
+  ; ((step (0500 backchain-mp-constrained))
+    ; (, (ev (: ⟨mp⟩ (-> (: $P ⟨wff⟩) (: $Q ⟨wff⟩) 
+                        ; (: $P ⟨|-⟩) (: (⟨->⟩ $P $Q) ⟨|-⟩) (: $Q ⟨|-⟩))))
+      ; (goal (: $Q ⟨|-⟩))
+      ; (ev (: $P ⟨|-⟩)))  ;; Key constraint: P must already be proven
+    ; (, (goal (: (⟨->⟩ $P $Q) ⟨|-⟩))
+      ; (goal (: $P ⟨wff⟩))
+      ; (goal (: $Q ⟨wff⟩))
+      ; (exec (50000 complete-mp-constrained)  ;; High priority exec
+        ; (, (ev (: $P ⟨wff⟩))
+            ; (ev (: $Q ⟨wff⟩))
+            ; (ev (: $P ⟨|-⟩))
+            ; (ev (: (⟨->⟩ $P $Q) ⟨|-⟩)))
+        ; (, (ev (: $Q ⟨|-⟩))
+            ; (debug completed-mp-constrained -> (: $Q ⟨|-⟩))))
+      ; (debug backchain-mp-constrained (: $Q ⟨|-⟩) needs (: (⟨->⟩ $P $Q) ⟨|-⟩))))
+  ; ;; output:
+  ; ; === QUERY-BASED DIAGNOSTICS (tick 50) ===
+  ; ; QUERY RESULTS:
+    ; ; (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) wff: ❌
+    ; ; (⟨=⟩ ⟨t⟩ ⟨t⟩) wff: ✓
+    ; ; ⊢ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩): ❌
+    ; ; ⊢ (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨=⟩ ⟨t⟩ ⟨t⟩))): ❌
+    ; ; ⊢ (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨=⟩ ⟨t⟩ ⟨t⟩)): ❌
+    ; ; ⊢ (⟨=⟩ ⟨t⟩ ⟨t⟩) [FINAL]: ❌
+
+  ; ; === PROOF CONSTRUCTION DIAGNOSTICS (tick 50) ===
+
+  ; ; 📊 ESSENTIAL INGREDIENTS STATUS:
+  ; ; ────────────────────────────────
+  ; ; TERMS:
+    ; ; ⟨t⟩ : ⟨term⟩ .................. ✓
+    ; ; ⟨0⟩ : ⟨term⟩ .................. ✓
+    ; ; (⟨+⟩ ⟨t⟩ ⟨0⟩) : ⟨term⟩ ......... ❌
+
+  ; ; WFFs:
+    ; ; P: (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) : ⟨wff⟩ . ❌
+    ; ; Q: (⟨=⟩ ⟨t⟩ ⟨t⟩) : ⟨wff⟩ .......... ✓
+    ; ; P→Q : ⟨wff⟩ ..................... ❌
+    ; ; P→(P→Q) : ⟨wff⟩ ................ ❌
+
+  ; ; PROOFS (⟨|-⟩):
+    ; ; ⊢ P (from a2) .................. ❌
+    ; ; ⊢ P→(P→Q) (from a1) ............ ❌
+    ; ; ⊢ P→Q (MP₁) .................... ❌
+    ; ; ⊢ Q [FINAL GOAL] ............... ❌
+
+;; Remove the old 0501 rule and potentially 0600 if this works better
+
+  ;; Priority 0550: Close MP when the goal is ⊢Q and both premises are present.
+  ;; This stays purely backward: it requires (goal (: $Q ⟨|-⟩)).
+  ; ((step (0550 mp-close))
+    ; (, (goal (: $Q ⟨|-⟩))
+      ; ;; Use the mp typing so $P and $Q are properly scoped
+      ; (ev (: ⟨mp⟩
+              ; (-> (: $P ⟨wff⟩) (: $Q ⟨wff⟩)
+                  ; (: $P ⟨|-⟩) (: (⟨->⟩ $P $Q) ⟨|-⟩) (: $Q ⟨|-⟩))))
+      ; ;; The two MP premises must already be in evidence:
+      ; (ev (: $P ⟨|-⟩))
+      ; (ev (: (⟨->⟩ $P $Q) ⟨|-⟩))
+      ; (ev (: $P ⟨wff⟩))
+      ; (ev (: $Q ⟨wff⟩)))
+    ; (, (ev (: $Q ⟨|-⟩))
+      ; (debug mp-close derived (: $Q ⟨|-⟩))))
+
+
+  ;; Priority 06: Special handling for MP when we have wff premises already
+  ; ((step (0600 backchain-mp-with-wffs))
+    ; (, (ev (: $name (-> (: $a ⟨wff⟩) (: $b ⟨wff⟩) (: $c $Tc) (: $d $Td) (: $result $Tr))))
+       ; (ev (: $c $Tc))
+       ; (ev (: $d $Td))
+       ; (goal (: $result $Tr)))
+    ; (, (goal (: $a ⟨wff⟩))
+       ; (goal (: $b ⟨wff⟩))
+       ; (exec (06000 complete-mp-wffs)
+         ; (, (ev (: $a ⟨wff⟩))
+            ; (ev (: $b ⟨wff⟩))
+            ; (ev (: $c $Tc))
+            ; (ev (: $d $Td))
+            ; (ev (: $name (-> (: $a ⟨wff⟩) (: $b ⟨wff⟩) (: $c $Tc) (: $d $Td) (: $result $Tr)))))
+         ; (, (ev (: $result $Tr))
+            ; (debug completed-mp-with-wffs -> (: $result $Tr))))
+       ; (debug backchain-mp-wffs (: $result $Tr) needs wffs)))
+
+  ;; Priority 0600: MP close (only when both sequents ⊢P and ⊢(P→Q) already exist)
+  ;; Seems to work.  Is it cheating too much?  Is it sound given it won't check that P and Q are wffs?
+  ((step (0600 backchain-mp-with-wffs))
+    (, (ev (: ⟨mp⟩
+              (-> (: $P ⟨wff⟩) (: $Q ⟨wff⟩)
+                  (: $P ⟨|-⟩) (: (⟨->⟩ $P $Q) ⟨|-⟩) (: $Q ⟨|-⟩))))
+      (ev (: $P ⟨|-⟩))
+      (ev (: (⟨->⟩ $P $Q) ⟨|-⟩))
+      (goal (: $Q ⟨|-⟩)))
+    (, (ev (: $Q ⟨|-⟩))
+      (debug mp-close(wffs) -> (: $Q ⟨|-⟩))))
+
+  ;; Seems to stall
+  ; ((step (0600 backchain-mp-with-wffs))
+    ; (, (ev (: ⟨mp⟩
+              ; (-> (: $P ⟨wff⟩) (: $Q ⟨wff⟩)
+                  ; (: $P ⟨|-⟩) (: (⟨->⟩ $P $Q) ⟨|-⟩) (: $Q ⟨|-⟩))))
+      ; (ev (: $P ⟨|-⟩))
+      ; (ev (: (⟨->⟩ $P $Q) ⟨|-⟩))
+      ; (goal (: $Q ⟨|-⟩))
+      ; (ev (: $P ⟨wff⟩))
+      ; (ev (: $Q ⟨wff⟩)))
+    ; (, (ev (: $Q ⟨|-⟩))
+      ; (debug mp-close(wffs) -> (: $Q ⟨|-⟩))))
+
+  ;; Priority 09: Abstract currying (fallback for exploration)
+  ((step (0900 abstract-curry))
+      (, (goal (: $proof $conclusion)))
+      (, (goal (: $lhs (-> $synth (: $proof $conclusion))))
+         (debug abstract-curry exploring (: $proof $conclusion))))
+
+  ;; Priority 10: Special case for reflexivity - try to use known pattern
+  ((step (1000 try-reflexivity-pattern))
+      (, (goal (: (⟨=⟩ $x $x) ⟨|-⟩)))
+      (, (goal (: $x ⟨term⟩))
+         (goal (: (⟨->⟩ (⟨=⟩ $x $x) (⟨->⟩ (⟨=⟩ $x $x) (⟨=⟩ $x $x))) ⟨|-⟩))
+         (goal (: (⟨=⟩ $x $x) ⟨wff⟩))
+         (debug trying-reflexivity-for $x)))
+
+  ;; Main backward chaining executor
+  (exec bc
+      (, ((step $x) $premises0 $conclusions0)
+         (exec bc $premises1 $conclusions1))
+      (, (exec $x $premises0 $conclusions0)
+         (exec bc $premises1 $conclusions1)))
+
+  ;; Goal: Prove t = t
+  (goal (: (⟨=⟩ ⟨t⟩ ⟨t⟩) ⟨|-⟩))
+    "#;
+
+    let mut s = Space::new();
+    let t0 = Instant::now();
+    s.load_all_sexpr(P.as_bytes()).unwrap();
+
+    println!("=== MM2 (bc v3): Proving ⊢ (t = t) ===");
+
+    let mut ticks = 0usize;
+    let multiplier = 5;
+    loop {
+        ticks += multiplier;
+        let t1 = Instant::now();
+        let n = s.metta_calculus(multiplier);
+        println!("executing step {} ({}) took {} ms (unifications {}, writes {}, transitions {})", 
+                ticks, n, t1.elapsed().as_millis(), 
+                unsafe { unifications }, unsafe { writes }, unsafe { transitions });
+
+        println!("space size {}", s.btm.val_count());
+
+        let mut buf = Vec::new();
+        s.dump_all_sexpr(&mut buf).unwrap();
+        let dump = String::from_utf8_lossy(&buf);
+
+        if n == 0 || ticks >= 50 {
+            println!("\n== mm2 (bc v3): — ran for {:?} and {} tick(s) ==", t0.elapsed(), ticks);
+            add_mm2_demo0_query_diagnostics(&mut s, ticks);
+            add_mm2_demo0_diagnostics(&mut s, ticks);
+            println!("\n--- Full Final State Dump ---");
+            print!("{dump}");
+            break;
+        }
+    }
+}
+
+fn mm2_bc_v2() {
+    // Program: universe, typed constructors, axioms (curried), tiny pipeline, and final assembly.
+    const P: &str = r#"
+  (kb (: ⟨+⟩ (-> ⟨term⟩ ⟨term⟩ ⟨term⟩))) ;; Nil-style wim
+  (kb (: ⟨=⟩ (-> ⟨term⟩ ⟨term⟩ ⟨wff⟩))) ;; weq
+  (kb (: ⟨t⟩ ⟨term⟩))
+  (kb (: ⟨0⟩ ⟨term⟩))
+  (kb (: tt (: ⟨t⟩ ⟨term⟩)))
+
+  (kb (: ⟨tpl⟩ (-> (: $x ⟨term⟩) (: $y ⟨term⟩) (: (⟨+⟩ $x $y) ⟨term⟩))))
+  (kb (: ⟨weq⟩ (-> (: $x ⟨term⟩) (: $y ⟨term⟩) (: (⟨=⟩ $x $y) ⟨wff⟩))))
+  (kb (: ⟨wim⟩ (-> (: $P ⟨wff⟩) (: $Q ⟨wff⟩) (: (⟨->⟩ $P $Q) ⟨wff⟩))))
+  (kb (: ⟨a2⟩ (-> (: $a ⟨term⟩) (: (⟨=⟩ (⟨+⟩ $a ⟨0⟩) $a) ⟨|-⟩))))
+  (kb (: ⟨a1⟩ (-> (: $t ⟨term⟩) (: $r ⟨term⟩) (: $s ⟨term⟩) (: (⟨->⟩ (⟨=⟩ $t $r) (⟨->⟩ (⟨=⟩ $t $s) (⟨=⟩ $r $s))) ⟨|-⟩))))
+  (kb (: ⟨mp⟩ (-> (: $P ⟨wff⟩) (: $Q ⟨wff⟩) (: $P ⟨|-⟩) (: (⟨->⟩ $P $Q) ⟨|-⟩) (: $Q ⟨|-⟩))))
+
+  (exec (0 lift) (, (kb (: $t $T))) (, (ev (: $t $T))))
+
+  ((step (0 base))
+    (, (goal (: $proof $conclusion)) (kb (: $proof $conclusion)))
+    (, 
+      (ev (: $proof $conclusion)) 
+      (debug base (: $proof $conclusion) found in kb)))
+
+  ((step (1 abs-curry2))
+      (, (goal (: $proof $conclusion)))
+      (, 
+        (goal (: $lhs (-> $synth (: $proof $conclusion)) )) 
+        (debug abs-curry2 (: $proof $conclusion) made (: $lhs (-> $synth (: $proof $conclusion))))))
+
+  ((step (1 rev1))
+    (, (ev (: $name (-> $a $b)))
+      (goal $b))
+    (, (goal $a)
+      ; Generate completion rule for this specific instantiation
+      (exec (01 app1)
+        (, (ev $a)
+            (ev (: $name (-> $a $b))))
+        (, (ev $b)
+            (debug completed ($name $a) for $b)))
+      (debug rev (goal $b) made (goal $a) due to (ev (: $name (-> $a $b))))))
+
+  ((step (1 rev2))
+    (, (ev (: $name (-> (: $b1 $b2) (: $c1 $c2) (: $d1 $d2))))
+      (goal (: $d1 $d2)))
+    (, (goal (: $b1 $b2))
+      (goal (: $c1 $c2))
+      ; Generate a completion rule specific to this instantiation
+      (exec (01 app2)
+        (, (ev (: $b1 $b2)) 
+            (ev (: $c1 $c2))
+            (ev (: $name (-> (: $b1 $b2) (: $c1 $c2) (: $d1 $d2)))))
+        (, (ev (: $d1 $d2))
+            (debug completed ($name (: $b1 $b2) (: $c1 $c2)) for (: $d1 $d2))))
+      (debug rev2 (goal (: $d1 $d2)) made (goals (: $b1 $b2) (: $c1 $c2)) due to (ev (: $name (-> (: $b1 $b2) (: $c1 $c2) (: $d1 $d2)))))))
+
+  ((step (2 rev-reflexivity))
+      (, (goal (: (⟨=⟩ $x $x) ⟨|-⟩)))
+      (, ; Try using a1 with all parameters equal to $x
+        (goal (: $x ⟨term⟩))
+        (goal (: (⟨->⟩ (⟨=⟩ $x $x) (⟨->⟩ (⟨=⟩ $x $x) (⟨=⟩ $x $x))) ⟨|-⟩))
+        (goal (: (⟨=⟩ $x $x) ⟨wff⟩))))
+
+  ((step (2 rev4-wff))
+    (, (ev (: $name (-> (: $a ⟨wff⟩) (: $b ⟨wff⟩) (: $c $Tc) (: $d $Td) (: $result $Tr))))
+       (ev (: $c $Tc))
+       (ev (: $d $Td))
+      (goal (: $result $Tr)))
+    (, (goal (: $a ⟨wff⟩))
+      (goal (: $b ⟨wff⟩))
+      ; Generate completion rule
+      (exec (01 app4)
+        (, (ev (: $a ⟨wff⟩))
+            (ev (: $b ⟨wff⟩))
+            (ev (: $c $Tc))
+            (ev (: $d $Td))
+            (ev (: $name (-> (: $a ⟨wff⟩) (: $b ⟨wff⟩) (: $c $Tc) (: $d $Td) (: $result $Tr)))))
+        (, (ev (: $result $Tr))
+            (debug completed ($name (: $a ⟨wff⟩) (: $b ⟨wff⟩) (: $c $Tc) (: $d $Td)) for (: $result $Tr))))
+      (debug rev4-wff (goal (: $result $Tr)) made (goals (: $a ⟨wff⟩) (: $b ⟨wff⟩)) due to (ev (: $name (-> (: $a ⟨wff⟩) (: $b ⟨wff⟩) (: $c $Tc) (: $d $Td) (: $result $Tr)))))))
+
+  ((step (0 rev4))
+    (, (ev (: $name (-> (: $a $Ta) (: $b $Tb) (: $c $Tc) (: $d $Td) (: $result $Tr))))
+      (goal (: $result $Tr)))
+    (, (goal (: $a $Ta))
+      (goal (: $b $Tb))
+      (goal (: $c $Tc))
+      (goal (: $d $Td))
+      ; Generate completion rule
+      (exec (01 app4)
+        (, (ev (: $a $Ta))
+            (ev (: $b $Tb))
+            (ev (: $c $Tc))
+            (ev (: $d $Td))
+            (ev (: $name (-> (: $a $Ta) (: $b $Tb) (: $c $Tc) (: $d $Td) (: $result $Tr)))))
+        (, (ev (: $result $Tr))
+            (debug completed ($name (: $a $Ta) (: $b $Tb) (: $c $Tc) (: $d $Td)) for (: $result $Tr))))
+      (debug rev4 (goal (: $result $Tr)) made (goals (: $a $Ta) (: $b $Tb) (: $c $Tc) (: $d $Td)) due to (ev (: $name (-> (: $a $Ta) (: $b $Tb) (: $c $Tc) (: $d $Td) (: $result $Tr)))))))
+
+  (exec bc
+      (, ((step $x) $premises0 $conclusions0)
+         (exec bc $premises1 $conclusions1) )
+      (, (exec $x $premises0 $conclusions0)
+         (exec bc $premises1 $conclusions1) ))
+
+  (goal (: (⟨=⟩ ⟨t⟩ ⟨t⟩) ⟨|-⟩))
+
+  ; ---------- CHECKLIST (put near the end of P) ----------
+
+  ; Shorthands (just for readability below — they are literal repeats, not new facts)
+  ; P := (= (+ t 0) t), Q := (= t t)
+
+  (need (: (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) ⟨wff⟩))                                           ; wff(P)
+  (need (: (⟨=⟩ ⟨t⟩ ⟨t⟩) ⟨wff⟩))                                                           ; wff(Q)
+  (need (: (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨=⟩ ⟨t⟩ ⟨t⟩)) ⟨wff⟩))                       ; wff(P -> Q)
+  (need (: (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩)
+              (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨=⟩ ⟨t⟩ ⟨t⟩))) ⟨wff⟩))               ; wff(P -> (P -> Q))
+
+  (need (: (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) ⟨|-⟩))                                               ; ⊢ P
+  (need (: (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩)
+              (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨=⟩ ⟨t⟩ ⟨t⟩))) ⟨|-⟩))               ; ⊢ (P -> (P -> Q))
+  (need (: (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨=⟩ ⟨t⟩ ⟨t⟩)) ⟨|-⟩))                       ; ⊢ (P -> Q)
+  (need (: (⟨=⟩ ⟨t⟩ ⟨t⟩) ⟨|-⟩))                                                           ; ⊢ Q (goal)
+
+  ; Record haves as soon as they appear (fires once per item)
+  ((step (0 have))
+    (, (need (: $x $T)) (ev (: $x $T)))
+    (O (+ (have (: $x $T))) (- (need (: $x $T)))))
+  ; --------------------------------------------------------
+    "#;
+
+    let mut s = Space::new();
+    let t0 = Instant::now();
+    s.load_all_sexpr(P.as_bytes()).unwrap();
+
+
+    println!("=== MM2 (bc): Proving ⊢ (t = t) ===");
+
+    let mut ticks = 0usize;
+    let mut multiplier = 0usize;
+    multiplier = 5;
+    loop {
+        ticks += multiplier;
+        let t1 = Instant::now();
+        let n = s.metta_calculus(multiplier);
+        println!("executing step {} ({}) took {} ms (unifications {}, writes {}, transitions {})", ticks, n, t1.elapsed().as_millis(), unsafe { unifications }, unsafe { writes }, unsafe { transitions });
+
+        println!("space size {}", s.btm.val_count());
+        let total_t = t0.elapsed();
+
+        let mut buf = Vec::new();
+        s.dump_all_sexpr(&mut buf).unwrap();
+        let dump = String::from_utf8_lossy(&buf);
+
+
+        if n == 0 || ticks >= 25 {
+            println!("\n== mm2 (bc): — ran for {:?} and {} tick(s) ==", t0.elapsed(), ticks);
+
+            println!("\n--- Full Final State Dump ---");
+            print!("{dump}");
+            break;
+        }
+    }
+}
 
 fn mm2_bc() {
     // Program: universe, typed constructors, axioms (curried), tiny pipeline, and final assembly.
@@ -1650,7 +2689,7 @@ fn mm2_bc() {
   ; (comment needed for bc?)
   (exec (0 lift) (, (kb (: $t $T))) (, (ev (: $t $T))))
 
-  (old exec (0 strip-name) (, (kb (: $name $rule))) (, (ev $rule)))  
+  ; (old exec (0 strip-name) (, (kb (: $name $rule))) (, (ev $rule)))  
 
   ; (comment There is evidence for the goal if it is in the kb?
    ; 'lift' above is equivalent to this, but this only does it for that which we're investigating, which is more 'efficient' (unless doing it in bulk is the) efficient option, which could be best for a small kb -- to be tested!)
@@ -1698,33 +2737,238 @@ fn mm2_bc() {
        ; (goal (: $c1 $c2)) 
        ; (debug rev2.0-cl (goal (: $d1 $d2)) made (goal (: $b1 $b2)) due to (ev (: $name (-> (: $b1 $b2) (: $c1 $c2) (: $d1 $d2)))) )))
 
-  ((step (2 rev1))
+  ((step (1 rev1))
     (, (ev (: $name (-> $a $b)))
       (goal $b))
     (, (goal $a)
       ; Generate completion rule for this specific instantiation
-      (exec (4 app1)
+      (exec (01 app1)
         (, (ev $a)
             (ev (: $name (-> $a $b))))
         (, (ev $b)
             (debug completed ($name $a) for $b)))
-      (debug rev-cl (goal $b) made (goal $a) due to (ev (: $name (-> $a $b))))))
+      (debug rev (goal $b) made (goal $a) due to (ev (: $name (-> $a $b))))))
 
   ; 7 ticks --> space size 52
   ; works to derive goal (debug completed ⟨weq⟩ for (: (⟨=⟩ ⟨t⟩ ⟨0⟩) ⟨wff⟩)) as (ev (: (⟨=⟩ ⟨t⟩ ⟨0⟩) ⟨wff⟩))
-  ((step (2 rev2))
+  ((step (1 rev2))
     (, (ev (: $name (-> (: $b1 $b2) (: $c1 $c2) (: $d1 $d2))))
       (goal (: $d1 $d2)))
     (, (goal (: $b1 $b2))
       (goal (: $c1 $c2))
       ; Generate a completion rule specific to this instantiation
-      (exec (4 app2)
+      (exec (01 app2)
         (, (ev (: $b1 $b2)) 
             (ev (: $c1 $c2))
             (ev (: $name (-> (: $b1 $b2) (: $c1 $c2) (: $d1 $d2)))))
         (, (ev (: $d1 $d2))
             (debug completed ($name (: $b1 $b2) (: $c1 $c2)) for (: $d1 $d2))))
-      (debug rev2-cl (goal (: $d1 $d2)) made (goal (: $b1 $b2)) due to (ev (: $name (-> (: $b1 $b2) (: $c1 $c2) (: $d1 $d2)))))))
+      (debug rev2 (goal (: $d1 $d2)) made (goals (: $b1 $b2) (: $c1 $c2)) due to (ev (: $name (-> (: $b1 $b2) (: $c1 $c2) (: $d1 $d2)))))))
+
+    ;; Claude Sonnet 4 hacks:
+    ; Don't help!
+    ; ((step (2 rev-wim))
+  ; (, (goal (: (⟨->⟩ $P $Q) ⟨wff⟩)))
+  ; (, (goal (: $P ⟨wff⟩))
+     ; (goal (: $Q ⟨wff⟩))
+     ; (exec (01 complete-wim-backward)
+       ; (, (ev (: $P ⟨wff⟩))
+          ; (ev (: $Q ⟨wff⟩))
+          ; (ev (: ⟨wim⟩ (-> (: $P ⟨wff⟩) (: $Q ⟨wff⟩) (: (⟨->⟩ $P $Q) ⟨wff⟩)))))
+       ; (, (ev (: (⟨->⟩ $P $Q) ⟨wff⟩))
+          ; (debug completed wim-backward for (: (⟨->⟩ $P $Q) ⟨wff⟩))))
+     ; (debug rev-wim made wff goals for (: (⟨->⟩ $P $Q) ⟨wff⟩))))
+
+    ; ; Add forward wff generation for complex implications
+  ; ((step (1 forward-wim))
+    ; (, (ev (: $P ⟨wff⟩))
+       ; (ev (: $Q ⟨wff⟩)))
+    ; (, (goal (: (⟨->⟩ $P $Q) ⟨wff⟩))
+       ; (exec (01 complete-wim)
+         ; (, (ev (: $P ⟨wff⟩))
+            ; (ev (: $Q ⟨wff⟩))
+            ; (ev (: ⟨wim⟩ (-> (: $P ⟨wff⟩) (: $Q ⟨wff⟩) (: (⟨->⟩ $P $Q) ⟨wff⟩)))))
+         ; (, (ev (: (⟨->⟩ $P $Q) ⟨wff⟩))
+            ; (debug completed wim-forward for (: (⟨->⟩ $P $Q) ⟨wff⟩))))
+       ; (debug forward-wim generated goal for (: (⟨->⟩ $P $Q) ⟨wff⟩))))
+
+    ; 0. Implication wff: goal-anchored
+    ; Oruži hack
+    ; ((step (0 wff-implies))
+      ; (, (goal (: (⟨->⟩ $P $Q) ⟨wff⟩)))
+      ; (, (goal (: $P ⟨wff⟩))
+        ; (goal (: $Q ⟨wff⟩))
+        ; (exec (01 wff-implies-complete)
+          ; (, (ev (: $P ⟨wff⟩))
+              ; (ev (: $Q ⟨wff⟩))
+              ; (ev (: ⟨wim⟩ (-> (: $P ⟨wff⟩) (: $Q ⟨wff⟩)
+                                ; (: (⟨->⟩ $P $Q) ⟨wff⟩)))))
+          ; (, (ev (: (⟨->⟩ $P $Q) ⟨wff⟩))
+              ; (debug completed wff-implies for (: (⟨->⟩ $P $Q) ⟨wff⟩))))))
+
+    ; seems important... or it blows up the search space!
+    ((step (2 rev-reflexivity))
+      (, (goal (: (⟨=⟩ $x $x) ⟨|-⟩)))
+      (, ; Try using a1 with all parameters equal to $x
+        (goal (: $x ⟨term⟩))
+        (goal (: (⟨->⟩ (⟨=⟩ $x $x) (⟨->⟩ (⟨=⟩ $x $x) (⟨=⟩ $x $x))) ⟨|-⟩))
+        (goal (: (⟨=⟩ $x $x) ⟨wff⟩))))
+
+    ; silly stuff by Claude.  They don't work within 20 ticks.
+    ; When trying to prove x=x, consider using a2 with x+0
+    ; ((step (2 reflexivity-via-a2))
+      ; (, (goal (: (⟨=⟩ $x $x) ⟨|-⟩)))
+      ; (, (goal (: (⟨=⟩ (⟨+⟩ $x ⟨0⟩) $x) ⟨|-⟩))))
+
+    ; ((step (2 rev3))
+      ; (, (ev (: $name (-> (: $a $T1) (: $b $T2) (: $c $T3) (: $result $T4))))
+        ; (goal (: $result $T4)))
+      ; (, (goal (: $a $T1))
+        ; (goal (: $b $T2))
+        ; (goal (: $c $T3))
+        ; ; Generate completion rule
+        ; (exec (01 app3)
+          ; (, (ev (: $a $T1))
+              ; (ev (: $b $T2))
+              ; (ev (: $c $T3))
+              ; (ev (: $name (-> (: $a $T1) (: $b $T2) (: $c $T3) (: $result $T4)))))
+          ; (, (ev (: $result $T4))
+              ; (debug completed ($name (: $a $T1) (: $b $T2) (: $c $T3)) for (: $result $T4))))
+        ; (debug rev3 (goal (: $d1 $d2)) made (goals (: $a $T1) (: $b $T2) (: $c $T3))  due to (ev (: $name (-> (: $a $T1) (: $b $T2) (: $c $T3) (: $result $T4)))))))
+
+  ;; rando gpt-5 suggestion
+  ;; Breaks the goal being found by gpt-5's other suggestion.
+  ; ((step (2 rev3))  ; a1 backward step, goal-anchored
+  ; (, (ev (: ⟨a1⟩ (-> (: $t ⟨term⟩) (: $r ⟨term⟩) (: $s ⟨term⟩)
+                     ; (: (⟨->⟩ (⟨=⟩ $t $r)
+                              ; (⟨->⟩ (⟨=⟩ $t $s)
+                                    ; (⟨=⟩ $r $s))) ⟨|-⟩))))
+     ; (goal (: (⟨->⟩ (⟨=⟩ $t $r) (⟨->⟩ (⟨=⟩ $t $s) (⟨=⟩ $r $s))) ⟨|-⟩)))
+  ; (, (goal (: $t ⟨term⟩))
+     ; (goal (: $r ⟨term⟩))
+     ; (goal (: $s ⟨term⟩))
+     ; (exec (01 app3)
+       ; (, (ev (: $t ⟨term⟩))
+           ; (ev (: $r ⟨term⟩))
+           ; (ev (: $s ⟨term⟩))
+           ; (ev (: ⟨a1⟩ (-> (: $t ⟨term⟩) (: $r ⟨term⟩) (: $s ⟨term⟩)
+                           ; (: (⟨->⟩ (⟨=⟩ $t $r)
+                                    ; (⟨->⟩ (⟨=⟩ $t $s)
+                                          ; (⟨=⟩ $r $s))) ⟨|-⟩)))))
+       ; (, (ev (: (⟨->⟩ (⟨=⟩ $t $r) (⟨->⟩ (⟨=⟩ $t $s) (⟨=⟩ $r $s))) ⟨|-⟩))
+           ; (debug completed (⟨a1⟩ (: $t ⟨term⟩) (: $r ⟨term⟩) (: $s ⟨term⟩))
+                  ; for (: (⟨->⟩ (⟨=⟩ $t $r) (⟨->⟩ (⟨=⟩ $t $s) (⟨=⟩ $r $s))) ⟨|-⟩))))
+     ; (debug rev3-gpt5 (goal (: (⟨->⟩ (⟨=⟩ $t $r)
+                                 ; (⟨->⟩ (⟨=⟩ $t $s)
+                                       ; (⟨=⟩ $r $s))) ⟨|-⟩))
+            ; made (goals (: $t ⟨term⟩) (: $r ⟨term⟩) (: $s ⟨term⟩))
+            ; due to (ev (: ⟨a1⟩ ...)))))
+
+  ;; Focusing idea: only generate the derivability goals
+  ;; Not needed with pure priority 0 + cheating evs.
+  ; ((step (2 rev4-derive))
+    ; (, (ev (: $name (-> (: $a ⟨wff⟩) (: $b ⟨wff⟩) (: $c $Tc) (: $d $Td) (: $result $Tr))))
+      ; (goal (: $result $Tr)))
+    ; (, (goal (: $c $Tc))
+      ; (goal (: $d $Td))
+      ; ; Generate completion rule
+      ; (exec (01 app4)
+        ; (, (ev (: $a ⟨wff⟩))
+            ; (ev (: $b ⟨wff⟩))
+            ; (ev (: $c $Tc))
+            ; (ev (: $d $Td))
+            ; (ev (: $name (-> (: $a ⟨wff⟩) (: $b ⟨wff⟩) (: $c $Tc) (: $d $Td) (: $result $Tr)))))
+        ; (, (ev (: $result $Tr))
+            ; (debug completed ($name (: $a ⟨wff⟩) (: $b ⟨wff⟩) (: $c $Tc) (: $d $Td)) for (: $result $Tr))))
+      ; (debug rev4-derive (goal (: $result $Tr)) made (goals (: $c $Tc) (: $d $Td)) due to (ev (: $name (-> (: $a ⟨wff⟩) (: $b ⟨wff⟩) (: $c $Tc) (: $d $Td) (: $result $Tr)))))))
+
+  ; But if we find the |- goals, then look for the wff goals.
+  ;; Still seems needed to cheat with the evs!
+  ((step (2 rev4-wff))
+    (, (ev (: $name (-> (: $a ⟨wff⟩) (: $b ⟨wff⟩) (: $c $Tc) (: $d $Td) (: $result $Tr))))
+       (ev (: $c $Tc))
+       (ev (: $d $Td))
+      (goal (: $result $Tr)))
+    (, (goal (: $a ⟨wff⟩))
+      (goal (: $b ⟨wff⟩))
+      ; Generate completion rule
+      (exec (01 app4)
+        (, (ev (: $a ⟨wff⟩))
+            (ev (: $b ⟨wff⟩))
+            (ev (: $c $Tc))
+            (ev (: $d $Td))
+            (ev (: $name (-> (: $a ⟨wff⟩) (: $b ⟨wff⟩) (: $c $Tc) (: $d $Td) (: $result $Tr)))))
+        (, (ev (: $result $Tr))
+            (debug completed ($name (: $a ⟨wff⟩) (: $b ⟨wff⟩) (: $c $Tc) (: $d $Td)) for (: $result $Tr))))
+      (debug rev4-wff (goal (: $result $Tr)) made (goals (: $a ⟨wff⟩) (: $b ⟨wff⟩)) due to (ev (: $name (-> (: $a ⟨wff⟩) (: $b ⟨wff⟩) (: $c $Tc) (: $d $Td) (: $result $Tr)))))))
+
+  ;; GPT-5 suggestion... breaks if I change the "priority"
+  ;; No longer needed if the 'pure' one is priority 0.
+  ; ((step (2 rev4))  ; MP backward step, goal-directed
+  ; (, (ev (: ⟨mp⟩ (-> (: $P ⟨wff⟩) (: $Q ⟨wff⟩)
+                      ; (: $P ⟨|-⟩) (: (⟨->⟩ $P $Q) ⟨|-⟩) (: $Q ⟨|-⟩))))
+     ; (goal (: $Q ⟨|-⟩)))
+  ; (, (goal (: $P ⟨|-⟩))                   ; proof of P
+     ; (goal (: (⟨->⟩ $P $Q) ⟨|-⟩))         ; implication P -> Q
+     ; (goal (: $P ⟨wff⟩))                  ; wff for *this* P (not any wff)
+     ; (goal (: $Q ⟨wff⟩))                  ; wff for *this* Q (not any wff)
+     ; ; Dedicated completion agent for this (P,Q)
+     ; (exec (01 app4)
+       ; (, (ev (: $P ⟨wff⟩))
+           ; (ev (: $Q ⟨wff⟩))
+           ; (ev (: $P ⟨|-⟩))
+           ; (ev (: (⟨->⟩ $P $Q) ⟨|-⟩)))
+       ; (, (ev (: $Q ⟨|-⟩))
+           ; (debug completed ⟨mp⟩ for (: $Q ⟨|-⟩))))
+     ; (debug rev4-gpt5 (goal (: $Q ⟨|-⟩)) made
+                  ; (goals (: $P ⟨|-⟩) (: (⟨->⟩ $P $Q) ⟨|-⟩) (: $P ⟨wff⟩) (: $Q ⟨wff⟩))
+                  ; due to (ev (: ⟨mp⟩ (-> (: $P ⟨wff⟩) (: $Q ⟨wff⟩)
+                                          ; (: $P ⟨|-⟩) (: (⟨->⟩ $P $Q) ⟨|-⟩)
+                                          ; (: $Q ⟨|-⟩)))))))
+
+    ; So adding this does allow the t=t is a wff goal to be removed.. just doing "two".                                    
+    ; ((step (0 rev4))  ; MP backward step, goal-directed
+      ; (, (ev (: ⟨mp⟩ (-> (: $P ⟨wff⟩) (: $Q ⟨wff⟩)
+                          ; (: $P ⟨|-⟩) (: (⟨->⟩ $P $Q) ⟨|-⟩) (: $Q ⟨|-⟩))))
+        ; (goal (: $Q ⟨|-⟩)))
+      ; (, (goal (: $P ⟨|-⟩))                   ; proof of P
+        ; (goal (: (⟨->⟩ $P $Q) ⟨|-⟩))         ; implication P -> Q
+        ; (goal (: $P ⟨wff⟩))                  ; wff for *this* P (not any wff)
+        ; (goal (: $Q ⟨wff⟩))                  ; wff for *this* Q (not any wff)
+        ; ; Dedicated completion agent for this (P,Q)
+        ; (exec (01 app4)
+          ; (, (ev (: $P ⟨wff⟩))
+              ; (ev (: $Q ⟨wff⟩))
+              ; (ev (: $P ⟨|-⟩))
+              ; (ev (: (⟨->⟩ $P $Q) ⟨|-⟩)))
+          ; (, (ev (: $Q ⟨|-⟩))
+              ; (debug completed ⟨mp⟩ for (: $Q ⟨|-⟩))))
+        ; (debug rev4-gpt5 (goal (: $Q ⟨|-⟩)) made
+                      ; (goals (: $P ⟨|-⟩) (: (⟨->⟩ $P $Q) ⟨|-⟩) (: $P ⟨wff⟩) (: $Q ⟨wff⟩))
+                      ; due to (ev (: ⟨mp⟩ (-> (: $P ⟨wff⟩) (: $Q ⟨wff⟩)
+                                              ; (: $P ⟨|-⟩) (: (⟨->⟩ $P $Q) ⟨|-⟩)
+                                              ; (: $Q ⟨|-⟩)))))))
+
+
+  ; The 'pure' one not needed here.
+  ; but with priority 0, it works... in leau of the previous one!                                    
+  ((step (0 rev4))
+    (, (ev (: $name (-> (: $a $Ta) (: $b $Tb) (: $c $Tc) (: $d $Td) (: $result $Tr))))
+      (goal (: $result $Tr)))
+    (, (goal (: $a $Ta))
+      (goal (: $b $Tb))
+      (goal (: $c $Tc))
+      (goal (: $d $Td))
+      ; Generate completion rule
+      (exec (01 app4)
+        (, (ev (: $a $Ta))
+            (ev (: $b $Tb))
+            (ev (: $c $Tc))
+            (ev (: $d $Td))
+            (ev (: $name (-> (: $a $Ta) (: $b $Tb) (: $c $Tc) (: $d $Td) (: $result $Tr)))))
+        (, (ev (: $result $Tr))
+            (debug completed ($name (: $a $Ta) (: $b $Tb) (: $c $Tc) (: $d $Td)) for (: $result $Tr))))
+      (debug rev4 (goal (: $result $Tr)) made (goals (: $a $Ta) (: $b $Tb) (: $c $Tc) (: $d $Td)) due to (ev (: $name (-> (: $a $Ta) (: $b $Tb) (: $c $Tc) (: $d $Td) (: $result $Tr)))))))
 
   ; works -- but does many useless inferences.
   ; 7 ticks --> space size 5631
@@ -1734,19 +2978,107 @@ fn mm2_bc() {
      ; (ev (: $b $T2)))
   ; (, (ev (: $r $R))))
 
+  ; ((step (3 mp))
+    ; (, (ev (: (⟨->⟩ $P $Q) ⟨|-⟩))
+      ; (ev (: $P ⟨|-⟩))
+      ; (ev (: $P ⟨wff⟩))
+      ; (ev (: $Q ⟨wff⟩)))
+    ; (, (ev (: $Q ⟨|-⟩))))
+
+  ; ((exec (4 mp))
+    ; (, (ev (: (⟨->⟩ $P $Q) ⟨|-⟩))
+      ; (ev (: $P ⟨|-⟩))
+      ; (ev (: $P ⟨wff⟩))
+      ; (ev (: $Q ⟨wff⟩)))
+    ; (, (ev (: $Q ⟨|-⟩))))
+
+  ;; Special rule for proving reflexivity using a1 and a2
+  ; thread 'main' (1663878) panicked at /home/zar/hyperon/MORK/kernel/src/space.rs:865:69:
+  ; called `Result::unwrap()` on an `Err` value: Utf8Error { valid_up_to: 1, error_len: None }
+  ; ((step (2 reflexivity-via-a1-a2))
+    ; (, (goal (: (⟨=⟩ $x $x) ⟨|-⟩)))
+    ; (, ; Use a2 to get x+0 = x, then use a1 with t=(x+0), r=x, s=x
+      ; (goal (: $x ⟨term⟩))
+      ; (goal (: (⟨=⟩ (⟨+⟩ $x ⟨0⟩) $x) ⟨|-⟩))
+      ; (goal (: (⟨->⟩ (⟨=⟩ (⟨+⟩ $x ⟨0⟩) $x) (⟨->⟩ (⟨=⟩ (⟨+⟩ $x ⟨0⟩) $x) (⟨=⟩ $x $x))) ⟨|-⟩))
+      ; ; Generate forward rule for final MP steps
+      ; (exec (01 reflexivity-complete)
+        ; (, (ev (: $x ⟨term⟩))
+            ; (ev (: (⟨=⟩ (⟨+⟩ $x ⟨0⟩) $x) ⟨|-⟩))
+            ; (ev (: (⟨=⟩ (⟨+⟩ $x ⟨0⟩) $x) ⟨wff⟩))
+            ; (ev (: (⟨=⟩ $x $x) ⟨wff⟩))
+            ; (ev (: (⟨->⟩ (⟨=⟩ (⟨+⟩ $x ⟨0⟩) $x) (⟨->⟩ (⟨=⟩ (⟨+⟩ $x ⟨0⟩) $x) (⟨=⟩ $x $x))) ⟨|-⟩)))
+        ; (, ; First MP: P -> (P -> Q), P |- (P -> Q)
+            ; (ev (: (⟨->⟩ (⟨=⟩ (⟨+⟩ $x ⟨0⟩) $x) (⟨=⟩ $x $x)) ⟨|-⟩))
+            ; (debug reflexivity first-mp done)))
+      ; (exec (02 reflexivity-final)
+        ; (, (ev (: (⟨->⟩ (⟨=⟩ (⟨+⟩ $x ⟨0⟩) $x) (⟨=⟩ $x $x)) ⟨|-⟩))
+            ; (ev (: (⟨=⟩ (⟨+⟩ $x ⟨0⟩) $x) ⟨|-⟩))
+            ; (ev (: (⟨=⟩ (⟨+⟩ $x ⟨0⟩) $x) ⟨wff⟩))
+            ; (ev (: (⟨=⟩ $x $x) ⟨wff⟩)))
+        ; (, ; Second MP: P -> Q, P |- Q
+            ; (ev (: (⟨=⟩ $x $x) ⟨|-⟩))
+            ; (debug reflexivity second-mp done)))))
+
+  ;; SUggestions by Claude that don't work.
+  ; ((step (2 rev2-weq))
+  ; (, (ev (: ⟨weq⟩ (-> (: $x ⟨term⟩) (: $y ⟨term⟩) (: (⟨=⟩ $x $y) ⟨wff⟩))))
+     ; (goal (: (⟨=⟩ $t1 $t2) ⟨wff⟩)))
+  ; (, (goal (: $t1 ⟨term⟩))
+     ; (goal (: $t2 ⟨term⟩))
+     ; (exec (01 app2-weq)
+       ; (, (ev (: $t1 ⟨term⟩))
+          ; (ev (: $t2 ⟨term⟩))
+          ; (ev (: ⟨weq⟩ (-> (: $x ⟨term⟩) (: $y ⟨term⟩) (: (⟨=⟩ $x $y) ⟨wff⟩)))))
+       ; (, (ev (: (⟨=⟩ $t1 $t2) ⟨wff⟩))
+          ; (debug completed (⟨weq⟩ (: $t1 ⟨term⟩) (: $t2 ⟨term⟩)) for (: (⟨=⟩ $t1 $t2) ⟨wff⟩))))
+     ; (debug rev2-weq (goal (: (⟨=⟩ $t1 $t2) ⟨wff⟩)) made (goals (: $t1 ⟨term⟩) (: $t2 ⟨term⟩)))))
+
+  ; ((step (3 forward-weq))
+  ; (, (ev (: $t ⟨term⟩)))
+  ; (, (ev (: (⟨=⟩ $t $t) ⟨wff⟩))
+     ; (debug forward-weq generated (: (⟨=⟩ $t $t) ⟨wff⟩) from (: $t ⟨term⟩))))
+
+  ; Oruži hack!  -- Gave me a mystery bug!
+  ; If we have ⊢ P and ⊢ (P -> (P -> Q)), then ⊢ (P -> Q)
+  ; thread 'main' (1858367) panicked at kernel/src/space.rs:146:124:
+    ; index out of bounds: the len is 0 but the index is 0
+  ; ((step (2 mp-contract))
+    ; (, (goal (: (⟨->⟩ $P $Q) ⟨|-⟩))
+      ; (ev   (: $P ⟨|-⟩))
+      ; (ev   (: (⟨->⟩ $P (⟨->⟩ $P $Q)) ⟨|-⟩))
+      ; (ev   (: $P ⟨wff⟩))
+      ; (ev   (: $Q ⟨wff⟩)))
+    ; (, (ev (: (⟨->⟩ $P $Q) ⟨|-⟩))
+      ; (debug completed mp-contract for (: (⟨->⟩ $P $Q) ⟨|-⟩))))
+
+
   (exec bc
       (, ((step $x) $premises0 $conclusions0)
          (exec bc $premises1 $conclusions1) )
       (, (exec $x $premises0 $conclusions0)
          (exec bc $premises1 $conclusions1) ))
 
-  ; (goal (: (⟨=⟩ ⟨t⟩ ⟨t⟩) ⟨|-⟩))
+  (goal (: (⟨=⟩ ⟨t⟩ ⟨t⟩) ⟨|-⟩))
   ; (comment a2 is satisfied)
-  (goal (: (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) ⟨|-⟩) )
+  ; (goal (: (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) ⟨|-⟩) )
   ; (comment a1:)
   ; (goal (: (⟨->⟩ (⟨=⟩ ⟨t⟩ ⟨t⟩) (⟨->⟩ (⟨=⟩ ⟨t⟩ ⟨0⟩) (⟨=⟩ ⟨t⟩ ⟨0⟩))) ⟨|-⟩))
   ; (comment weq is satisfied)
   ; (goal (: (⟨=⟩ ⟨t⟩ ⟨0⟩) ⟨wff⟩))
+
+  ; helper 'goals' to guide proof search.
+  ; (goal (: (⟨=⟩ ⟨t⟩ ⟨t⟩) ⟨wff⟩))
+  ; (goal (: (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) ⟨wff⟩))
+  ; (goal (: (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) ⟨|-⟩))
+  ; (goal (: (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨=⟩ ⟨t⟩ ⟨t⟩))) ⟨|-⟩))
+  ; (goal (: (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨=⟩ ⟨t⟩ ⟨t⟩))) ⟨wff⟩))
+
+  ; (ev (: (⟨=⟩ ⟨t⟩ ⟨t⟩) ⟨wff⟩))
+  ; (ev (: (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) ⟨wff⟩))
+  ; (ev (: (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) ⟨|-⟩))
+  ; (ev (: (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨=⟩ ⟨t⟩ ⟨t⟩))) ⟨|-⟩))
+  ; (ev (: (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨=⟩ ⟨t⟩ ⟨t⟩))) ⟨wff⟩))
     "#;
 
 
@@ -1758,10 +3090,12 @@ fn mm2_bc() {
     println!("=== MM2 (bc): Proving ⊢ (t = t) ===");
 
     let mut ticks = 0usize;
+    let mut multiplier = 0usize;
+    multiplier = 5;
     loop {
-        ticks += 1;
+        ticks += multiplier;
         let t1 = Instant::now();
-        let n = s.metta_calculus(1);
+        let n = s.metta_calculus(multiplier);
         println!("executing step {} ({}) took {} ms (unifications {}, writes {}, transitions {})", ticks, n, t1.elapsed().as_millis(), unsafe { unifications }, unsafe { writes }, unsafe { transitions });
 
         // if n == 1 { continue } // comment out if you want the analysis at every step
@@ -1774,7 +3108,7 @@ fn mm2_bc() {
         let dump = String::from_utf8_lossy(&buf);
 
 
-        if n == 0 || ticks >= 7 {
+        if n == 0 || ticks >= 25 {
             println!("\n== mm2 (bc): — ran for {:?} and {} tick(s) ==", t0.elapsed(), ticks);
 
             println!("\n--- Full Final State Dump ---");
@@ -2703,6 +4037,9 @@ fn main() {
                     "mm1_forward" => { mm1_forward(); }
                     "mm1_forward_evidence" => { mm1_forward_evidence(); }
                     "mm2_bc" => { mm2_bc(); }
+                    "mm2_bc_v2" => { mm2_bc_v2(); }
+                    "mm2_bc_v3" => { mm2_bc_v3(); }
+                    "mm2_bc_v4" => { mm2_bc_v4(); }
                     "bc2" => { bc2(); }
                     s => { println!("bench not known: {s}") }
                 }
