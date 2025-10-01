@@ -4132,6 +4132,640 @@ fn mm1_b2_tpl() {
     }
 }
 
+fn mm2_bc_v5() {
+    // MM2 Backward Chainer v4: v4 but with exec factored out into the Rust.
+    const P: &str = r#"
+  ;; Type signatures for constructors
+  (kb (: ⟨+⟩ (-> ⟨term⟩ ⟨term⟩ ⟨term⟩)))  ;; Addition operator
+  (kb (: ⟨=⟩ (-> ⟨term⟩ ⟨term⟩ ⟨wff⟩)))   ;; Equality predicate
+  (kb (: ⟨t⟩ ⟨term⟩))                      ;; Constant t
+  (kb (: ⟨0⟩ ⟨term⟩))                      ;; Constant 0
+  
+  ;; Type constructors (used to build wffs and terms)
+  (kb (: ⟨tpl⟩ (-> (: $x ⟨term⟩) (: $y ⟨term⟩) (: (⟨+⟩ $x $y) ⟨term⟩))))
+  (kb (: ⟨weq⟩ (-> (: $x ⟨term⟩) (: $y ⟨term⟩) (: (⟨=⟩ $x $y) ⟨wff⟩))))
+  (kb (: ⟨wim⟩ (-> (: $P ⟨wff⟩) (: $Q ⟨wff⟩) (: (⟨->⟩ $P $Q) ⟨wff⟩))))
+  
+  ;; Axioms
+  (kb (: ⟨a2⟩ (-> (: $a ⟨term⟩) (: (⟨=⟩ (⟨+⟩ $a ⟨0⟩) $a) ⟨|-⟩))))  ;; a + 0 = a
+  (kb (: ⟨a1⟩ (-> (: $t ⟨term⟩) (: $r ⟨term⟩) (: $s ⟨term⟩) 
+                  (: (⟨->⟩ (⟨=⟩ $t $r) (⟨->⟩ (⟨=⟩ $t $s) (⟨=⟩ $r $s))) ⟨|-⟩))))
+  
+  ;; Modus Ponens inference rule
+  (kb (: ⟨mp⟩ (-> (: $P ⟨wff⟩) (: $Q ⟨wff⟩) (: $P ⟨|-⟩) (: (⟨->⟩ $P $Q) ⟨|-⟩) (: $Q ⟨|-⟩))))
+
+  ;; Priority 00: Initial lifting from KB to evidence
+  (exec (0000 lift-kb-to-ev) 
+    (, (kb (: $t $T))) 
+    (, (ev (: $t $T))))
+
+  ;; Priority 01: Direct KB lookup for goals
+  ((step (0100 lookup-in-kb))
+    (, (goal (: $proof $conclusion)) 
+       (kb (: $proof $conclusion)))
+    (, (ev (: $proof $conclusion))))
+
+  ;; Priority 02: Backward chain single-premise rules (axiom instantiation)
+  ((step (0200 rev1))
+    (, (ev (: $name (-> $a $b)))
+       (goal $b))
+    (, (goal $a)
+       (exec (02000 complete-rev1)
+         (, (ev $a)
+            (ev (: $name (-> $a $b))))
+         (, (ev $b)))
+       (debug rev1 (goal $b) needs (goal $a))))
+
+  ;; Priority 03: Backward chain two-premise type constructors (weq, wim, tpl)
+  ((step (0300 rev2))
+    (, (ev (: $name (-> (: $b1 $b2) (: $c1 $c2) (: $d1 $d2))))
+       (goal (: $d1 $d2)))
+    (, (goal (: $b1 $b2))
+       (goal (: $c1 $c2))
+       (exec (03000 complete-rev2)
+         (, (ev (: $b1 $b2)) 
+            (ev (: $c1 $c2))
+            (ev (: $name (-> (: $b1 $b2) (: $c1 $c2) (: $d1 $d2)))))
+         (, (ev (: $d1 $d2))))
+       (debug rev2 (: $d1 $d2) needs (: $b1 $b2) and (: $c1 $c2))))
+
+  ;; Priority 04: Backward chain three-premise rules (a1)
+  ((step (0400 rev3))
+    (, (ev (: $name (-> (: $a $Ta) (: $b $Tb) (: $c $Tc) (: $result $Tr))))
+       (goal (: $result $Tr)))
+    (, (goal (: $a $Ta))
+       (goal (: $b $Tb))
+       (goal (: $c $Tc))
+       (exec (04000 complete-rev3)
+         (, (ev (: $a $Ta))
+            (ev (: $b $Tb))
+            (ev (: $c $Tc))
+            (ev (: $name (-> (: $a $Ta) (: $b $Tb) (: $c $Tc) (: $result $Tr)))))
+         (, (ev (: $result $Tr))))
+       (debug rev3 (: $result $Tr) needs three args)))
+
+  ;; Priority 05: Backward chain MP - keep the general version from v3
+  ((step (0501 rev4))
+    (, (ev (: $name (-> (: $a $Ta) (: $b $Tb) (: $c $Tc) (: $d $Td) (: $result $Tr))))
+       (goal (: $result $Tr)))
+    (, (goal (: $a $Ta))
+       (goal (: $b $Tb))
+       (goal (: $c $Tc))
+       (goal (: $d $Td))
+       (exec (05010 rev4)
+         (, (ev (: $a $Ta))
+            (ev (: $b $Tb))
+            (ev (: $c $Tc))
+            (ev (: $d $Td))
+            (ev (: $name (-> (: $a $Ta) (: $b $Tb) (: $c $Tc) (: $d $Td) (: $result $Tr)))))
+         (, (ev (: $result $Tr))))
+       (debug rev4 (: $result $Tr) needs four args)))
+
+  ;; Also not sure if it's needed. Hardcoded mp.  Blows up 2x and slows around tick 35->40.
+  ;; Priority 06: MP close - the version that worked in v3!
+  ((step (0600 mp-close))
+    (, (ev (: ⟨mp⟩
+              (-> (: $P ⟨wff⟩) (: $Q ⟨wff⟩)
+                  (: $P ⟨|-⟩) (: (⟨->⟩ $P $Q) ⟨|-⟩) (: $Q ⟨|-⟩))))
+       (ev (: $P ⟨|-⟩))
+       (ev (: (⟨->⟩ $P $Q) ⟨|-⟩))
+       (goal (: $Q ⟨|-⟩)))
+    (, (ev (: $Q ⟨|-⟩))
+       (debug mp-close -> (: $Q ⟨|-⟩))))
+
+  ; Huh, so abstraction isn't "needed" in this case!
+  ;; Priority 09: Abstract currying - keep it but maybe with higher priority
+  ; ((step (0900 abs))
+      ; (, (goal (: $proof $conclusion)))
+      ; (, (goal (: $lhs (-> $synth (: $proof $conclusion))))
+         ; (debug abstract-curry exploring (: $proof $conclusion))))
+
+  ;; Not sure this is *needed* but serach space blows up 2x and slows around tick 35->40..  Basically a hard-coding of a1.
+  ;; Priority 10: Special case for reflexivity
+  ((step (1000 try-reflexivity-pattern))
+      (, (goal (: (⟨=⟩ $x $x) ⟨|-⟩)))
+      (, (goal (: $x ⟨term⟩))
+         (goal (: (⟨->⟩ (⟨=⟩ $x $x) (⟨->⟩ (⟨=⟩ $x $x) (⟨=⟩ $x $x))) ⟨|-⟩))
+         (goal (: (⟨=⟩ $x $x) ⟨wff⟩))
+         (debug trying-reflexivity-for $x)))
+         
+  ;; Main backward chaining executor
+  ; (exec bc
+    ; (, ((step ($priority $name)) $premises0 $conclusions0)
+       ; (exec bc $premises1 $conclusions1)
+       ; (low-and-high-priority $lowP $highP $tick))
+    ; (O (+ (exec ($priority $name) $premises0 $conclusions0))
+       ; (+ (exec bc $premises1 $conclusions1))
+       ; (- ((step ($priority $name)) $premises0 $conclusions0))
+       ; (- (low-and-high-priority $lowP $highP $tick))
+       ; (+ ((step ($highP $name)) $premises0 $conclusions0))
+    ; ))
+
+    ; (exec bc
+    ; (, ((step $x) $premises0 $conclusions0)
+       ; (exec bc $premises1 $conclusions1))
+    ; (, (exec $x $premises0 $conclusions0)
+       ; (exec bc $premises1 $conclusions1)))
+
+  ; Note: using (S ($priority)) sped it up and decreased ticks to goal by 1.  But growth of space is the same.
+  (exec bc
+    (, ((step ($priority $name)) $premises0 $conclusions0)
+      (exec bc $premises1 $conclusions1))
+    (O (+ (exec ($priority $name) $premises0 $conclusions0))
+      (+ (exec bc $premises1 $conclusions1))
+      (- ((step ($priority $name)) $premises0 $conclusions0))
+      (+ ((step ( (S ($priority)) $name)) $premises0 $conclusions0))
+    ))
+
+  ;; Goal: Prove t = t
+  (goal (: (⟨=⟩ ⟨t⟩ ⟨t⟩) ⟨|-⟩))
+
+  ;; Seed value;
+  (low-and-high-priority 0000 1000 1)
+    "#;
+
+    let mut s = Space::new();
+    let t0 = Instant::now();
+    s.load_all_sexpr(P.as_bytes()).unwrap();
+
+    println!("=== MM2 (bc v5): Proving ⊢ (t = t) ===");
+
+    let mut ticks = 0usize;
+    let multiplier = 1;
+    loop {
+        ticks += multiplier;
+        let t1 = Instant::now();
+        let n = s.metta_calculus(multiplier);
+        println!("executing step {} ({}) took {} ms (unifications {}, writes {}, transitions {})", 
+                ticks, n, t1.elapsed().as_millis(), 
+                unsafe { unifications }, unsafe { writes }, unsafe { transitions });
+
+        println!("space size {}", s.btm.val_count());
+
+        // Check if proof is complete
+        let mut q_proof = Vec::new();
+        s.dump_sexpr(
+            expr!(s, "[2] ev [3] : [3] ⟨=⟩ ⟨t⟩ ⟨t⟩ ⟨|-⟩"),
+            expr!(s, "[2] ev [3] : [3] ⟨=⟩ ⟨t⟩ ⟨t⟩ ⟨|-⟩"),
+            &mut q_proof
+        );
+
+        let proof_complete = !q_proof.is_empty();
+
+        if proof_complete {
+            println!("\n✅ PROOF COMPLETE: {}", String::from_utf8_lossy(&q_proof));
+        }
+
+        // Add diagnostics at key points
+         if ticks < 50 && !proof_complete {
+          add_mm2_demo0_query_diagnostics(&mut s, ticks);
+        
+
+        // After each tick, analyze priorities
+        let mut all_exec_names = Vec::new();
+        s.dump_sexpr(
+            expr!(s, "[4] exec $ $ $"),
+            expr!(s, "_1"),  // Extract just the name/priority
+            &mut all_exec_names
+        );
+
+        let exec_str = String::from_utf8_lossy(&all_exec_names);
+        let mut priorities: Vec<(String, u32)> = exec_str
+            .lines()
+            .filter_map(|line| {
+                let trimmed = line.trim();
+                // Handle patterns like "(0100 lookup-in-kb)" or "(05010 rev4)"
+                if trimmed.starts_with('(') && trimmed.contains(' ') {
+                    // Split on whitespace and get first token after '('
+                    let parts: Vec<&str> = trimmed
+                        .trim_start_matches('(')
+                        .split_whitespace()
+                        .collect();
+                    
+                    if let Some(first) = parts.first() {
+                        // Try to parse as u32
+                        if let Ok(num) = first.parse::<u32>() {
+                            return Some((trimmed.to_string(), num));
+                        }
+                    }
+                }
+                // Skip "bc" and other non-numeric execs
+                None
+            })
+            .collect();
+
+        priorities.sort_by_key(|(_, p)| *p);
+
+        let priority_line: Vec<String> = priorities
+                .iter()
+                .map(|(name, pri)| format!("{}:{}", name.trim_matches(&['(', ')'][..]), pri))
+                .collect();
+            
+            println!("  Priorities (highest→lowest): {}", priority_line.join(" < "));
+
+        // Now insert new priority metadata
+        if let Some((low_name, low_p)) = priorities.first() {
+            if let Some((high_name, high_p)) = priorities.last() {
+                println!(
+                    "[priority diag] lowest = {} ({}), highest = {} ({})",
+                    low_name, low_p, high_name, high_p
+                );
+                
+                // Check if this priority metadata already exists
+                let mut existing = Vec::new();
+                s.dump_sexpr(
+                    expr!(s, "[4] low-and-high-priority $ $ $"),
+                    expr!(s, "[4] low-and-high-priority _1 _2 _3"),
+                    &mut existing
+                );
+                
+                let existing_str = String::from_utf8_lossy(&existing);
+
+                println!("  [debug] Priority query returned {} lines: {}", existing_str.lines().count(), existing_str);
+
+                // Insert new metadata atoms
+                if existing.is_empty() {
+                  let priority_meta = format!("(low-and-high-priority {} {} {})", low_p, high_p, ticks);
+                  s.load_sexpr(
+                      priority_meta.as_bytes(), 
+                      expr!(s, "$"), 
+                      expr!(s, "_1")
+                  ).unwrap();
+                }
+            }
+        }
+
+          // Diagnostic: Check what exec bc patterns exist
+      // First, dump EVERYTHING for comparison
+// let mut full_dump = Vec::new();
+// s.dump_all_sexpr(&mut full_dump).unwrap();
+// let full_dump_str = String::from_utf8_lossy(&full_dump);
+
+// // Now extract exec bc with proper output pattern
+// println!("\n=== EXEC BC STATEMENTS (tick {}) ===", ticks);
+// let mut bc_execs = Vec::new();
+// s.dump_sexpr(
+//     expr!(s, "[4] exec bc $ $"),
+//     expr!(s, "[4] exec bc _1 _2"),  // Use _1, _2 to extract actual content
+//     &mut bc_execs
+// );
+// println!("Query result:\n{}", String::from_utf8_lossy(&bc_execs));
+
+// // Extract from full dump using string operations for validation
+// let exec_bc_from_dump: Vec<&str> = full_dump_str
+//     .lines()
+//     .filter(|line| line.contains("(exec bc "))
+//     .collect();
+// println!("String extraction found {} exec bc lines:", exec_bc_from_dump.len());
+// for line in exec_bc_from_dump.iter().take(5) {
+//     println!("  {}", line);
+// }
+
+// // Extract ALL exec statements
+// println!("\n=== ALL EXEC STATEMENTS (tick {}) ===", ticks);
+// let mut all_execs = Vec::new();
+// s.dump_sexpr(
+//     expr!(s, "[4] exec $ $ $"),
+//     expr!(s, "[4] exec _1 _2 _3"),  // Extract all 3 components
+//     &mut all_execs
+// );
+// println!("Query result:\n{}", String::from_utf8_lossy(&all_execs));
+
+// let exec_from_dump: Vec<&str> = full_dump_str
+//     .lines()
+//     .filter(|line| line.trim().starts_with("(exec "))
+//     .collect();
+// println!("String extraction found {} exec lines:", exec_from_dump.len());
+// for line in exec_from_dump.iter().take(10) {
+//     println!("  {}", line);
+// }
+
+// // Extract ALL step statements
+// println!("\n=== ALL STEP STATEMENTS (tick {}) ===", ticks);
+// let mut all_steps = Vec::new();
+// s.dump_sexpr(
+//     expr!(s, "[3] [2] step $ $ $"),
+//     expr!(s, "[3] [2] step _1 _2 _3"),  // Extract step name, premises, conclusions
+//     &mut all_steps
+// );
+// println!("Query result:\n{}", String::from_utf8_lossy(&all_steps));
+
+// let step_from_dump: Vec<&str> = full_dump_str
+//     .lines()
+//     .filter(|line| line.contains("((step "))
+//     .collect();
+// println!("String extraction found {} step lines:", step_from_dump.len());
+// for line in step_from_dump.iter().take(10) {
+//     println!("  {}", line);
+// }
+
+
+}
+
+
+        if n == 0 || proof_complete || ticks >= 50 {
+            println!("\n== mm2 (bc v5): ran for {:?} and {} tick(s) ==", t0.elapsed(), ticks);
+            
+            // Final diagnostics
+            add_mm2_demo0_query_diagnostics(&mut s, ticks);
+            add_mm2_demo0_diagnostics(&mut s, ticks);
+            
+            let mut buf = Vec::new();
+            s.dump_all_sexpr(&mut buf).unwrap();
+            let dump = String::from_utf8_lossy(&buf);
+            
+            // Check if proof is complete
+            if dump.contains("(ev (: (⟨=⟩ ⟨t⟩ ⟨t⟩) ⟨|-⟩))") {
+                println!("\n✅ PROOF COMPLETE!");
+            } else {
+                println!("\n❌ Proof incomplete");
+                // Show what's missing
+                println!("\nWhat's still needed:");
+                if !dump.contains("(ev (: (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨=⟩ ⟨t⟩ ⟨t⟩)) ⟨|-⟩))") {
+                    println!("  - P→Q proof (first MP)");
+                }
+                if !dump.contains("(ev (: (⟨=⟩ ⟨t⟩ ⟨t⟩) ⟨|-⟩))") {
+                    println!("  - Final Q proof (second MP)");
+                }
+            }
+            println!("\n--- Full Final State Dump ---");
+            print!("{dump}");
+            break;
+        }
+    }
+}
+
+
+// Had the idea to implement the BC in Rust and just use the space for the kb.
+// But was lazy and just vibe-coding, so it didn't work.
+// // Helper function to check if a pattern exists in the space
+// fn check_pattern(s: &Space, pattern: &str) -> bool {
+//     let mut buf: Vec<u8> = Vec::new();
+//     s.dump_all_sexpr(&mut buf).unwrap();
+//     let dump = String::from_utf8_lossy(&buf);
+//     dump.contains(pattern)
+// }
+
+// // Main MM3 backward chainer - Rust-controlled with MM2 execution
+// pub fn mm3_bc_nil(
+//     s: &mut Space,
+//     max_depth: usize,
+//     max_iterations: usize,
+// ) -> bool {
+//     println!("=== MM3 Backward Chainer (Rust Control + MM2 Execution) ===");
+//     println!("Max depth: {}, Max iterations: {}", max_depth, max_iterations);
+    
+//     let start_time = Instant::now();
+    
+//     // Initialize the backward chaining program with consistent angle bracket notation
+//     let bc_program = r#"
+//         ;; Type constructors
+//         (kb (: ⟨+⟩ (-> ⟨term⟩ ⟨term⟩ ⟨term⟩)))
+//         (kb (: ⟨=⟩ (-> ⟨term⟩ ⟨term⟩ ⟨wff⟩)))
+//         (kb (: ⟨->⟩ (-> ⟨wff⟩ ⟨wff⟩ ⟨wff⟩)))
+        
+//         ;; Terms
+//         (kb (: ⟨t⟩ ⟨term⟩))
+//         (kb (: ⟨0⟩ ⟨term⟩))
+        
+//         ;; Type constructors for building proofs
+//         (kb (: ⟨tpl⟩ (-> (: $x ⟨term⟩) (: $y ⟨term⟩) (: (⟨+⟩ $x $y) ⟨term⟩))))
+//         (kb (: ⟨weq⟩ (-> (: $x ⟨term⟩) (: $y ⟨term⟩) (: (⟨=⟩ $x $y) ⟨wff⟩))))
+//         (kb (: ⟨wim⟩ (-> (: $P ⟨wff⟩) (: $Q ⟨wff⟩) (: (⟨->⟩ $P $Q) ⟨wff⟩))))
+        
+//         ;; Axioms
+//         (kb (: ⟨a2⟩ (-> (: $a ⟨term⟩) (: (⟨=⟩ (⟨+⟩ $a ⟨0⟩) $a) ⟨|-⟩))))
+//         (kb (: ⟨a1⟩ (-> (: $t ⟨term⟩) (: $r ⟨term⟩) (: $s ⟨term⟩) 
+//                        (: (⟨->⟩ (⟨=⟩ $t $r) (⟨->⟩ (⟨=⟩ $t $s) (⟨=⟩ $r $s))) ⟨|-⟩))))
+        
+//         ;; Modus Ponens
+//         (kb (: ⟨mp⟩ (-> (: $P ⟨wff⟩) (: $Q ⟨wff⟩) 
+//                        (: $P ⟨|-⟩) (: (⟨->⟩ $P $Q) ⟨|-⟩) 
+//                        (: $Q ⟨|-⟩))))
+        
+//         ;; Priority 00: Lift KB to evidence
+//         (exec (0000 lift-kb) 
+//             (, (kb (: $t $T))) 
+//             (, (ev (: $t $T))))
+        
+//         ;; Priority 01: Direct KB lookup
+//         ((step (0100 kb-lookup))
+//             (, (goal (: $proof $theorem)) 
+//                (kb (: $proof $theorem)))
+//             (, (ev (: $proof $theorem))))
+        
+//         ;; Priority 02: Backward chain single-premise rules
+//         ((step (0200 backchain-single))
+//             (, (ev (: $name (-> (: $arg $argtype) (: $result $restype))))
+//                (goal (: $proof $restype)))
+//             (, (goal (: $argproof $argtype))
+//                (exec (0201 complete-app)
+//                    (, (ev (: $argproof $argtype))
+//                       (ev (: $name (-> (: $arg $argtype) (: $result $restype)))))
+//                    (, (ev (: ($name $argproof) $restype))))))
+        
+//         ;; Priority 03: Backward chain two-premise rules
+//         ((step (0300 backchain-double))
+//             (, (ev (: $name (-> (: $a1 $t1) (: $a2 $t2) (: $result $restype))))
+//                (goal (: $proof $restype)))
+//             (, (goal (: $p1 $t1))
+//                (goal (: $p2 $t2))
+//                (exec (0301 complete-app2)
+//                    (, (ev (: $p1 $t1))
+//                       (ev (: $p2 $t2))
+//                       (ev (: $name (-> (: $a1 $t1) (: $a2 $t2) (: $result $restype)))))
+//                    (, (ev (: (($name $p1) $p2) $restype))))))
+        
+//         ;; Priority 04: Backward chain three-premise rules (for a1)
+//         ((step (0400 backchain-triple))
+//             (, (ev (: $name (-> (: $a1 $t1) (: $a2 $t2) (: $a3 $t3) (: $result $restype))))
+//                (goal (: $proof $restype)))
+//             (, (goal (: $p1 $t1))
+//                (goal (: $p2 $t2))
+//                (goal (: $p3 $t3))
+//                (exec (0401 complete-app3)
+//                    (, (ev (: $p1 $t1))
+//                       (ev (: $p2 $t2))
+//                       (ev (: $p3 $t3))
+//                       (ev (: $name (-> (: $a1 $t1) (: $a2 $t2) (: $a3 $t3) (: $result $restype)))))
+//                    (, (ev (: ((($name $p1) $p2) $p3) $restype))))))
+        
+//         ;; Priority 05: MP backward chaining (special case)
+//         ((step (0500 backchain-mp))
+//             (, (ev (: ⟨mp⟩ (-> (: $P ⟨wff⟩) (: $Q ⟨wff⟩)
+//                               (: $P ⟨|-⟩) (: (⟨->⟩ $P $Q) ⟨|-⟩) (: $Q ⟨|-⟩))))
+//                (goal (: $proof $Q))
+//                (ev (: $pproof $P))
+//                (ev (: $impproof (⟨->⟩ $P $Q))))
+//             (, (ev (: ((⟨mp⟩ $P $Q $pproof $impproof) $Q) ⟨|-⟩))))
+        
+//         ;; Priority 09: Abstract currying (exploration)
+//         ((step (0900 abstract))
+//             (, (goal (: $proof $conclusion)))
+//             (, (goal (: $lhs (-> $synth (: $proof $conclusion))))))
+        
+//         ;; Main executor
+//         (exec bc
+//             (, ((step $x) $premises $conclusions)
+//                (exec bc $premises2 $conclusions2))
+//             (, (exec $x $premises $conclusions)
+//                (exec bc $premises2 $conclusions2)))
+        
+//         ;; Initial goal: prove t = t
+//         (goal (: $proof (⟨=⟩ ⟨t⟩ ⟨t⟩) ⟨|-⟩))
+//     "#;
+    
+//     s.load_all_sexpr(bc_program.as_bytes()).unwrap();
+    
+//     // Track progress
+//     let mut iteration = 0;
+//     let mut last_space_size = 0;
+//     let mut stall_count = 0;
+    
+//     // Main execution loop
+//     while iteration < max_iterations {
+//         iteration += 1;
+        
+//         // Execute metta calculus steps
+//         let trans = s.metta_calculus(5);
+        
+//         // Check space size
+//         let current_size = s.btm.val_count();
+        
+//         // Only print every 10 iterations to reduce noise
+//         if iteration % 10 == 0 || trans > 0 {
+//             println!("[Iteration {}] Transitions: {}, Space size: {}", 
+//                      iteration, trans, current_size);
+//         }
+        
+//         // Check if proof is found
+//         if check_pattern(s, "(ev (: $") && check_pattern(s, "(⟨=⟩ ⟨t⟩ ⟨t⟩) ⟨|-⟩))") {
+//             println!("\n✅ PROOF FOUND!");
+//             println!("Time: {:?}", start_time.elapsed());
+//             println!("Iterations: {}", iteration);
+            
+//             // Show the proof
+//             let mut buf: Vec<u8> = Vec::new();
+//             s.dump_all_sexpr(&mut buf).unwrap();
+//             let dump = String::from_utf8_lossy(&buf);
+            
+//             println!("\n--- Proof Evidence ---");
+//             for line in dump.lines() {
+//                 if line.contains("(ev") && line.contains("(⟨=⟩ ⟨t⟩ ⟨t⟩)") {
+//                     println!("{}", line);
+//                 }
+//             }
+            
+//             return true;
+//         }
+        
+//         // Check for stalling
+//         if current_size == last_space_size {
+//             stall_count += 1;
+//             if stall_count > 20 {
+//                 println!("Space size unchanged for 20 iterations - likely stuck");
+//                 break;
+//             }
+//         } else {
+//             stall_count = 0;
+//         }
+//         last_space_size = current_size;
+        
+//         // No more transitions
+//         if trans == 0 {
+//             println!("No more transitions possible");
+//             break;
+//         }
+        
+//         // Diagnostics every 50 iterations
+//         if iteration % 50 == 0 {
+//             let mut buf: Vec<u8> = Vec::new();
+//             s.dump_all_sexpr(&mut buf).unwrap();
+//             let dump = String::from_utf8_lossy(&buf);
+            
+//             let goals = dump.lines().filter(|l| l.contains("(goal")).count();
+//             let evidence = dump.lines().filter(|l| l.contains("(ev")).count();
+            
+//             println!("  Current state: {} goals, {} evidence items", goals, evidence);
+//         }
+//     }
+    
+//     println!("\n❌ No proof found within constraints");
+//     println!("Time: {:?}", start_time.elapsed());
+//     println!("Iterations: {}", iteration);
+    
+//     // Final state dump
+//     let mut buf: Vec<u8> = Vec::new();
+//     s.dump_all_sexpr(&mut buf).unwrap();
+//     let dump = String::from_utf8_lossy(&buf);
+    
+//     println!("\n--- Final State Summary ---");
+//     let goals = dump.lines().filter(|l| l.contains("(goal")).collect::<Vec<_>>();
+//     let evidence = dump.lines().filter(|l| l.contains("(ev")).collect::<Vec<_>>();
+    
+//     println!("Goals ({}):", goals.len());
+//     for goal in goals.iter().take(5) {
+//         println!("  {}", goal);
+//     }
+    
+//     println!("\nEvidence ({}):", evidence.len());
+//     for ev in evidence.iter().take(10) {
+//         println!("  {}", ev);
+//     }
+    
+//     false
+// }
+
+// // Run the MM2-style backward chainer
+// pub fn run_mm2_bc_demo(s: &mut Space) {
+//     println!("=== MM2 Backward Chainer: Proving ⟨t⟩ = ⟨t⟩ ===\n");
+    
+//     let success = mm3_bc_nil(s, 10, 1000);
+    
+//     if !success {
+//         println!("\n--- Debugging: What went wrong? ---");
+        
+//         // Check what's in the space
+//         let mut buf: Vec<u8> = Vec::new();
+//         s.dump_all_sexpr(&mut buf).unwrap();
+//         let dump = String::from_utf8_lossy(&buf);
+        
+//         // Look for key patterns
+//         println!("\nLooking for key axioms:");
+//         if dump.contains("(ev (: ⟨a1⟩") {
+//             println!("  ✓ a1 axiom loaded");
+//         }
+//         if dump.contains("(ev (: ⟨a2⟩") {
+//             println!("  ✓ a2 axiom loaded");
+//         }
+//         if dump.contains("(ev (: ⟨mp⟩") {
+//             println!("  ✓ MP rule loaded");
+//         }
+        
+//         println!("\nLooking for partial proofs:");
+//         if dump.contains("(⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩)") {
+//             println!("  Found t+0=t pattern");
+//         }
+//         if dump.contains("(⟨->⟩") && dump.contains("(⟨=⟩ ⟨t⟩ ⟨t⟩)") {
+//             println!("  Found implication involving t=t");
+//         }
+//     }
+// }
+
+// // Prompt: 
+// // I have an idea.
+
+// // In our mm2_bc_v4 chainer, we are doing EVERYTHING in mm2.
+
+// // What if we use the MM2 space like a kb and treat Rust as the IL (intermediate language)?
+
+// // Can you implement the backward chainer from demo0_nil.metta in RUST in a function called mm3_bc_nil?  The core backward chaining logic should be in Rust and mirror demo0_nil's as closely as possible (insofar as it is neat, elegant, and efficient).  Then the core pattern matching logic and rewrites can be done in MM2.  We can add expressions as needed and make queries to the space to determine which execs to add and when.  Basically, the control loop can be in Rust instead of in (exec bc ...) :).  Give me the full function and any helper functions before it to copy and execute :)
+
+// pub fn run_bc_demo0() {
+//     let mut space = Space::new();
+//     run_mm2_bc_demo(&mut space); 
+// }
+
 
 use std::ffi::OsStr;
 use std::ffi::OsString;
@@ -4220,7 +4854,9 @@ fn main() {
                     "mm2_bc_v2" => { mm2_bc_v2(); }
                     "mm2_bc_v3" => { mm2_bc_v3(); }
                     "mm2_bc_v4" => { mm2_bc_v4(); }
+                    "mm2_bc_v5" => { mm2_bc_v5(); }
                     "bc2" => { bc2(); }
+                    // "rust_bc1" => { run_bc_demo0(); }
                     s => { println!("bench not known: {s}") }
                 }
             }
