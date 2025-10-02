@@ -2,13 +2,14 @@ use std::collections::{BTreeSet, HashSet};
 // use std::future::Future;
 // use std::task::Poll;
 use std::time::Instant;
-use pathmap::trie_map::BytesTrieMap;
+use pathmap::PathMap;
 use pathmap::zipper::{Zipper, ZipperAbsolutePath, ZipperIteration, ZipperMoving};
 use mork_frontend::bytestring_parser::Parser;
 use mork::{expr, prefix, sexpr};
 use mork::prefix::Prefix;
 use mork::space::{transitions, unifications, writes, Space};
 use mork_bytestring::{item_byte, Tag};
+use itertools::Itertools;
 /*fn main() {
     let mut s = Space::new();
     let t0 = Instant::now();
@@ -585,6 +586,55 @@ fn sink_two_positive_equal_crossed() {
     assert!(!res.contains("(Something (foo bar) (bar baz))\n"));
 }
 
+fn sink_add_remove() {
+    let mut s = Space::new();
+
+    const SPACE_EXPRS: &str = r#"
+A
+(exec a (, A) (O (- A) (+ B)))
+    "#;
+
+    s.load_all_sexpr(SPACE_EXPRS.as_bytes()).unwrap();
+
+    let mut t0 = Instant::now();
+    let steps = s.metta_calculus(1000000000000000);
+    println!("elapsed {} steps {} size {}", t0.elapsed().as_millis(), steps, s.btm.val_count());
+
+    let mut v = vec![];
+    s.dump_all_sexpr(&mut v).unwrap();
+    let res = String::from_utf8(v).unwrap();
+
+    println!("result: {res}");
+    assert!(!res.contains("A\n"));
+    assert!(res.contains("B\n"));
+}
+
+fn sink_add_remove_var() {
+    let mut s = Space::new();
+
+    const SPACE_EXPRS: &str = r#"
+(foo a)
+(exec 0
+  (, (foo $x))
+  (O (- (foo $x))
+     (+ (bar $x))))
+    "#;
+
+    s.load_all_sexpr(SPACE_EXPRS.as_bytes()).unwrap();
+
+    let mut t0 = Instant::now();
+    let steps = s.metta_calculus(1000000000000000);
+    println!("elapsed {} steps {} size {}", t0.elapsed().as_millis(), steps, s.btm.val_count());
+
+    let mut v = vec![];
+    s.dump_all_sexpr(&mut v).unwrap();
+    let res = String::from_utf8(v).unwrap();
+
+    println!("result: {res}");
+    assert!(!res.contains("(foo a)\n"));
+    assert!(res.contains("(bar a)\n"));
+}
+
 fn sink_odd_even_sort() {
     let mut s = Space::new();
     const SPACE_EXPRS: &str = r#"
@@ -605,13 +655,6 @@ fn sink_odd_even_sort() {
              (, (exec ($k $kp) $p0 $t0)))
     "#;
 
-    // let mut SUCCS: String = (0..5).map(|x| format!("(succ {x} {})\n", x+1)).collect();
-    // s.load_all_sexpr(SUCCS.as_bytes()).unwrap();
-    // let mut PARITY: String = (0..5).map(|x| format!("(parity {x} {})\n", if x % 2 == 0 { "even" } else { "odd" })).collect();
-    // s.load_all_sexpr(PARITY.as_bytes()).unwrap();
-    // let mut ORDER: String = (b'A'..=b'E').flat_map(|x| (b'A'..x).map(move |y| format!("(lt {} {})\n", y as char, x as char))).collect();
-    // s.load_all_sexpr(ORDER.as_bytes()).unwrap();
-
     s.load_all_sexpr(SPACE_EXPRS.as_bytes()).unwrap();
 
     let mut t0 = Instant::now();
@@ -626,6 +669,122 @@ fn sink_odd_even_sort() {
     println!("result:\n{res}");
     assert_eq!(res, "A\nB\nC\nD\nE\n");
 }
+
+fn sink_head() {
+    let mut s = Space::new();
+
+    const SPACE_EXPRS: &str = r#"
+(foo 1) (foo 2) (foo 3)
+(bar x) (bar y)
+(baz P) (baz Q) (baz R)
+(exec 0 (, (foo $x) (bar $y) (baz $z)) (O (head 7 (cux $z $y $x))))
+    "#;
+
+    s.load_all_sexpr(SPACE_EXPRS.as_bytes()).unwrap();
+
+    let mut t0 = Instant::now();
+    let steps = s.metta_calculus(1000000000000000);
+    println!("elapsed {} steps {} size {}", t0.elapsed().as_millis(), steps, s.btm.val_count());
+
+    let mut v = vec![];
+    s.dump_sexpr(expr!(s, "[4] cux $ $ $"), expr!(s, "[3] _3 _2 _1"), &mut v);
+    // s.dump_all_sexpr(&mut v).unwrap();
+    let res = String::from_utf8(v).unwrap();
+
+    println!("result: {res}");
+    assert_eq!(res, "(1 x P)\n(2 x P)\n(3 x P)\n(1 y P)\n(2 y P)\n(3 y P)\n(1 x Q)\n")
+}
+
+fn sink_wasm_add() {
+    let mut s = Space::new();
+
+    const SPACE_EXPRS: &str = r#"
+(wasm add
+    (if (i32.and (i32.and
+            (i32.eq (i32.load8_u 0 (i32.const 0)) (i32.const 0x02))
+            (i32.eq (i32.load8_u 0 (i32.const 1)) (i32.const 0xc4)))
+            (i32.eq (i32.load8_u 0 (i32.const 6)) (i32.const 0xc4)))
+      (then
+        (i32.store 1 (i32.const 0) (i32.const 0xc4))
+        (i32.store 1 (i32.const 1) (call 0 (i32.add
+            (call 0 (i32.load 0 (i32.const 2)))
+            (call 0 (i32.load 0 (i32.const 7))))))
+      )
+      (else unreachable)
+    )
+)
+
+(exec 0 (, (wasm add $f)) (,
+  (exec 1 (, (xs $i $x) (ys $i $y))
+          (O (wasm $f ($x $y))))
+))
+    "#; // (zs $i $z) $z
+    let nargs = 1_000_000;
+    s.load_all_sexpr(SPACE_EXPRS.as_bytes()).unwrap();
+    let mut args = vec![];
+    let options = ["x", "y"];
+    for (k, a) in options.iter().enumerate() {
+        for i in 0i32..nargs {
+            let mut e = vec![item_byte(Tag::Arity(3)), item_byte(Tag::SymbolSize(2)), a.as_bytes()[0], b's'];
+            let is = i.to_string();
+            e.push(item_byte(Tag::SymbolSize(is.len() as _)));
+            e.extend_from_slice(is.as_bytes());
+            e.push(item_byte(Tag::SymbolSize(4)));
+            e.extend_from_slice(((options.len() as i32)*i + (k as i32)).to_be_bytes().as_slice());
+            s.btm.insert(&e[..], ());
+        }
+    }
+    s.load_all_sexpr(&args[..]).unwrap();
+
+    let mut t0 = Instant::now();
+    let steps = s.metta_calculus(1);
+    println!("elapsed {} steps {} size {}", t0.elapsed().as_millis(), steps, s.btm.val_count());
+
+    // let mut v = vec![];
+    // s.dump_sexpr(expr!(s, "[4] cux $ $ $"), expr!(s, "[3] _3 _2 _1"), &mut v);
+    // s.dump_all_sexpr(&mut v).unwrap();
+    // let res = String::from_utf8(v).unwrap();
+
+    // println!("result: {res}");
+    // assert_eq!(res, "(1 x P)\n(2 x P)\n(3 x P)\n(1 y P)\n(2 y P)\n(3 y P)\n(1 x Q)\n")
+}
+
+fn bench_sink_odd_even_sort(elements: usize) {
+    let mut s = Space::new();
+    const SPACE_EXPRS: &str = r#"
+((phase $p)  (, (parity $i $p) (succ $i $si) (A $i $e) (A $si $se) (lt $se $e))
+             (O (- (A $i $e)) (- (A $si $se)) (+ (A $i $se)) (+ (A $si $e))))
+(phase 0 odd) (phase 1 even)
+(exec repeat (, (A $k $_) (phase $kp $phase) ((phase $phase) $p0 $t0))
+             (, (exec ($k $kp) $p0 $t0)))
+    "#;
+    let mut arr: Vec<_> = (0..elements).map(|i| { let mut hs = std::hash::DefaultHasher::new(); i.hash(&mut hs); base64::engine::general_purpose::STANDARD_NO_PAD.encode((hs.finish() as u32).to_be_bytes()) }).collect();
+    let mut ARRAY: String = (0..elements).map(|x| format!("(A {x} {})\n", arr[x])).collect();
+    // println!("array {ARRAY}");
+    s.load_all_sexpr(ARRAY.as_bytes()).unwrap();
+    let mut SUCCS: String = (0..elements).map(|x| format!("(succ {x} {})\n", x+1)).collect();
+    s.load_all_sexpr(SUCCS.as_bytes()).unwrap();
+    let mut PARITY: String = (0..elements).map(|x| format!("(parity {x} {})\n", if x % 2 == 0 { "even" } else { "odd" })).collect();
+    s.load_all_sexpr(PARITY.as_bytes()).unwrap();
+    arr.sort();
+    let arr_ptr = &arr;
+    let mut ORDER: String = (0..elements).flat_map(|x| (0..x).map(move |y| format!("(lt {} {})\n", arr_ptr[y], arr_ptr[x]))).collect();
+    s.load_all_sexpr(ORDER.as_bytes()).unwrap();
+    s.load_all_sexpr(SPACE_EXPRS.as_bytes()).unwrap();
+
+    let mut t0 = Instant::now();
+    let steps = s.metta_calculus(1000000000000000);
+    println!("elapsed {} steps {} size {}", t0.elapsed().as_millis(), steps, s.btm.val_count());
+
+    let mut v = vec![];
+    // s.dump_all_sexpr(&mut v).unwrap();
+    s.dump_sexpr(expr!(s, "[3] A $ $"), expr!(s, "_2"), &mut v);
+    let res = String::from_utf8(v).unwrap();
+
+    // println!("result:\n{res}");
+    assert_eq!(res[..res.len()-1], arr.iter().map(|i| i.to_string()).join("\n"));
+}
+
 
 fn logic_query() {
     let mut s = Space::new();
@@ -941,7 +1100,7 @@ fn bc3() {
     // assert!(res.contains("(@ (@ . (@ uncurry ab_c)) (@ (@ curry sym) b))\n"));
 }
 
-fn cm0() {
+fn bench_cm0(to_copy: usize) {
     let mut s = Space::new();
     
     // Follow along https://en.wikipedia.org/wiki/Counter_machine#Program
@@ -952,8 +1111,6 @@ fn cm0() {
     s.load_csv(REGS_CSV.as_bytes(), expr!(s, "[2] $ $"), expr!(s, "[3] state 0 [3] REG _1 _2"), b',').unwrap();
     JZ,2,5\nDEC,2,2INC,3,3\nINC,1,4\nJZ,0,0\nJZ,1,9\nDEC,1,7\nINC,2,8\nJZ,0,5\nH,0,0
      */
-    let TO_COPY = 50;
-
     let SPACE_MACHINE = format!(r#"
     (program Z (JZ 2 (S (S (S (S (S Z))))) ))
     (program (S Z) (DEC 2))
@@ -997,7 +1154,7 @@ fn cm0() {
                ((step $k $ts) $p0 $t0))
             (, (exec ($k $ts) $p0 $t0)
                (exec (clocked (S $ts)) $p1 $t1)))
-    "#, peano(TO_COPY));
+    "#, peano(to_copy));
 
     s.load_all_sexpr(SPACE_MACHINE.as_bytes()).unwrap();
 
@@ -1015,7 +1172,7 @@ fn cm0() {
     let res = String::from_utf8(v).unwrap();
     
     // println!("{res}");
-    assert!(res.contains(format!("({} {})", last_ts, peano(TO_COPY)).as_str()));
+    assert!(res.contains(format!("({} {})", last_ts, peano(to_copy)).as_str()));
 }
 
 /*fn match_case() {
@@ -4614,6 +4771,7 @@ fn mm2_bc_v5() {
     }
 }
 
+
 fn mm0_ver_v1() {
     // MM2 Backward Chainer v4: v4 but with exec factored out into the Rust.
     const P: &str = r#"
@@ -4739,12 +4897,14 @@ fn mm0_ver_v1() {
     }
 }
 
-
-
 use std::ffi::OsStr;
 use std::ffi::OsString;
+use std::hash::{Hash, Hasher};
+use std::ops::Add;
+use base64::Engine;
 use serde::{Serialize, Deserialize};
 use clap::{Args, Parser as CLAParser, Subcommand, ValueEnum};
+use clap::builder::TypedValueParser;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 enum Format { MeTTa, JSON, CSV, UPaths, Paths, ACT }
@@ -4801,7 +4961,11 @@ fn main() {
     // mm1_forward_evidence();
     // sink_odd_even_sort();
     // mm2_bc();
-    // return;
+    // sink_add_remove();
+    // sink_wasm_add();
+    // bench_cm0(50);
+    // bench_sink_odd_even_sort(2000);
+    return;
 
     let args = Cli::parse();
 
@@ -4810,12 +4974,14 @@ fn main() {
             #[cfg(debug_assertions)]
             println!("WARNING running in debug, if unintentional, build with --release");
             let mut selected: BTreeSet<&str> = only.split(",").collect();
-            if selected.remove("all") { selected.extend(&["transitive", "clique", "finite_domain", "process_calculus", "exponential", "exponential_fringe"]) }
-            if selected.remove("default") { selected.extend(&["transitive", "clique", "finite_domain", "process_calculus"]) }
+            if selected.remove("all") { selected.extend(&["counter_machine", "transitive", "clique", "finite_domain", "process_calculus", "exponential", "exponential_fringe", "odd_even_sort"]) }
+            if selected.remove("default") { selected.extend(&["counter_machine", "transitive", "clique", "finite_domain", "process_calculus"]) }
+            if selected.remove("sinks") { selected.extend(&["odd_even_sort"]) }
 
             for b in selected {
                 println!("=== benchmarking {} ===", b);
                 match b {
+                    "counter_machine" => { bench_cm0(50); }
                     "transitive" => { bench_transitive_no_unify(50000, 1000000); }
                     "clique" => { bench_clique_no_unify(200, 3600, 5); }
                     "finite_domain" => { bench_finite_domain(10_000); }
@@ -4832,6 +4998,7 @@ fn main() {
                     "mm0_ver_v1" => { mm0_ver_v1(); }
                     "bc2" => { bc2(); }
                     // "rust_bc1" => { run_bc_demo0(); }
+                    "odd_even_sort" => { bench_sink_odd_even_sort(2000); }
                     s => { println!("bench not known: {s}") }
                 }
             }
@@ -4855,11 +5022,13 @@ fn main() {
             logic_query();
 
             bc0();
-            cm0();
 
             sink_two_bipolar_equal_crossed();
             sink_two_positive_equal_crossed();
             sink_odd_even_sort();
+            sink_add_remove();
+            sink_add_remove_var();
+            sink_head();
         }
         Commands::Run { input_path, steps, instrumentation, output_path } => {
             #[cfg(debug_assertions)]
