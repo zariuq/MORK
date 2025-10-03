@@ -4484,11 +4484,12 @@ fn mm2_bc_v5() {
     (, (kb (: $t $T) $proof)) 
     (, (ev (: $t $T) $proof)))
 
+  ;; Not needed here due to the "lift-kb-to-env".
   ;; Priority 01: Direct KB lookup for goals
-  ((step (0100 lookup-in-kb))
-    (, (goal (: $name $expression)) 
-       (kb (: $name $expression) $proof))
-    (, (ev (: $name $expression) $proof)))
+  ; ((step (0100 lookup-in-kb))
+    ; (, (goal (: $name $expression)) 
+       ; (kb (: $name $expression) $proof))
+    ; (, (ev (: $name $expression) $proof)))
 
   ;; Priority 02: Backward chain single-premise rules (axiom instantiation)
   ; ((step (0200 rev1))
@@ -4501,68 +4502,100 @@ fn mm2_bc_v5() {
          ; (, (ev $b ($name-proof $a-proof))))
        ; (debug rev1 (goal $b) needs (goal $a) with proof ($name-proof $a-proof))))
 
-  ((step (0200 rev1))
+  ((step (0011 rev1))
     (, (ev (: $name (-> $a $b)) $name-proof)
        (goal $b))
     (, (goal $a)
-       (exec (02000 complete-rev1)
+       (exec (0012 complete-rev1)
          (, (ev $a $a-proof)
             (ev (: $name (-> $a $b)) $name-proof))
             (O (+ (ev $b ($name-proof $a-proof)))
                (- ((step (02000 complete-rev1)) $premises0 $conclusions0)))) 
-       ((step (02000 complete-rev1))
+       ((step (0032 complete-rev1))
          (, (ev $a $a-proof)
             (ev (: $name (-> $a $b)) $name-proof))
          (, (ev $b ($name-proof $a-proof))))
        (debug rev1 (goal $b) needs (goal $a) with proof ($name-proof $a-proof))))
 
     ;; Priority 03: Backward chain two-premise type constructors (weq, wim, tpl)
-  ((step (0300 rev2))
-  (, (ev (: $name (-> (: $b1 $b2) (: $c1 $c2) (: $d1 $d2))) $name-proof)
-     (goal (: $d1 $d2)))
-  (, (goal (: $b1 $b2))
-     (goal (: $c1 $c2))
-     (exec (03000 complete-rev2)
-       (, (ev (: $b1 $b2) $b-proof)
-          (ev (: $c1 $c2) $c-proof)
-          (ev (: $name (-> (: $b1 $b2) (: $c1 $c2) (: $d1 $d2))) $name-proof))
-       (, (ev (: $d1 $d2) ($name-proof $b-proof $c-proof))))
-     (debug rev2 (: $d1 $d2) needs (: $b1 $b2) and (: $c1 $c2) with proof ($name-proof $b-proof $c-proof))))
+  ((step (0021 rev2))
+    (, (ev (: $name (-> (: $b1 $b2) (: $c1 $c2) (: $d1 $d2))) $name-proof)
+      (goal (: $d1 $d2)))
+    (, (goal (: $b1 $b2))
+      (goal (: $c1 $c2))
+      (exec (0022 complete-rev2)
+        (, (ev (: $b1 $b2) $b-proof)
+            (ev (: $c1 $c2) $c-proof)
+            (ev (: $name (-> (: $b1 $b2) (: $c1 $c2) (: $d1 $d2))) $name-proof))
+        (O (+ (ev (: $d1 $d2) ($name-proof $b-proof $c-proof)))
+            (- ((step (0022 complete-rev2)) $premises0 $conclusions0))))
+      ((step (0022 complete-rev2))
+        (, (ev (: $b1 $b2) $b-proof)
+            (ev (: $c1 $c2) $c-proof)
+            (ev (: $name (-> (: $b1 $b2) (: $c1 $c2) (: $d1 $d2))) $name-proof))
+        (, (ev (: $d1 $d2) ($name-proof $b-proof $c-proof))))
+      (debug rev2 (: $d1 $d2) needs (: $b1 $b2) and (: $c1 $c2) with proof ($name-proof $b-proof $c-proof))))
 
+    ;; Priority 04: Backward chain three-premise rules (like a1 axiom)
+    ((step (0300 rev3))
+      (, (ev (: $name (-> (: $b1 $b2) (: $c1 $c2) (: $d1 $d2) (: $e1 $e2))) $name-proof)
+        (goal (: $e1 $e2)))
+      (, (goal (: $b1 $b2))
+        (goal (: $c1 $c2))
+        (goal (: $d1 $d2))
+        (exec (0301 complete-rev3)
+          (, (ev (: $b1 $b2) $b-proof)
+              (ev (: $c1 $c2) $c-proof)
+              (ev (: $d1 $d2) $d-proof)
+              (ev (: $name (-> (: $b1 $b2) (: $c1 $c2) (: $d1 $d2) (: $e1 $e2))) $name-proof))
+          (O (+ (ev (: $e1 $e2) ($name-proof $b-proof $c-proof $d-proof)))
+              (- ((step (0301 complete-rev3)) $premises0 $conclusions0))))
+        ((step (0301 complete-rev3))
+          (, (ev (: $b1 $b2) $b-proof)
+              (ev (: $c1 $c2) $c-proof)
+              (ev (: $d1 $d2) $d-proof)
+              (ev (: $name (-> (: $b1 $b2) (: $c1 $c2) (: $d1 $d2) (: $e1 $e2))) $name-proof))
+          (, (ev (: $e1 $e2) ($name-proof $b-proof $c-proof $d-proof))))
+        (debug rev3 (: $e1 $e2) needs (: $b1 $b2) and (: $c1 $c2) and (: $d1 $d2) with proof ($name-proof $b-proof $c-proof $d-proof))))
 
-  ;; Priority 04: Backward chain three-premise rules (a1)
-  ((step (0400 rev3))
-    (, (ev (: $name (-> (: $a $Ta) (: $b $Tb) (: $c $Tc) (: $result $Tr))) $name-proof)
-      (goal (: $result $Tr)))
-    (, (goal (: $a $Ta))
-      (goal (: $b $Tb))
-      (goal (: $c $Tc))
-      (exec (04000 complete-rev3)
-        (, (ev (: $a $Ta) $a-proof)
-            (ev (: $b $Tb) $b-proof)
-            (ev (: $c $Tc) $c-proof)
-            (ev (: $name (-> (: $a $Ta) (: $b $Tb) (: $c $Tc) (: $result $Tr))) $name-proof))
-        (, (ev (: $result $Tr) ($name-proof $a-proof $b-proof $c-proof))))
-      (debug rev3 (: $result $Tr) needs (: $a $Ta) and (: $b $Tb) and (: $c $Tc) with proof ($name-proof $a-proof $b-proof $c-proof))))
+    ;; Priority 01: Backward chain four-premise rules (like mp/modus ponens)
+    ((step (0010 rev4))
+      (, (ev (: $name (-> (: $b1 $b2) (: $c1 $c2) (: $d1 $d2) (: $e1 $e2) (: $f1 $f2))) $name-proof)
+        (goal (: $f1 $f2)))
+      (, (goal (: $b1 $b2))
+        (goal (: $c1 $c2))
+        (goal (: $d1 $d2))
+        (goal (: $e1 $e2))
+        (exec (0011 complete-rev4)
+          (, (ev (: $b1 $b2) $b-proof)
+              (ev (: $c1 $c2) $c-proof)
+              (ev (: $d1 $d2) $d-proof)
+              (ev (: $e1 $e2) $e-proof)
+              (ev (: $name (-> (: $b1 $b2) (: $c1 $c2) (: $d1 $d2) (: $e1 $e2) (: $f1 $f2))) $name-proof))
+          (O (+ (ev (: $f1 $f2) ($name-proof $b-proof $c-proof $d-proof $e-proof)))
+              (- ((step (0011 complete-rev4)) $premises0 $conclusions0))))
+        ((step (0011 complete-rev4))
+          (, (ev (: $b1 $b2) $b-proof)
+              (ev (: $c1 $c2) $c-proof)
+              (ev (: $d1 $d2) $d-proof)
+              (ev (: $e1 $e2) $e-proof)
+              (ev (: $name (-> (: $b1 $b2) (: $c1 $c2) (: $d1 $d2) (: $e1 $e2) (: $f1 $f2))) $name-proof))
+          (, (ev (: $f1 $f2) ($name-proof $b-proof $c-proof $d-proof $e-proof))))
+        (debug rev4 (: $f1 $f2) needs (: $b1 $b2) and (: $c1 $c2) and (: $d1 $d2) and (: $e1 $e2) with proof ($name-proof $b-proof $c-proof $d-proof $e-proof))))
 
-  ;; Priority 05: Backward chain MP - keep the general version from v3
-  ((step (0501 rev4))
-    (, (ev (: $name (-> (: $a $Ta) (: $b $Tb) (: $c $Tc) (: $d $Td) (: $result $Tr))) $name-proof)
-      (goal (: $result $Tr)))
-    (, (goal (: $a $Ta))
-      (goal (: $b $Tb))
-      (goal (: $c $Tc))
-      (goal (: $d $Td))
-      (exec (05010 rev4)
-        (, (ev (: $a $Ta) $a-proof)
-            (ev (: $b $Tb) $b-proof)
-            (ev (: $c $Tc) $c-proof)
-            (ev (: $d $Td) $d-proof)
-            (ev (: $name (-> (: $a $Ta) (: $b $Tb) (: $c $Tc) (: $d $Td) (: $result $Tr))) $name-proof))
-        (, (ev (: $result $Tr) ($name-proof $a-proof $b-proof $c-proof $d-proof))))
-      (debug rev4 (: $result $Tr) needs (: $a $Ta) and (: $b $Tb) and (: $c $Tc) and (: $d $Td) with proof ($name-proof $a-proof $b-proof $c-proof $d-proof))))
+   ;; Priority 0001: MP start - create subgoals including wffs
+  ; ((step (0001 mp-start))
+    ; (, (ev (: ⟨mp⟩ 
+            ; (-> (: $P ⟨wff⟩) (: $Q ⟨wff⟩)
+                ; (: $P ⟨|-⟩) (: (⟨->⟩ $P $Q) ⟨|-⟩) (: $Q ⟨|-⟩))) $mp-proof)
+      ; (goal (: $Q ⟨|-⟩)))
+    ; (, (goal (: $P ⟨wff⟩))
+      ; (goal (: $Q ⟨wff⟩))
+      ; (goal (: $P ⟨|-⟩))
+      ; (goal (: (⟨->⟩ $P $Q) ⟨|-⟩))
+      ; (debug mp-start -> (: $Q ⟨|-⟩) needs (: $P ⟨wff⟩) and (: $Q ⟨wff⟩) and (: $P ⟨|-⟩) and (: (⟨->⟩ $P $Q) ⟨|-⟩))))
 
-
+  ;; Seems necessary and with "cheating", i.e., not proving the wff statements.
   ;; Also not sure if it's needed. Hardcoded mp.  Blows up 2x and slows around tick 35->40.
   ;; Priority 06: MP close - the version that worked in v3!
   ((step (0500 mp-close))
@@ -4571,6 +4604,8 @@ fn mm2_bc_v5() {
                   (: $P ⟨|-⟩) (: (⟨->⟩ $P $Q) ⟨|-⟩) (: $Q ⟨|-⟩))) $mp-proof)
        (ev (: $P ⟨|-⟩) $P-proof)
        (ev (: (⟨->⟩ $P $Q) ⟨|-⟩) $PQ-proof)
+       ; (ev (: $P ⟨wff⟩))
+       ; (ev (: $Q ⟨wff⟩))
        (goal (: $Q ⟨|-⟩)))
     (, (ev (: $Q ⟨|-⟩) ($mp-proof $P-proof $PQ-proof))
        (debug mp-close -> (: $Q ⟨|-⟩) with proof ($mp-proof $P-proof $PQ-proof))))
@@ -4585,49 +4620,84 @@ fn mm2_bc_v5() {
   ;; Not needed.  Slows down search.  Search space is "the same".  Removing for now.
   ;; Basically a hard-coding of a1.
   ;; Priority 10: Special case for reflexivity
-  ((step (1000 try-reflexivity-pattern))
-      (, (goal (: (⟨=⟩ $x $x) ⟨|-⟩)))
-      (, (goal (: $x ⟨term⟩))
-         (goal (: (⟨->⟩ (⟨=⟩ $x $x) (⟨->⟩ (⟨=⟩ $x $x) (⟨=⟩ $x $x))) ⟨|-⟩))
-         (goal (: (⟨=⟩ $x $x) ⟨wff⟩))
-         (debug trying-reflexivity-for $x)))
-         
-  (exec bc
-    (, ((step ($priority $name)) $premises0 $conclusions0)
-      (exec bc $premises1 $conclusions1))
-    (O (+ (exec ($priority $name) $premises0 $conclusions0))
-      (+ (exec bc $premises1 $conclusions1))
-      (- ((step ($priority $name)) $premises0 $conclusions0))
-      (+ ((step ( (S ($priority)) $name)) $premises0 $conclusions0))
-    ))
+  ; ((step (1000 try-reflexivity-pattern))
+      ; (, (goal (: (⟨=⟩ $x $x) ⟨|-⟩)))
+      ; (, (goal (: $x ⟨term⟩))
+         ; (goal (: (⟨->⟩ (⟨=⟩ $x $x) (⟨->⟩ (⟨=⟩ $x $x) (⟨=⟩ $x $x))) ⟨|-⟩))
+         ; (goal (: (⟨=⟩ $x $x) ⟨wff⟩))
+         ; (debug trying-reflexivity-for $x)))
+  
+    (exec bc
+      (, ((step ($priority $name)) $premises0 $conclusions0)
+        (exec bc $premises1 $conclusions1))
+      (O (+ (exec ($priority $name) $premises0 $conclusions0))
+        (+ (exec bc $premises1 $conclusions1))
+        (- ((step ($priority $name)) $premises0 $conclusions0))
+        (+ ((step ( (S ($priority)) $name)) $premises0 $conclusions0))
+      ))
 
-  ;; Main backward chaining executor
-  ; (exec bc
-    ; (, ((step ($priority $name)) $premises0 $conclusions0)
-       ; (exec bc $premises1 $conclusions1)
-       ; (low-and-high-priority $lowP $highP $tick))
-    ; (O (+ (exec ($priority $name) $premises0 $conclusions0))
-       ; (+ (exec bc $premises1 $conclusions1))
-       ; (+ ((step ($highP $name)) $premises0 $conclusions0))
-       ; (- ((step ($priority $name)) $premises0 $conclusions0))
-       ; (- (low-and-high-priority $lowP $highP $tick))
-       ; (+ (debug $highP $priority $tick))
+    ;; Silly attempt to try to refine the ordering.  
+    ; (exec 1r4
+    ; (, ((step ($priority rev4)) $premises0 $conclusions0)
+      ; (exec 1r4 $premises1 $conclusions1))
+    ; (, (exec ($priority $name) $premises0 $conclusions0)
+       ; ((step ($priority rev4)) $premises0 $conclusions0)
+       ; (debug exec 1r4 $name $remises0 $conclusions0)
     ; ))
 
-      ; (exec bc
+    ; (exec 1r2
+        ; (, ((step ($priority rev2)) $premises0 $conclusions0)
+          ; (exec 1r4 $premises1 $conclusions1))
+        ; (, (exec ($priority rev2) $premises0 $conclusions0)
+          ; ((step ($priority rev2)) $premises0 $conclusions0)
+          ; (debug exec 1r2 rev2 $premises0 $conclusions0)
+        ; ))
+
+    ; (exec 9bc
     ; (, ((step ($priority $name)) $premises0 $conclusions0)
-       ; (exec bc $premises1 $conclusions1)
-       ; (low-and-higher-priority $lowP $higherP $tick))
-    ; (O (+ (exec ($priority $name) $premises0 $conclusions0))
-       ; (+ (exec bc $premises1 $conclusions1))
-       ; (+ (debug $higherP $priority $tick $name))
-       ; (+ ((step ($higherP ($priority $tick $name))) $premises0 $conclusions0))
-       ; ; (+ (debug ($higherP $priority $tick $name)))
-       ; ; (+ ((step ($higherP $name)) $premises0 $conclusions0))
-       ; (- ((step ($priority $name)) $premises0 $conclusions0))
-       ; (- (low-and-higher-priority $lowP $higherP $tick))
+      ; (exec 9bc $premises1 $conclusions1))
+    ; (, (exec ($priority $name) $premises0 $conclusions0)
+       ; (exec 9bc $premises1 $conclusions1)
+       ; ((step ($priority $name)) $premises0 $conclusions0)
+       ; (debug exec 9bc $name $premises0 $conclusions0)
     ; ))
 
+    ; (exec 9me
+      ; (, (make-exec $name $premises $conclusions))
+      ; (, (exec $name $premises $conclusion)
+        ; (debug make-exec $name)))
+
+   ; (make-exec 1r4
+      ; (, ((step ($priority rev4)) $premises0 $conclusions0))
+      ; (, (exec ($priority rev4) $premises0 $conclusions0)
+        ; ((step ($priority rev4)) $premises0 $conclusions0)
+        ; (debug exec 1r4 rev4 $premises0 $conclusions0)
+      ; ))
+
+   ; (make-exec 1r2
+      ; (, ((step ($priority rev2)) $premises0 $conclusions0))
+      ; (, (exec ($priority rev2) $premises0 $conclusions0)
+        ; ((step ($priority rev2)) $premises0 $conclusions0)
+        ; (debug exec 1r2 rev2 $premises0 $conclusions0)
+      ; ))
+    
+   ; (make-execs
+    ; (exec 1r4
+      ; (, ((step ($priority rev4)) $premises0 $conclusions0)
+        ; (exec 1r4 $premises1 $conclusions1))
+      ; (, (exec ($priority rev4) $premises0 $conclusions0)
+        ; ((step ($priority rev4)) $premises0 $conclusions0)
+        ; (debug exec 1r4 rev4 $premises0 $conclusions0)
+      ; ))
+    ; (exec 1r2
+      ; (, ((step ($priority rev2)) $premises0 $conclusions0)
+        ; (exec 1r4 $premises1 $conclusions1))
+      ; (, (exec ($priority rev2) $premises0 $conclusions0)
+        ; ((step ($priority rev2)) $premises0 $conclusions0)
+        ; (debug exec 1r2 rev2 $premises0 $conclusions0)
+      ; ))
+    ; )
+ 
     ; (exec bc
     ; (, ((step $x) $premises0 $conclusions0)
        ; (exec bc $premises1 $conclusions1))
@@ -4636,9 +4706,9 @@ fn mm2_bc_v5() {
 
   ;; Goal: Prove t = t
   (goal (: (⟨=⟩ ⟨t⟩ ⟨t⟩) ⟨|-⟩))
+  ; (goal (: (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) ⟨wff⟩))
 
-  ;; Seed value;
-  (low-and-high-priority 0000 1000 1)
+
     "#;
 
     let mut s = Space::new();
@@ -4668,90 +4738,6 @@ fn mm2_bc_v5() {
         );
 
         let proof_complete = add_mm2_demo0_query_diagnostics(&mut s, ticks, Some(true));
-
-
-        // Add diagnostics at key points
-        //  if ticks < 50 && !proof_complete {
-          // add_mm2_demo0_query_diagnostics(&mut s, ticks);
-          // add_mm2_demo0_query_diagnostics(&mut s, ticks, Some(true)); 
-        
-
-        // // After each tick, analyze priorities
-        // let mut all_exec_names = Vec::new();
-        // s.dump_sexpr(
-        //     expr!(s, "[4] exec $ $ $"),
-        //     expr!(s, "_1"),  // Extract just the name/priority
-        //     &mut all_exec_names
-        // );
-
-        // let exec_str = String::from_utf8_lossy(&all_exec_names);
-        // let mut priorities: Vec<(String, u32)> = exec_str
-        //     .lines()
-        //     .filter_map(|line| {
-        //         let trimmed = line.trim();
-        //         // Handle patterns like "(0100 lookup-in-kb)" or "(05010 rev4)"
-        //         if trimmed.starts_with('(') && trimmed.contains(' ') {
-        //             // Split on whitespace and get first token after '('
-        //             let parts: Vec<&str> = trimmed
-        //                 .trim_start_matches('(')
-        //                 .split_whitespace()
-        //                 .collect();
-                    
-        //             if let Some(first) = parts.first() {
-        //                 // Try to parse as u32
-        //                 if let Ok(num) = first.parse::<u32>() {
-        //                     return Some((trimmed.to_string(), num));
-        //                 }
-        //             }
-        //         }
-        //         // Skip "bc" and other non-numeric execs
-        //         None
-        //     })
-        //     .collect();
-
-        // priorities.sort_by_key(|(_, p)| *p);
-
-        // let priority_line: Vec<String> = priorities
-        //         .iter()
-        //         .map(|(name, pri)| format!("{}:{}", name.trim_matches(&['(', ')'][..]), pri))
-        //         .collect();
-            
-        //     println!("  Priorities (highest→lowest): {}", priority_line.join(" < "));
-
-        // // Now insert new priority metadata
-        // if let Some((low_name, low_p)) = priorities.first() {
-        //     if let Some((high_name, high_p)) = priorities.last() {
-        //         println!(
-        //             "[priority diag] lowest = {} ({}), highest = {} ({})",
-        //             low_name, low_p, high_name, high_p
-        //         );
-                
-        //         // Check if this priority metadata already exists
-        //         let mut existing = Vec::new();
-        //         s.dump_sexpr(
-        //             expr!(s, "[4] low-and-high-priority $ $ $"),
-        //             expr!(s, "[4] low-and-high-priority _1 _2 _3"),
-        //             &mut existing
-        //         );
-                
-        //         let existing_str = String::from_utf8_lossy(&existing);
-
-        //         println!("  [debug] Priority query returned {} lines: {}", existing_str.lines().count(), existing_str);
-
-        //         // Insert new metadata atoms
-        //         if existing.is_empty() {
-        //           let priority_meta = format!("(low-and-high-priority {} {} {})", low_p, high_p, ticks);
-        //           s.load_sexpr(
-        //               priority_meta.as_bytes(), 
-        //               expr!(s, "$"), 
-        //               expr!(s, "_1")
-        //           ).unwrap();
-        //         }
-        //     }
-        // }
-        
-        // }
-
 
         if n == 0 || proof_complete || ticks >= 33 {
             println!("\n== mm2 (bc v5): ran for {:?} and {} tick(s) ==", t0.elapsed(), ticks);
