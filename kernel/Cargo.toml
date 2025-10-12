@@ -35,3 +35,7 @@ default = ["nightly"]
 neo4j = ["dep:neo4rs", "dep:tokio"]
 interning = []
 nightly = ["pathmap/nightly"]
+
+[[bin]]
+name = "mmb"
+path = "src/mmb.rs"

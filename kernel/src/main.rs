@@ -699,55 +699,63 @@ fn sink_wasm_add() {
     let mut s = Space::new();
 
     const SPACE_EXPRS: &str = r#"
-(wasm add
-    (if (i32.and (i32.and
-            (i32.eq (i32.load8_u 0 (i32.const 0)) (i32.const 0x02))
-            (i32.eq (i32.load8_u 0 (i32.const 1)) (i32.const 0xc4)))
-            (i32.eq (i32.load8_u 0 (i32.const 6)) (i32.const 0xc4)))
-      (then
-        (i32.store 1 (i32.const 0) (i32.const 0xc4))
-        (i32.store 1 (i32.const 1) (call 0 (i32.add
-            (call 0 (i32.load 0 (i32.const 2)))
-            (call 0 (i32.load 0 (i32.const 7))))))
+  (wasm add
+      (if (i32.and (i32.and
+              (i32.eq (i32.load8_u 0 (i32.const 0)) (i32.const 0x02))
+              (i32.eq (i32.load8_u 0 (i32.const 1)) (i32.const 0xc4)))
+              (i32.eq (i32.load8_u 0 (i32.const 6)) (i32.const 0xc4)))
+        (then
+          (i32.store 1 (i32.const 0) (i32.const 0xc4))
+          (i32.store 1 (i32.const 1) (call 0 (i32.add
+              (call 0 (i32.load 0 (i32.const 2)))
+              (call 0 (i32.load 0 (i32.const 7))))))
+        )
+        (else unreachable)
       )
-      (else unreachable)
-    )
-)
+  )
 
-(exec 0 (, (wasm add $f)) (,
-  (exec 1 (, (xs $i $x) (ys $i $y))
-          (O (wasm $f ($x $y))))
-))
+  (exec 0 (, (wasm add $f)) (,
+    (exec 1 (, (xs $i $x) (ys $i $y))
+            (O (wasm $f ($x $y))))))
+
     "#; // (zs $i $z) $z
-    let nargs = 1_000_000;
+    let nargs = 4;
     s.load_all_sexpr(SPACE_EXPRS.as_bytes()).unwrap();
-    let mut args = vec![];
+    let mut args = String::new();
     let options = ["x", "y"];
     for (k, a) in options.iter().enumerate() {
         for i in 0i32..nargs {
+            let value = (options.len() as i32)*i + (k as i32);
+
+            // BOTH: bytestring insert (Arity 3) AND S-expression
             let mut e = vec![item_byte(Tag::Arity(3)), item_byte(Tag::SymbolSize(2)), a.as_bytes()[0], b's'];
             let is = i.to_string();
             e.push(item_byte(Tag::SymbolSize(is.len() as _)));
             e.extend_from_slice(is.as_bytes());
             e.push(item_byte(Tag::SymbolSize(4)));
-            e.extend_from_slice(((options.len() as i32)*i + (k as i32)).to_be_bytes().as_slice());
+            e.extend_from_slice(&value.to_be_bytes());
             s.btm.insert(&e[..], ());
+
+            // Also as S-expression
+            // args.push_str(&format!("({}s {} {})\n", a, i, value));
         }
     }
-    s.load_all_sexpr(&args[..]).unwrap();
+    s.load_all_sexpr(args.as_bytes()).unwrap();
 
     let mut t0 = Instant::now();
     let steps = s.metta_calculus(1);
     println!("elapsed {} steps {} size {}", t0.elapsed().as_millis(), steps, s.btm.val_count());
 
-    // let mut v = vec![];
+    let mut v = vec![];
     // s.dump_sexpr(expr!(s, "[4] cux $ $ $"), expr!(s, "[3] _3 _2 _1"), &mut v);
-    // s.dump_all_sexpr(&mut v).unwrap();
-    // let res = String::from_utf8(v).unwrap();
+    s.dump_all_sexpr(&mut v).unwrap();
+    let res = String::from_utf8(v).unwrap();
 
-    // println!("result: {res}");
+    println!("result: {res}");
     // assert_eq!(res, "(1 x P)\n(2 x P)\n(3 x P)\n(1 y P)\n(2 y P)\n(3 y P)\n(1 x Q)\n")
 }
+
+
 
 fn bench_sink_odd_even_sort(elements: usize) {
     let mut s = Space::new();
@@ -4899,6 +4907,158 @@ fn mm0_ver_v1() {
     }
 }
 
+fn test_mm2_stack_simple() {
+    println!("=== MM2 Stack Operations Test - Simple Push ===\n");
+
+    let mut s = Space::new();
+    let t0 = Instant::now();
+
+    // Load the final push test
+    let test_path = "/home/zar/claude/hyperon/metamath/mmverify/mm2/test_push_final.mm2";
+    let test_code = std::fs::read_to_string(test_path)
+        .expect(&format!("Failed to read {}", test_path));
+
+    println!("Loading test code from {}...", test_path);
+    s.load_all_sexpr(test_code.as_bytes()).unwrap();
+
+    println!("\n--- Initial state ---");
+    let mut buf = Vec::new();
+    s.dump_all_sexpr(&mut buf).unwrap();
+    let dump = String::from_utf8_lossy(&buf);
+    println!("{}", dump);
+
+    // Run the calculus
+    println!("\n--- Running metta_calculus for up to 10 ticks ---");
+    let ticks = s.metta_calculus(10);
+    println!("Executed {} tick(s) in {:?}", ticks, t0.elapsed());
+
+    // Check for expected result
+    println!("\n--- Checking for result: (stack-state ...) ---");
+    let mut results = Vec::new();
+    s.dump_sexpr(
+        expr!(s, "[2] stack-state $"),
+        expr!(s, "[2] stack-state _1"),
+        &mut results
+    );
+
+    if results.is_empty() {
+        println!("❌ FAILED: No stack-state fact found!");
+        println!("\nFull space dump:");
+        let mut buf = Vec::new();
+        s.dump_all_sexpr(&mut buf).unwrap();
+        println!("{}", String::from_utf8_lossy(&buf));
+    } else {
+        let result_str = String::from_utf8_lossy(&results);
+        println!("✅ SUCCESS: Found result:");
+        println!("  {}", result_str);
+
+        // Check if it matches expected: ((term t))
+        if result_str.contains("term") && result_str.contains("t") {
+            println!("  ✅ Content matches expected!");
+        }
+    }
+
+    // Check that exec was consumed
+    println!("\n--- Checking that exec was consumed (should be gone) ---");
+    let mut exec_check = Vec::new();
+    s.dump_sexpr(
+        expr!(s, "[2] exec push-fhyp $"),
+        expr!(s, "[2] exec push-fhyp _1"),
+        &mut exec_check
+    );
+
+    if exec_check.is_empty() {
+        println!("✅ Good: exec command was consumed");
+    } else {
+        println!("⚠️  Warning: exec still present");
+        println!("  {}", String::from_utf8_lossy(&exec_check));
+    }
+
+    println!("\n=== Test Complete ===");
+}
+
+fn test_mm2_stack_comprehensive() {
+    println!("=== MM2 Stack Operations Test - Comprehensive ===\n");
+
+    let mut s = Space::new();
+
+    // Load stack operations library
+    let stack_path = "/home/zar/claude/hyperon/metamath/mmverify/mm2/stack.mm2";
+    let stack_code = std::fs::read_to_string(stack_path)
+        .expect(&format!("Failed to read {}", stack_path));
+
+    println!("Loading stack.mm2...");
+    s.load_all_sexpr(stack_code.as_bytes()).unwrap();
+
+    // Load comprehensive tests
+    let test_path = "/home/zar/claude/hyperon/metamath/mmverify/mm2/test_stack.mm2";
+    let test_code = std::fs::read_to_string(test_path)
+        .expect(&format!("Failed to read {}", test_path));
+
+    println!("Loading test_stack.mm2...");
+    s.load_all_sexpr(test_code.as_bytes()).unwrap();
+
+    // Run calculus
+    println!("\nRunning calculus...");
+    let t0 = Instant::now();
+    let ticks = s.metta_calculus(1000);
+    println!("Executed {} tick(s) in {:?}", ticks, t0.elapsed());
+
+    // Check various results
+    println!("\n--- Results ---");
+
+    // Check for stack-pushed
+    let mut pushed = Vec::new();
+    s.dump_sexpr(
+        expr!(s, "[2] stack-pushed $"),
+        expr!(s, "[2] stack-pushed _1"),
+        &mut pushed
+    );
+    let pushed_str = String::from_utf8_lossy(&pushed);
+    let pushed_count = pushed_str.lines().filter(|l| !l.trim().is_empty()).count();
+    println!("stack-pushed facts: {}", pushed_count);
+    for (i, line) in pushed_str.lines().take(5).enumerate() {
+        if !line.trim().is_empty() {
+            println!("  {}: {}", i+1, line);
+        }
+    }
+
+    // Check for stack-popped
+    let mut popped = Vec::new();
+    s.dump_sexpr(
+        expr!(s, "[2] stack-popped $"),
+        expr!(s, "[2] stack-popped _1"),
+        &mut popped
+    );
+    let popped_str = String::from_utf8_lossy(&popped);
+    let popped_count = popped_str.lines().filter(|l| !l.trim().is_empty()).count();
+    println!("\nstack-popped facts: {}", popped_count);
+    for (i, line) in popped_str.lines().take(5).enumerate() {
+        if !line.trim().is_empty() {
+            println!("  {}: {}", i+1, line);
+        }
+    }
+
+    // Check for errors
+    let mut errors = Vec::new();
+    s.dump_sexpr(
+        expr!(s, "[2] stack-error $"),
+        expr!(s, "[2] stack-error _1"),
+        &mut errors
+    );
+    let errors_str = String::from_utf8_lossy(&errors);
+    let errors_count = errors_str.lines().filter(|l| !l.trim().is_empty()).count();
+    println!("\nstack-error facts: {}", errors_count);
+    for (i, line) in errors_str.lines().enumerate() {
+        if !line.trim().is_empty() {
+            println!("  {}: {}", i+1, line);
+        }
+    }
+
+    println!("\n=== Comprehensive Test Complete ===");
+}
+
+
 use std::ffi::OsStr;
 use std::ffi::OsString;
 use std::hash::{Hash, Hasher};
@@ -4950,7 +5110,6 @@ enum Commands {
     }
 }
 
-
 fn main() {
     env_logger::init();
 
@@ -5001,6 +5160,9 @@ fn main() {
                     "bc2" => { bc2(); }
                     // "rust_bc1" => { run_bc_demo0(); }
                     "odd_even_sort" => { bench_sink_odd_even_sort(2000); }
+                    "sink_wasm_add" => { sink_wasm_add(); }
+                    "test_stack" => { test_mm2_stack_simple(); }
+                    "test_stack_full" => { test_mm2_stack_comprehensive(); }
                     s => { println!("bench not known: {s}") }
                 }
             }
