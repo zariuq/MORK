@@ -1,0 +1,84 @@
+; ============================================================================
+; Fibonacci in MM2: Demonstrating Unfold/Fold Recursion Pattern
+; ============================================================================
+;
+; This example shows how recursive functions work in MM2:
+; 1. UNFOLD phase: Break problems into smaller subproblems
+; 2. BASE cases: Stop recursion and return values
+; 3. FOLD phase: Combine results back together
+;
+; Example: fib(3)
+;   UNFOLD: fib(3) → fib(2) + fib(1)
+;     UNFOLD: fib(2) → fib(1) + fib(0)
+;       BASE: fib(1) → 1
+;       BASE: fib(0) → 0
+;     FOLD: fib(2) = 1 + 0 = 1
+;     BASE: fib(1) → 1
+;   FOLD: fib(3) = 1 + 1 = 2
+; ============================================================================
+
+; === Broadcast chain pattern ===
+; Extracts exec rules from step declarations to keep them persistent
+; Without this, exec rules are consumed and can't fire multiple times
+(exec bc
+  (, ((step ($priority $name)) $premises0 $conclusions0)
+     (exec bc $premises1 $conclusions1))
+  (O (+ (exec ($priority $name) $premises0 $conclusions0))
+     (+ (exec bc $premises1 $conclusions1))
+     (- ((step ($priority $name)) $premises0 $conclusions0))
+     (+ ((step ((S ($priority)) $name)) $premises0 $conclusions0))))
+
+; === BASE CASES (where recursion stops) ===
+
+((step (0 fib-base-0))
+  (, (fib 0 $id))
+  (O (+ (fib-result $id 0))
+     (- (fib 0 $id))))
+
+((step (1 fib-base-1))
+  (, (fib 1 $id))
+  (O (+ (fib-result $id 1))
+     (- (fib 1 $id))))
+
+; === RECURSIVE UNFOLD ===
+
+; fib(2) = fib(1) + fib(0)
+((step (2 fib-2-unfold))
+  (, (fib 2 $id))
+  (O (+ (fib 1 (left-2 $id)))
+     (+ (fib 0 (right-2 $id)))
+     (+ (wait-2 $id))
+     (- (fib 2 $id))))
+
+; fib(3) = fib(2) + fib(1)
+((step (4 fib-3-unfold))
+  (, (fib 3 $id))
+  (O (+ (fib 2 (left-3 $id)))
+     (+ (fib 1 (right-3 $id)))
+     (+ (wait-3 $id))
+     (- (fib 3 $id))))
+
+; === FOLD (combine results) ===
+
+; fib(2) fold: 1 + 0 = 1
+((step (3 fib-2-fold))
+  (, (wait-2 $id)
+     (fib-result (left-2 $id) 1)
+     (fib-result (right-2 $id) 0))
+  (O (+ (fib-result $id 1))
+     (- (wait-2 $id))
+     (- (fib-result (left-2 $id) 1))
+     (- (fib-result (right-2 $id) 0))))
+
+; fib(3) fold: 1 + 1 = 2
+((step (5 fib-3-fold))
+  (, (wait-3 $id)
+     (fib-result (left-3 $id) 1)
+     (fib-result (right-3 $id) 1))
+  (O (+ (fib-result $id 2))
+     (- (wait-3 $id))
+     (- (fib-result (left-3 $id) 1))
+     (- (fib-result (right-3 $id) 1))))
+
+; === Compute fib(3) = 2 ===
+(fib 10 main)

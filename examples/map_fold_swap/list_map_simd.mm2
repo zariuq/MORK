@@ -1,0 +1,36 @@
+; list_map_simd: SIMD-style parallel map
+; Instead of sequential self-replication, process ALL elements at once!
+; Each element gets its own exec rule that fires independently.
+
+; Input list as indexed atoms
+(list input 0 5)
+(list input 1 3)
+(list input 2 1)
+
+; Function table: double(x) = 2*x
+(double 1 2)
+(double 2 4)
+(double 3 6)
+(double 4 8)
+(double 5 10)
+
+; SIMD approach: One exec with $i variable matches ALL elements at once!
+; No self-replication, no loops - pure parallel SIMD!
+
+(exec map
+  (, (list input $i $x)
+     (double $x $result))
+  (O (- (list input $i $x))
+     (+ (list-out input $i $result))))
+
+; Expected output (all elements processed in ONE step!):
+; (list-out input 0 10)  ← double(5)
+; (list-out input 1 6)   ← double(3)
+; (list-out input 2 2)   ← double(1)
+;
+; Performance comparison:
+; - Sequential: 4 steps, 274 transitions
+; - SIMD: 1 step, 25 transitions ⚡
+;
+; The magic: $i matches ALL indices, so all elements are processed simultaneously!
+; This is true SIMD-style parallel processing.

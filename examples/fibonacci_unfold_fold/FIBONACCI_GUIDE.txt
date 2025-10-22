@@ -1,0 +1,48 @@
+UNDERSTANDING THE FIBONACCI MM2 OUTPUT
+======================================
+
+WHAT ARE THOSE NESTED S() STRUCTURES?
+--------------------------------------
+The messy output like:
+
+  ((step ((S ((S ((S ((S ...))))) fib-base-0)) ...)
+
+These are PRIORITY COUNTERS from the broadcast chain pattern.
+
+HOW IT WORKS:
+1. Rules start as: ((step (0 fib-base-0)) ...)
+2. Broadcast chain extracts: (exec (0 fib-base-0) ...)
+3. Creates next step: ((step ((S (0)) fib-base-0)) ...)
+4. After N steps: ((step ((S ((S (... N times ...
+
+This keeps rules "alive" so they can fire multiple times.
+Each S() wrapper = one regeneration cycle.
+
+WHY NOT USE SIMPLE NUMBERS?
+----------------------------
+The broadcast chain uses (S ($priority)) to increment priorities:
+  (+ ((step ((S ($priority)) $name)) ...))
+
+This automatically creates nested S structures. You COULD use fixed
+numeric priorities like (100 fib-base-0), but then you need to
+manually re-add each exec in its own output - more code, same result.
+
+TRADEOFF:
+  Broadcast chain = less code, messy intermediate output
+  Manual regen = more code, same messy output
+
+SOLUTION: FILTER THE OUTPUT
+---------------------------
+# Clean view - just results:
+mork run --steps 2000 fibonacci_table.mm2 | grep "fib-result test"
+
+# With timing info:
+mork run --steps 2000 fibonacci_table.mm2 2>&1 | grep -E "(executing|fib-result test)"
+
+OUTPUT:
+  executing 2000 steps took 329 ms (unifications 2666, writes 9952, transitions 644715)
+  (fib-result test-8 21)
+  (fib-result test-10 55)
+  (fib-result test-12 144)
+
+Perfect! ✓

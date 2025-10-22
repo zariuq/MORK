@@ -1,0 +1,41 @@
+; Simple unfold/fold pattern demonstration
+; compute-double(n) unfolds to: add(n, n), then folds to produce result
+; This shows the recursion pattern without actual recursion
+
+; --- Example 1: Double 3 (unfold to 3+3, fold to 6) ---
+
+; UNFOLD phase: Break compute-double into add operation
+(exec (000 double-unfold)
+  (, (compute-double $n $id))
+  (O (+ (add $n $n (add-id $id)))
+     (+ (wait-double $id))
+     (- (compute-double $n $id))))
+
+; Hardcode addition results for demo (in real version, this would be recursive)
+(exec (001 add-3-3)
+  (, (add 3 3 $id))
+  (O (+ (add-result $id 6))
+     (- (add 3 3 $id))))
+
+(exec (002 add-2-2)
+  (, (add 2 2 $id))
+  (O (+ (add-result $id 4))
+     (- (add 2 2 $id))))
+
+(exec (003 add-1-1)
+  (, (add 1 1 $id))
+  (O (+ (add-result $id 2))
+     (- (add 1 1 $id))))
+
+; FOLD phase: Collect result from addition
+(exec (004 double-fold)
+  (, (wait-double $id)
+     (add-result (add-id $id) $result))
+  (O (+ (final-result $id $result))
+     (- (wait-double $id))
+     (- (add-result (add-id $id) $result))))
+
+; --- Start computation ---
+(compute-double 3 task1)
+(compute-double 2 task2)
+(compute-double 1 task3)

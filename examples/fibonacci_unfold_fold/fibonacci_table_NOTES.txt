@@ -1,0 +1,40 @@
+FIBONACCI TABLE-BASED IMPLEMENTATION - KEY INSIGHTS
+====================================================
+
+SUCCESS: Generic Fibonacci working up to fib(12) = 144
+
+RESULTS:
+  fib(8)  = 21  ✓
+  fib(10) = 55  ✓
+  fib(12) = 144 ✓
+
+KEY OPTIMIZATION: Bidirectional Pattern Matching
+-------------------------------------------------
+Instead of separate S and P tables:
+
+  OLD WAY (redundant):
+    S(4, 5)   - successor: 4 → 5
+    P(5, 4)   - predecessor: 5 → 4
+
+  NEW WAY (optimized):
+    S(4, 5)   - BOTH directions!
+    
+  Pattern matching works bidirectionally:
+    S(4, $s)  matches S(4, 5) → $s = 5  (successor)
+    S($p, 5)  matches S(4, 5) → $p = 4  (predecessor)
+
+TABLES USED:
+  - S(n, n+1):     144 entries (0 to 144)
+  - A(a, b, sum):  ~8100 entries (covers all needed additions)
+
+FIBONACCI RULE (Generic):
+  ((step (2 fib-unfold))
+    (, (fib $n $id)
+       (S $n1 $n)      ; n1 = n-1 (predecessor via S!)
+       (S $n2 $n1))    ; n2 = n-2 (predecessor via S!)
+    (O (+ (fib $n1 (left $id)))
+       (+ (fib $n2 (right $id)))
+       (+ (wait-add $id))
+       (- (fib $n $id))))
+
+This is TRUE GENERIC recursion - works for ANY n in table bounds!

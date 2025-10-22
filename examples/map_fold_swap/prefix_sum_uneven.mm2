@@ -1,0 +1,80 @@
+; prefix_sum_uneven: Show multiple lists of DIFFERENT lengths processing in parallel
+; Demonstrates that the pattern naturally handles different sizes!
+;
+; Example:
+;   input: [5, 3, 1] (3 elements) → [5, 8, 9]
+;   meep:  [2, 4, 1, 3, 5] (5 elements) → [2, 6, 7, 10, 15]
+
+; Input lists - DIFFERENT lengths!
+(list input 0 5)
+(list input 1 3)
+(list input 2 1)
+; input has 3 elements
+
+(list meep 0 2)
+(list meep 1 4)
+(list meep 2 1)
+(list meep 3 3)
+(list meep 4 5)
+; meep has 5 elements
+
+; Start prefix_sum for BOTH lists
+; Each will naturally terminate when it runs out of elements!
+(prefix input 0 0)
+(prefix meep 0 0)
+
+; Addition table - extended for meep's values
+(add 0 1 1)
+(add 0 2 2)
+(add 0 3 3)
+(add 0 4 4)
+(add 0 5 5)
+(add 1 3 4)
+(add 2 4 6)
+(add 3 5 8)
+(add 5 3 8)
+(add 6 1 7)
+(add 7 3 10)
+(add 8 1 9)
+(add 10 5 15)
+
+; Successor - extended to 4
+(succ 0 1) (succ 1 2) (succ 2 3) (succ 3 4) (succ 4 5)
+
+; Prefix rule: same as before, $name handles both lists!
+(exec prefix
+  (, (prefix $name $i $running_sum)
+     (list $name $i $x)
+     (add $running_sum $x $new_sum)
+     (succ $i $i1)
+     (exec prefix $p $t))
+  (O (- (prefix $name $i $running_sum))
+     (- (list $name $i $x))
+     (+ (list-out $name $i $new_sum))
+     (+ (prefix $name $i1 $new_sum))
+     (+ (exec prefix $p $t))))
+
+; Base case: naturally terminates when (list $name $i $x) fails to match
+(exec prefix-done
+  (, (prefix $name $i $running_sum))
+  (O (- (prefix $name $i $running_sum))
+     (+ (prefix-complete $name))))  ; Track which list completed!
+
+; Expected output:
+; (list-out input 0 5)    ← input: 0+5 = 5
+; (list-out input 1 8)    ← input: 5+3 = 8
+; (list-out input 2 9)    ← input: 8+1 = 9
+; (prefix-complete input) ← input done! (3 elements)
+;
+; (list-out meep 0 2)     ← meep: 0+2 = 2
+; (list-out meep 1 6)     ← meep: 2+4 = 6
+; (list-out meep 2 7)     ← meep: 6+1 = 7
+; (list-out meep 3 10)    ← meep: 7+3 = 10
+; (list-out meep 4 15)    ← meep: 10+5 = 15
+; (prefix-complete meep)  ← meep done! (5 elements)
+;
+; Key insight:
+; - input finishes after 3 steps, meep continues for 2 more
+; - Both process independently - different lengths don't interfere!
+; - Pattern matching naturally stops when no more elements exist
+; - No explicit length tracking needed!

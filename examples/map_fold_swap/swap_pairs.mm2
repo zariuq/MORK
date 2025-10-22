@@ -1,0 +1,37 @@
+; swap_pairs: Swap the two elements within each pair
+; Example: (5 cow) → (cow 5)
+;          (3 dog) → (dog 3)
+;
+; Uses indexed list representation
+
+; Input list - each element is a 2-element pair
+(list input 0 (3 dog))
+(list input 1 (5 cow))
+(list input 2 (7 pig))
+(list input 3 (2 hen))
+
+; Metadata: process list from index 0
+(swap-pairs input 0)
+
+; Main rule: swap elements within each pair
+; Stops naturally when (list $name $i ...) doesn't match!
+(exec swap
+  (, (swap-pairs $name $i)
+     (list $name $i ($first $second))  ; Match pair structure
+     (succ $i $i1)
+     (exec swap $p $t))
+  (O (- (swap-pairs $name $i))
+     (- (list $name $i ($first $second)))
+     ; Output the SWAPPED pair
+     (+ (list-out $name $i ($second $first)))  ; Swapped!
+     (+ (swap-pairs $name $i1))
+     (+ (exec swap $p $t))))
+
+; Helpers
+(succ 0 1) (succ 1 2) (succ 2 3) (succ 3 4) (succ 4 5)
+
+; Expected output:
+; (list-out input 0 (dog 3))  ← swapped!
+; (list-out input 1 (cow 5))  ← swapped!
+; (list-out input 2 (pig 7))  ← swapped!
+; (list-out input 3 (hen 2))  ← swapped!

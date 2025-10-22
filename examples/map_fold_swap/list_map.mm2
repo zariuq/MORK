@@ -1,0 +1,48 @@
+; list_map: Apply a function to each element of a list
+; Example: double each number in [1,2,3] → [2,4,6]
+;
+; Demonstrates:
+; 1. Generic list mapping using function table
+; 2. Self-replicating exec pattern
+; 3. Building output with indices
+
+; Input: map 'double' function over list [1,2,3]
+(map-at 0 double (Cons 1 (Cons 2 (Cons 3 Nil))))
+(map-at 0 double (Cons 2 (Cons 1 (Cons 5 Nil))))
+
+; Function table: double(x) = 2*x
+(double 1 2)
+(double 2 4)
+(double 3 6)
+(double 4 8)
+(double 5 10)
+
+; Main map rule: applies function to head, recurses on tail
+(exec map
+  (, (map-at $i $fn (Cons $x $rest))
+     ($fn $x $result)        ; Apply function: fn(x) = result
+     (succ $i $i1)           ; Next index
+     (exec map $p $t))       ; Self-replicate
+  (O (- (map-at $i $fn (Cons $x $rest)))
+     (+ (out $i $result))            ; Output result at index i
+     (+ (map-at $i1 $fn $rest))      ; Continue with rest
+     (+ (exec map $p $t))))          ; Regenerate rule
+
+; Successor for indices
+(succ 0 1)
+(succ 1 2)
+(succ 2 3)
+(succ 3 4)
+(succ 4 5)
+
+; Base case: empty list
+(exec map-done
+  (, (map-at $i $fn Nil))
+  (O (- (map-at $i $fn Nil))
+     (+ (map-complete))))
+
+; Expected output:
+; (out 0 2)  ← double(1)
+; (out 1 4)  ← double(2)
+; (out 2 6)  ← double(3)
+; (map-complete)
