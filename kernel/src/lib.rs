@@ -4,5 +4,6 @@
 #![feature(stmt_expr_attributes)]
 
 pub mod space;
+mod sources;
 mod sinks;
 pub mod mmb;
