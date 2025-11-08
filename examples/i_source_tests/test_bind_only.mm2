@@ -1,0 +1,21 @@
+; Test: == to construct from existing pattern
+; ============================================
+;
+; Pattern: (I (== <expr> $var)) where <expr> matches space
+; Constructs the expression and binds to variable
+
+; Setup: An expression with repeated variables
+(E ($x $x $x))
+
+; Test: Use == to construct matching expression
+(exec 0
+  (I (== (E ($x $x $x)) $e))
+  (O (+ (show $e))))
+
+; What happens:
+; 1. (E ($x $x $x)) pattern matches the fact in space
+; 2. $x gets bound (to some fresh variable)
+; 3. (== ...) constructs (E ($a $a $a)) with that binding
+; 4. $e gets bound to the constructed expression
+;
+; Expected: (show (E ($a $a $a)))

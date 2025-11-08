@@ -1,0 +1,31 @@
+; Test: Mixing BTM (main space) and ACT (external file)
+; ======================================================
+;
+; Prerequisites: Create ACT file first
+;   ./examples/misc/make_fruit_colors_act.sh
+;
+; Pattern: (I (BTM <pat1>) (ACT file <pat2>))
+; Combines queries from main space AND external ACT file!
+
+; Setup: Preferences in main space
+(likes Alice apple)
+(likes Bob banana)
+(likes Carol grape)
+
+; Test: Find what color each person's favorite fruit is
+; 1. (BTM (likes $person $fruit)) queries main space
+; 2. (ACT fruit_colors (color $fruit $c)) queries ACT file
+; 3. Both must agree on $fruit binding!
+
+(exec 0
+  (I (BTM (likes $person $fruit))
+     (ACT fruit_colors (color $fruit $c)))
+  (O (+ (preference $person likes $fruit which-is $c))))
+
+; Expected:
+; (preference Alice likes apple which-is red)
+; (preference Bob likes banana which-is yellow)
+; (preference Carol likes grape which-is purple)
+;
+; Key insight: Mix internal facts (BTM) with external data (ACT)!
+; This is like a JOIN in databases.

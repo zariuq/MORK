@@ -1,0 +1,35 @@
+; Test: != operator (exclusion/all-different binding)
+; ===================================================
+;
+; != generates ALL bindings where values are DIFFERENT
+; Pattern: (!= <expr1> <expr2>) binds to all pairs where expr1 ≠ expr2
+
+; Setup: Three values in space
+(VAL X)
+(VAL Y)
+(VAL Z)
+
+; Test: Find all pairs where values differ
+; (!= (VAL $x) (VAL $y)) will bind:
+;   $x=X, $y=Y
+;   $x=X, $y=Z
+;   $x=Y, $y=X
+;   $x=Y, $y=Z
+;   $x=Z, $y=X
+;   $x=Z, $y=Y
+; (6 combinations - all different pairs)
+
+(exec 0
+  (I (!= (VAL $x) (VAL $y)))
+  (O (+ (OUT ($x != $y)))))
+
+; Expected output (6 facts):
+; (OUT (X != Y))
+; (OUT (X != Z))
+; (OUT (Y != X))
+; (OUT (Y != Z))
+; (OUT (Z != X))
+; (OUT (Z != Y))
+;
+; Key insight: != is ALL-DIFFERENT generator, not equality check!
+; It produces the cartesian product excluding equal pairs.

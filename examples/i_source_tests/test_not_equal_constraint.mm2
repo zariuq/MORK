@@ -1,0 +1,32 @@
+; Test: != as a constraint (all-different requirement)
+; ====================================================
+;
+; Use != to ensure variables get DIFFERENT values
+; Useful for: graph coloring, constraint satisfaction, etc.
+
+; Setup: Available colors
+(color red)
+(color blue)
+(color green)
+
+; Task: Assign 3 different colors to 3 nodes
+; Requirements:
+; - Each node gets a color
+; - All three colors must be DIFFERENT
+
+(exec 0
+  (I (!= (color $c1) (color $c2))
+     (!= (color $c2) (color $c3))
+     (!= (color $c3) (color $c1)))
+  (O (+ (coloring $c1 $c2 $c3))))
+
+; Expected: All 6 permutations of 3 colors
+; (coloring red blue green)
+; (coloring red green blue)
+; (coloring blue red green)
+; (coloring blue green red)
+; (coloring green red blue)
+; (coloring green blue red)
+;
+; Key insight: Multiple != constraints ensure all-different values!
+; This is constraint programming in MM2.

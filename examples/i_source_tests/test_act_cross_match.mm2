@@ -1,0 +1,27 @@
+; Test: Cross-matching two ACT queries
+; =====================================
+;
+; Prerequisites: Create ACT file first
+;   ./examples/misc/make_fruit_colors_act.sh
+;
+; Pattern: (I (ACT file1 <pat1>) (ACT file2 <pat2>))
+; Queries TWO ACT files (or same file twice) with consistent bindings
+
+; Test: Find items that appear in BOTH patterns in the ACT file
+; The fruit_colors.act has facts like:
+;   (color apple red)
+;   (color banana yellow)
+
+; This won't work perfectly because we only have one type of fact,
+; but let's try finding the same fruit mentioned twice
+(exec 0
+  (I (ACT fruit_colors (color $fruit $c1))
+     (ACT fruit_colors (color $fruit $c2)))
+  (O (+ (fruit-has-colors $fruit $c1 $c2))))
+
+; Expected: Each fruit paired with itself and others
+; (fruit-has-colors apple red red)
+; (fruit-has-colors banana yellow yellow)
+; etc.
+;
+; Key insight: Multiple ACT queries can cross-match on shared variables!

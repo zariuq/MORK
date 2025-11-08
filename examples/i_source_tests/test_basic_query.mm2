@@ -1,0 +1,28 @@
+; Test: Basic pattern matching and transformation
+; ===============================================
+;
+; Demonstrates: (, <pattern>) for positive matches
+; Each color fact triggers the exec to produce a "found" fact
+
+; Setup: Add color facts
+(color apple red)
+(color banana yellow)
+(color grape purple)
+
+; Add a trigger to start processing
+(start-query)
+
+; Test: For each color, produce a result
+; The trigger ensures the exec fires
+(exec (0 find-colors)
+  (, (start-query)
+     (color $fruit $c))
+  (O (+ (found $fruit has-color $c))
+     (- (start-query))))
+
+; Expected output (one execution, multiple results):
+; (found apple has-color red)
+; (found banana has-color yellow)
+; (found grape has-color purple)
+;
+; Note: Execution happens once per combination of matches

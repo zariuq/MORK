@@ -1,0 +1,34 @@
+; Test: Multiple patterns (conjunction)
+; ======================================
+;
+; Demonstrates: (, <pattern1> <pattern2> ...) matches ALL patterns together
+; The exec fires only when all patterns can be satisfied simultaneously
+
+; Setup: Fruits and their colors
+(fruit apple)
+(fruit banana)
+(fruit grape)
+
+(color apple red)
+(color banana yellow)
+(color grape purple)
+
+; Add trigger
+(find-red-fruits)
+
+; Test: Find fruits that are red
+; Requires BOTH (fruit $name) AND (color $name red) to match
+(exec (0 red-fruit-finder)
+  (, (find-red-fruits)
+     (fruit $name)
+     (color $name red))
+  (O (+ (red-fruit-found $name))
+     (- (find-red-fruits))))
+
+; Expected output:
+; (red-fruit-found apple)
+;
+; Why only apple?
+; - apple matches (fruit apple) ✓
+; - apple matches (color apple red) ✓
+; - banana and grape don't match (color $name red) ✗

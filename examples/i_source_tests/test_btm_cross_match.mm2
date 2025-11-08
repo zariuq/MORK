@@ -1,0 +1,22 @@
+; Test: BTM cross-matching pattern
+; =================================
+;
+; From main.rs:1154 - matching two patterns with consistent bindings
+
+; Setup: Same structure for both patterns
+(Something (foo bar) (foo bar))
+(Else (foo bar) (foo bar))
+
+; This should match because both have (foo bar) (foo bar)
+(exec (0 cross-match)
+  (I (BTM (Something $x $y))
+     (BTM (Else $x $y)))
+  (O (+ (MATCHED $x $y))))
+
+; Expected: (MATCHED (foo bar) (foo bar))
+
+(exec (0 cross-match)
+  (, (Something $x $y)
+     (Else $x $y))
+  (O (+ (MATCHED2 $x $y))))
+

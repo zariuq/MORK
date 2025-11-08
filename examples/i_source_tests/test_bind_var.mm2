@@ -1,0 +1,26 @@
+; Test: == operator (expression constructor/unifier)
+; ==================================================
+;
+; == doesn't "check equality" - it CONSTRUCTS expressions!
+; Pattern: (== <expr> $var) builds <expr> and binds $var to it
+
+(LHS (foo $y))
+(RHS ($x bar))
+
+; How this works:
+; 1. (BTM (LHS $x)) queries space, finds (LHS (foo $y))
+;    Binds: $x = (foo $y)
+; 2. (== (RHS $x) $o) constructs (RHS (foo $y))
+;    Binds: $o = (RHS (foo $y))  [note: variables get fresh names like $a]
+; 3. Output: (+ (REM $o)) produces (REM (RHS ($a bar)))
+
+(exec 0
+  (I (BTM (LHS $x))
+     (== (RHS $x) $o))
+  (O (+ (REM $o))
+     (- $o)))
+
+; Expected: (REM (RHS ($a bar)))
+;
+; Key insight: == is an expression CONSTRUCTOR, not a comparison!
+; It builds new expressions from patterns with variable substitution.
