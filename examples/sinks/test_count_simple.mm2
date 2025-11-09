@@ -1,0 +1,23 @@
+; Test: COUNT aggregator
+; =====================
+;
+; Demonstrates: (O (count <report-template-with-$k> $k <template-to-count>))
+; Counts unique instances and binds the count to variable $k
+
+; Setup: Initial facts
+(color apple red)
+(color banana yellow)
+(color grape purple)
+(color strawberry red)
+(color cherry red)
+
+; Test: Count all colors
+(exec (0 count-all-colors)
+  (, (color $fruit $c))
+  (O (count (total-colors $k) $k (result $fruit $c))))
+
+; Expected output:
+; (total-colors 5)
+;
+; The pattern matches 5 times (apple, banana, grape, strawberry, cherry)
+; The count aggregator creates (total-colors 5) where $k is bound to 5

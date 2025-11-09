@@ -1,0 +1,24 @@
+; Test: Simple REMOVE operation
+; ==============================
+;
+; Demonstrates: (O (- <template>)) to remove facts from the space
+; Shows exact match semantics - template must match exactly
+
+; Setup: Initial facts
+(color apple red)
+(color banana yellow)
+(color grape purple)
+(cleanup)
+
+; Rule: Remove specific facts
+(exec (0 remove-colors)
+  (, (cleanup))
+  (O (- (color apple red))
+     (- (color banana yellow))
+     (- (cleanup))))
+
+; Expected output:
+; (color grape purple)  ; Only this remains
+;
+; The apple and banana colors are removed.
+; The grape color remains because it wasn't in the remove list.

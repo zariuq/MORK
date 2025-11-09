@@ -1,0 +1,29 @@
+; Test: COUNT with guard (expected value check)
+; =============================================
+;
+; Demonstrates: Using a constant instead of $k to guard the count
+; Based on test from kernel/src/main.rs:1598
+
+; Setup: Initial facts
+(foo 1) (foo 2) (foo 3)
+(bar x) (bar y)
+(baz P) (baz Q) (baz R)
+
+; Test 1: Guard that matches (18 combinations expected)
+(exec 0
+  (, (foo $x) (bar $y) (baz $z))
+  (O (count (all-eighteen) 18 ($z $y $x))))
+
+; Test 2: Guard that doesn't match (16 combinations, but we have 18)
+(exec 0
+  (, (foo $x) (bar $y) (baz $z))
+  (O (count (all-sixteen) 16 (cux $z $y $x))))
+
+; Expected output:
+; (all-eighteen)
+;
+; Explanation:
+; - Test 1: count is 18, guard is 18 → MATCH → produces (all-eighteen)
+; - Test 2: count is 18, guard is 16 → NO MATCH → produces nothing
+;
+; The guard (constant in $k position) filters outputs by count
