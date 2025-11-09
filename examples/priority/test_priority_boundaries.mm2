@@ -1,0 +1,66 @@
+; Test: Priority ordering boundary cases
+; ======================================
+;
+; Explores edge cases and boundaries of priority ordering
+
+; Successor table
+(S 0 1) (S 1 2) (S 2 3) (S 3 4) (S 4 5) (S 5 6) (S 6 7) (S 7 8)
+
+; Order tracker
+(order 0)
+
+; Test 1: Large number priorities (test shortlex with big numbers)
+(exec 999 (, (order $n) (S $n $next))
+  (O (+ (processed 999 at-step $n))
+     (- (order $n))
+     (+ (order $next))))
+
+(exec 1000 (, (order $n) (S $n $next))
+  (O (+ (processed 1000 at-step $n))
+     (- (order $n))
+     (+ (order $next))))
+
+; Expected: 999 before 1000 (3 digits vs 4 digits)
+
+; Test 2: Nested tuple priorities
+(exec (((0))) (, (order $n) (S $n $next))
+  (O (+ (depth triple at-step $n))
+     (- (order $n))
+     (+ (order $next))))
+
+(exec ((0)) (, (order $n) (S $n $next))
+  (O (+ (depth double at-step $n))
+     (- (order $n))
+     (+ (order $next))))
+
+(exec (0) (, (order $n) (S $n $next))
+  (O (+ (depth single at-step $n))
+     (- (order $n))
+     (+ (order $next))))
+
+; Question: Does nesting depth affect ordering?
+; Hypothesis: Deeper nesting = more bytes = later execution
+
+; Test 3: Number vs symbol with same length
+(exec 42 (, (order $n) (S $n $next))
+  (O (+ (type num-42 at-step $n))
+     (- (order $n))
+     (+ (order $next))))
+
+(exec ab (, (order $n) (S $n $next))
+  (O (+ (type sym-ab at-step $n))
+     (- (order $n))
+     (+ (order $next))))
+
+(exec 99 (, (order $n) (S $n $next))
+  (O (+ (type num-99 at-step $n))
+     (- (order $n))
+     (+ (order $next))))
+
+; Question: Do all numbers come before all symbols of same length?
+; Or are they interleaved based on byte values?
+;
+; Expected results with tracking will show:
+; - Large numbers: 999 < 1000 (shortlex)
+; - Nesting: actual byte-level ordering
+; - Number vs symbol: which comes first

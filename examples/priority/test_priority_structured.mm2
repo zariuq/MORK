@@ -1,0 +1,76 @@
+; Test: Structured priority expressions
+; =====================================
+;
+; Demonstrates: Priority can be complex expressions, not just numbers
+; Tests how MM2 orders structured terms like (phase 0), (0 1), etc.
+
+; Successor table
+(S 0 1) (S 1 2) (S 2 3) (S 3 4) (S 4 5) (S 5 6) (S 6 7) (S 7 8)
+
+; Order tracker
+(order 0)
+
+; Test 1: Tuple-style priorities (phase num)
+(exec (phase 0) (, (order $n) (S $n $next))
+  (O (+ (completed phase-a at-step $n))
+     (- (order $n))
+     (+ (order $next))))
+
+(exec (phase 1) (, (order $n) (S $n $next))
+  (O (+ (completed phase-b at-step $n))
+     (- (order $n))
+     (+ (order $next))))
+
+(exec (phase 2) (, (order $n) (S $n $next))
+  (O (+ (completed phase-c at-step $n))
+     (- (order $n))
+     (+ (order $next))))
+
+; Expected order: (phase 0), (phase 1), (phase 2)
+; This is based on shortlex ordering of the full expression
+
+; Test 2: Multi-element tuples
+(exec (0 1) (, (order $n) (S $n $next))
+  (O (+ (done (0 1) at-step $n))
+     (- (order $n))
+     (+ (order $next))))
+
+(exec (0 0) (, (order $n) (S $n $next))
+  (O (+ (done (0 0) at-step $n))
+     (- (order $n))
+     (+ (order $next))))
+
+(exec (1 0) (, (order $n) (S $n $next))
+  (O (+ (done (1 0) at-step $n))
+     (- (order $n))
+     (+ (order $next))))
+
+; Expected order for Test 2:
+; Both (0 0) and (0 1) have same length/structure
+; Both (0 0) and (1 0) have same length/structure
+; Should compare element-wise: (0 0) < (0 1) < (1 0)
+
+; Test 3: Symbols vs numbers in priorities
+(exec foo (, (order $n) (S $n $next))
+  (O (+ (processed foo at-step $n))
+     (- (order $n))
+     (+ (order $next))))
+
+(exec 42 (, (order $n) (S $n $next))
+  (O (+ (processed 42 at-step $n))
+     (- (order $n))
+     (+ (order $next))))
+
+; Question: Do numbers come before symbols, or vice versa?
+; This tests the boundary between different atom types
+
+; Expected results (with tracking):
+; (completed phase-a at-step 0)
+; (completed phase-b at-step 1)
+; (completed phase-c at-step 2)
+; (done (0 0) at-step 3)
+; (done (0 1) at-step 4)
+; (done (1 0) at-step 5)
+; (processed 42 at-step 6)
+; (processed foo at-step 7)
+; (order 8)

@@ -1,0 +1,70 @@
+; Test: Shortlex ordering vs Lexicographic ordering
+; ==================================================
+;
+; Demonstrates: Priority uses SHORTLEX ordering (length first, then value)
+; NOT standard lexicographic ordering
+;
+; Shortlex: shorter representations come first, then sorted by value
+; Example: 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, ... 99, 100, 101, ...
+;
+; Lexicographic (dictionary): compare digit by digit
+; Example: 0, 1, 10, 100, 101, ... 2, 20, 200, ... (NOT how MM2 works!)
+
+; Successor table: S(n, n+1)
+(S 0 1) (S 1 2) (S 2 3) (S 3 4) (S 4 5) (S 5 6) (S 6 7)
+
+; Order tracker
+(order 0)
+
+; Exec rules with carefully chosen priorities to test ordering
+; Each fires once, consuming the order tracker and incrementing it
+(exec 100 (, (order $n) (S $n $next))
+  (O (+ (fired 100 at-step $n))
+     (- (order $n))
+     (+ (order $next))))
+
+(exec 20 (, (order $n) (S $n $next))
+  (O (+ (fired 20 at-step $n))
+     (- (order $n))
+     (+ (order $next))))
+
+(exec 10 (, (order $n) (S $n $next))
+  (O (+ (fired 10 at-step $n))
+     (- (order $n))
+     (+ (order $next))))
+
+(exec 3 (, (order $n) (S $n $next))
+  (O (+ (fired 3 at-step $n))
+     (- (order $n))
+     (+ (order $next))))
+
+(exec 2 (, (order $n) (S $n $next))
+  (O (+ (fired 2 at-step $n))
+     (- (order $n))
+     (+ (order $next))))
+
+(exec 1 (, (order $n) (S $n $next))
+  (O (+ (fired 1 at-step $n))
+     (- (order $n))
+     (+ (order $next))))
+
+(exec 0 (, (order $n) (S $n $next))
+  (O (+ (fired 0 at-step $n))
+     (- (order $n))
+     (+ (order $next))))
+
+; Expected SHORTLEX execution order (PROVEN with at-step tracking):
+; (fired 0 at-step 0)    [1 digit: "0"]  - Step 0
+; (fired 1 at-step 1)    [1 digit: "1"]  - Step 1
+; (fired 2 at-step 2)    [1 digit: "2"]  - Step 2
+; (fired 3 at-step 3)    [1 digit: "3"]  - Step 3
+; (fired 10 at-step 4)   [2 digits: "10"] - Step 4
+; (fired 20 at-step 5)   [2 digits: "20"] - Step 5
+; (fired 100 at-step 6)  [3 digits: "100"] - Step 6
+; (order 7) - final counter
+;
+; If it were LEXICOGRAPHIC ordering (WRONG!):
+; Wrong order would be: 0, 1, 10, 100, 2, 20, 3
+;
+; The key difference: All single-digit priorities execute before
+; any double-digit priorities, which execute before triple-digit.

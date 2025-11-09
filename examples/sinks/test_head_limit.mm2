@@ -1,0 +1,31 @@
+; Test: HEAD sink - limit results
+; ================================
+;
+; Demonstrates: (O (head N <template>)) to limit output to first N results
+; Based on test from kernel/src/main.rs:1566
+
+; Setup: 3 × 2 × 3 = 18 combinations
+(foo 1) (foo 2) (foo 3)
+(bar x) (bar y)
+(baz P) (baz Q) (baz R)
+
+; Test: Limit to first 7 results
+(exec 0
+  (, (foo $x) (bar $y) (baz $z))
+  (O (head 7 (cux $z $y $x))))
+
+; Expected output: First 7 combinations
+; (cux P x 1)
+; (cux P x 2)
+; (cux P x 3)
+; (cux P y 1)
+; (cux P y 2)
+; (cux P y 3)
+; (cux Q x 1)
+;
+; Out of 18 possible combinations, only 7 are added to the space.
+; The "head" sink limits the output (like SQL LIMIT or Unix head command).
+;
+; Syntax: (head <max-count> <template-to-instantiate>)
+; - First argument: maximum number of results
+; - Second argument: template to instantiate (like count, symbol name is arbitrary)

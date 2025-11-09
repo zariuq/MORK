@@ -10,8 +10,9 @@ Collection of MM2 (Minimal MeTTa 2) example programs demonstrating various patte
 
 ## Directory Structure
 
-- **`i_wrapper_tests/`** - Complete test suite for all I-wrapper (input) patterns (BTM, ACT, ==, !=)
-- **`sinks/`** - Complete test suite for O-wrapper (output/sink) patterns (+, -)
+- **`sources/`** - Complete test suite for all I-wrapper (input) patterns (BTM, ACT, ==, !=)
+- **`sinks/`** - Complete test suite for O-wrapper (output/sink) patterns (+, -, count, head, max)
+- **`priority/`** - Priority ordering tests: shortlex, numeric, symbols, structured
 - **`fibonacci_unfold_fold/`** - Recursion, unfold/fold, and memoization examples
 - **`map_fold_swap/`** - List processing, loops, and SIMD patterns
 - **`if_cond/`** - Conditional branching examples
@@ -150,11 +151,33 @@ The performance gap widens dramatically as N increases! See `FIBONACCI_19_RESULT
 - `MEMOIZATION_DEMO.md` - User-friendly demonstration
 - `FIBONACCI_19_RESULTS.md` - Performance analysis for fib(19)
 
-## I-Wrapper Tests
+## Priority Ordering Tests
+
+Complete exploration of how exec rules are ordered for execution in MM2.
+
+See `priority/README.md` for detailed documentation.
+
+**Key insight:** MM2 uses **SHORTLEX ordering** (short lexicographic), NOT standard dictionary ordering!
+
+**Test coverage:**
+- Basic numeric priorities: 0, 1, 2, 3
+- Shortlex demonstration: 0, 1, 2, 3, 10, 20, 100 (length first, then value)
+- Symbol ordering: a, b, aa, bb, aaa (shortlex for symbols too)
+- Structured priorities: (0 0), (0 1), (1 0) and (phase 0), (phase 1)
+- Boundary cases: numbers vs symbols, nesting depth, large numbers
+
+**Quick test:**
+```bash
+cd priority
+../../target/release/mork run --steps 10 test_priority_basic.mm2
+../../target/release/mork run --steps 20 test_priority_shortlex.mm2
+```
+
+## I-Wrapper (Source) Tests
 
 Complete test suite covering ALL I-wrapper patterns found in MORK!
 
-See `i_wrapper_tests/README.md` for detailed documentation.
+See `sources/README.md` for detailed documentation.
 
 **Test coverage:**
 - Basic patterns: `(, (pattern))` comma-wrapper queries
@@ -166,9 +189,9 @@ See `i_wrapper_tests/README.md` for detailed documentation.
 
 **Quick test:**
 ```bash
-cd i_wrapper_tests
-mork run --steps 10 test_btm_cross_match.mm2
-mork run --steps 20 test_not_equal.mm2
+cd sources
+../../target/release/mork run --steps 10 test_btm_cross_match.mm2
+../../target/release/mork run --steps 20 test_not_equal.mm2
 ```
 
 ## O-Wrapper (Sink) Tests
@@ -187,8 +210,8 @@ See `sinks/README.md` for detailed documentation.
 **Quick test:**
 ```bash
 cd sinks
-mork run --steps 10 test_add_simple.mm2
-mork run --steps 10 test_count_var.mm2
+../../target/release/mork run --steps 10 test_add_simple.mm2
+../../target/release/mork run --steps 10 test_count_var.mm2
 ```
 
 **NOT implemented:**

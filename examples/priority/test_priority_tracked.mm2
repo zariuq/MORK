@@ -1,0 +1,41 @@
+; Test: Priority ordering with execution tracking
+; ===============================================
+;
+; Demonstrates: Actually PROVES the execution order by tracking it!
+; Uses (order N) atom that gets incremented as each exec fires
+
+; Successor table: S(n, n+1)
+(S 0 1) (S 1 2) (S 2 3) (S 3 4) (S 4 5)
+
+; Order tracker starting at 0
+(order 0)
+
+; Exec rules that track their execution order
+(exec 3 (, (order $n) (S $n $next))
+  (O (+ (executed 3 at-step $n))
+     (- (order $n))
+     (+ (order $next))))
+
+(exec 1 (, (order $n) (S $n $next))
+  (O (+ (executed 1 at-step $n))
+     (- (order $n))
+     (+ (order $next))))
+
+(exec 2 (, (order $n) (S $n $next))
+  (O (+ (executed 2 at-step $n))
+     (- (order $n))
+     (+ (order $next))))
+
+(exec 0 (, (order $n) (S $n $next))
+  (O (+ (executed 0 at-step $n))
+     (- (order $n))
+     (+ (order $next))))
+
+; Expected results (PROVABLE execution order):
+; (executed 0 at-step 0)  <- exec 0 fires FIRST
+; (executed 1 at-step 1)  <- exec 1 fires SECOND
+; (executed 2 at-step 2)  <- exec 2 fires THIRD
+; (executed 3 at-step 3)  <- exec 3 fires FOURTH
+; (order 4) <- final order counter
+;
+; This PROVES the execution order: 0, 1, 2, 3

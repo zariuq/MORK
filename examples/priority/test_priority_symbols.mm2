@@ -1,0 +1,86 @@
+; Test: Symbol-based priority ordering
+; =====================================
+;
+; Demonstrates: How symbols are ordered when used as priorities
+; Tests alphabetical ordering and symbol length effects
+
+; Successor table
+(S 0 1) (S 1 2) (S 2 3) (S 3 4) (S 4 5) (S 5 6) (S 6 7) (S 7 8) (S 8 9) (S 9 10) (S 10 11) (S 11 12) (S 12 13)
+
+; Order tracker
+(order 0)
+
+; Test 1: Alphabetical symbol priorities
+(exec alpha (, (order $n) (S $n $next))
+  (O (+ (ran alpha at-step $n))
+     (- (order $n))
+     (+ (order $next))))
+
+(exec bravo (, (order $n) (S $n $next))
+  (O (+ (ran bravo at-step $n))
+     (- (order $n))
+     (+ (order $next))))
+
+(exec charlie (, (order $n) (S $n $next))
+  (O (+ (ran charlie at-step $n))
+     (- (order $n))
+     (+ (order $next))))
+
+(exec delta (, (order $n) (S $n $next))
+  (O (+ (ran delta at-step $n))
+     (- (order $n))
+     (+ (order $next))))
+
+(exec zulu (, (order $n) (S $n $next))
+  (O (+ (ran zulu at-step $n))
+     (- (order $n))
+     (+ (order $next))))
+
+; Test 2: Symbol length priority (shortlex applies to symbols too)
+(exec aaa (, (order $n) (S $n $next))
+  (O (+ (triggered aaa at-step $n))
+     (- (order $n))
+     (+ (order $next))))
+
+(exec aa (, (order $n) (S $n $next))
+  (O (+ (triggered aa at-step $n))
+     (- (order $n))
+     (+ (order $next))))
+
+(exec a (, (order $n) (S $n $next))
+  (O (+ (triggered a at-step $n))
+     (- (order $n))
+     (+ (order $next))))
+
+(exec bb (, (order $n) (S $n $next))
+  (O (+ (triggered bb at-step $n))
+     (- (order $n))
+     (+ (order $next))))
+
+(exec b (, (order $n) (S $n $next))
+  (O (+ (triggered b at-step $n))
+     (- (order $n))
+     (+ (order $next))))
+
+; Test 3: Simple single-character comparison
+(exec z (, (order $n) (S $n $next))
+  (O (+ (done z at-step $n))
+     (- (order $n))
+     (+ (order $next))))
+
+(exec x (, (order $n) (S $n $next))
+  (O (+ (done x at-step $n))
+     (- (order $n))
+     (+ (order $next))))
+
+(exec y (, (order $n) (S $n $next))
+  (O (+ (done y at-step $n))
+     (- (order $n))
+     (+ (order $next))))
+
+; Expected SHORTLEX order for symbols:
+; Single chars first (alphabetically): a, b, x, y, z, alpha, bravo, charlie, delta, zulu
+; Then 2 chars (alphabetically): aa, bb
+; Then 3+ chars: aaa
+;
+; Results with tracking will show actual execution order!

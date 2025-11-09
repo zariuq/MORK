@@ -1,0 +1,28 @@
+; Test: Conditional swap (bubble sort step)
+; ==========================================
+;
+; Demonstrates: Swapping two facts conditionally
+; Based on test from kernel/src/main.rs:1537 (odd_even_sort)
+
+; Setup: Order relation and two items
+(lt B A)  ; B < A (meaning A should come after B)
+
+; Test: Swap if out of order
+(exec 0
+  (, (item 0 $x)
+     (item 1 $y)
+     (lt $y $x))   ; If y < x, they're out of order
+  (O (- (item 0 $x))
+     (- (item 1 $y))
+     (+ (item 0 $y))
+     (+ (item 1 $x))))
+
+(item 0 A)
+(item 1 B)
+
+; Expected output:
+; (item 0 B)
+; (item 1 A)
+;
+; The items are swapped because B < A in the order relation.
+; This is one step of bubble sort!

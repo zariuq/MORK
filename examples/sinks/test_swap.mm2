@@ -1,0 +1,20 @@
+; Test: Swap/Replace pattern (remove A, add B)
+; ==============================================
+;
+; Demonstrates: Using (+ ...) and (- ...) together to swap facts
+; Based on test from kernel/src/main.rs:1368
+
+; Setup
+A
+
+; Test: Remove A, add B
+(exec a
+  (, A)
+  (O (- A)
+     (+ B)))
+
+; Expected output:
+; B
+;
+; The fact A is removed and B is added in one atomic step.
+; This is the fundamental swap/replace pattern.
