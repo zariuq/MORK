@@ -1,0 +1,163 @@
+; Test: Self-Replication Pattern - Simple Working Examples
+;
+; Note: MORK doesn't auto-evaluate arithmetic, so we use literal values
+
+; ============================================================================
+; PATTERN 1: Chain Reaction (no arithmetic needed)
+; ============================================================================
+
+(chain 1)
+
+(exec (1)
+  (, (chain 1))
+  (O (+ (log step-1))
+     (+ (chain 2))
+     (- (chain 1))))
+
+(exec (2)
+  (, (chain 2))
+  (O (+ (log step-2))
+     (+ (chain 3))
+     (- (chain 2))))
+
+(exec (3)
+  (, (chain 3))
+  (O (+ (log step-3))
+     (+ (chain 4))
+     (- (chain 3))))
+
+(exec (4)
+  (, (chain 4))
+  (O (+ (log step-4))
+     (+ (chain 5))
+     (- (chain 4))))
+
+; Self-replication chain: 1 → 2 → 3 → 4 → 5
+; Each step produces the trigger for the next step
+
+; ============================================================================
+; PATTERN 2: Sierpiński Priority Space (fractal subdivision)
+; ============================================================================
+
+(fractal-trigger)
+
+; Coarsest level
+(exec (10)
+  (, (fractal-trigger))
+  (O (+ (executed-at-priority (10)))))
+
+(exec (20)
+  (, (fractal-trigger))
+  (O (+ (executed-at-priority (20)))))
+
+; First subdivision - insert between (10) and (20)
+(exec (10 5)
+  (, (fractal-trigger))
+  (O (+ (executed-at-priority (10 5)))))
+
+; Second subdivision - insert between (10) and (10 5)
+(exec (10 2)
+  (, (fractal-trigger))
+  (O (+ (executed-at-priority (10 2)))))
+
+; Second subdivision - insert between (10 5) and (20)
+(exec (10 7)
+  (, (fractal-trigger))
+  (O (+ (executed-at-priority (10 7)))))
+
+; Third subdivision - insert between (10 5) and (10 7)
+(exec (10 5 5)
+  (, (fractal-trigger))
+  (O (+ (executed-at-priority (10 5 5)))))
+
+; Third subdivision - insert between (10) and (10 2)
+(exec (10 1)
+  (, (fractal-trigger))
+  (O (+ (executed-at-priority (10 1)))))
+
+; Expected execution order (Sierpiński pattern):
+; (10) → (10 1) → (10 2) → (10 5) → (10 5 5) → (10 7) → (20)
+;
+; Visual fractal structure:
+;
+;        (10) ──────────────── (20)
+;         │
+;    ┌────┼────┐
+;  (10 1)(10 2)(10 5) ── (10 7)
+;               │
+;            (10 5 5)
+
+; ============================================================================
+; PATTERN 3: Max Sink with Manual Iteration
+; ============================================================================
+
+(value-sequence 5)
+(value-sequence 12)
+(value-sequence 8)
+(value-sequence 20)
+(value-sequence 3)
+
+(exec (30)
+  (, (value-sequence $v))
+  (O (max (max-value-seen $m) $m $v)))
+
+; Max processes all values: 5, 12, 8, 20, 3
+; Result: (max-value-seen 20)
+
+; ============================================================================
+; PATTERN 4: State Machine
+; ============================================================================
+
+(state init)
+
+(exec (40)
+  (, (state init))
+  (O (+ (transition init-to-loading))
+     (+ (state loading))
+     (- (state init))))
+
+(exec (41)
+  (, (state loading))
+  (O (+ (transition loading-to-ready))
+     (+ (state ready))
+     (- (state loading))))
+
+(exec (42)
+  (, (state ready))
+  (O (+ (transition ready-to-done))
+     (+ (state done))
+     (- (state ready))))
+
+; State progression: init → loading → ready → done
+
+; ============================================================================
+; PATTERN 5: Fractal Priority Insertion Example
+; ============================================================================
+;
+; ALGORITHM: How to insert priority C between A and B
+;
+; Case 1: Both single elements
+;   A = (X), B = (Y)
+;   Insert: C = (X (midpoint of X and Y))
+;   Example: between (10) and (20) → insert (10 5)
+;
+; Case 2: B extends A
+;   A = (X), B = (X Y)
+;   Insert: C = (X (half of Y))
+;   Example: between (10) and (10 5) → insert (10 2)
+;
+; Case 3: Same prefix, different last element
+;   A = (X Y), B = (X Z)
+;   Insert: C = (X (midpoint of Y and Z))
+;   Example: between (10 5) and (10 7) → insert (10 6)
+;
+; Case 4: B extends A with more elements
+;   A = (X Y), B = (X Y Z)
+;   Insert: C = (X Y (half of Z))
+;   Example: between (10 5) and (10 5 5) → insert (10 5 2)
+;
+; This enables INFINITE subdivision, just like decimals:
+; - Decimals: 1.0, 1.5, 1.25, 1.125, ... (infinite)
+; - Tuples: (1), (1 5), (1 2), (1 1), ... (infinite)
+;
+; The SAME fractal property! ✅

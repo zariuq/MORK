@@ -1,0 +1,104 @@
+; Test: Edge cases for deterministic behavior with MaxSink
+;
+; Verify that max/min behave predictably even in corner cases
+
+; ============================================================================
+; EDGE CASE 1: Same max value from different patterns
+; ============================================================================
+
+(measurement-x 100)
+(measurement-y 100)  ; Same max value
+(measurement-x 50)
+(measurement-y 75)
+
+(exec 0
+  (, (measurement-x $v))
+  (O (max (max-x $m) $m $v)))
+
+(exec 0
+  (, (measurement-y $v))
+  (O (max (max-y $m) $m $v)))
+
+; Expected: Both produce 100 (for max-x) and 100 (for max-y)
+; Execution order: max-x fires first (lexicographic)
+
+; ============================================================================
+; EDGE CASE 2: Empty pattern vs non-empty pattern
+; ============================================================================
+
+(has-value 5)
+(has-value 10)
+
+; This will match nothing (no no-value facts)
+(exec 1
+  (, (no-value $x))
+  (O (max (max-empty $m) $m $x)))
+
+; This will match two facts
+(exec 1
+  (, (has-value $y))
+  (O (max (max-nonempty $m) $m $y)))
+
+; Expected: Only (max-nonempty 10) appears
+; max-empty produces no output (no matches)
+
+; ============================================================================
+; EDGE CASE 3: Negative values with same absolute value
+; ============================================================================
+
+(signed -5)
+(signed 5)
+(signed -3)
+(signed 3)
+
+(exec 2
+  (, (signed $n))
+  (O (max (max-signed $m) $m $n)))
+
+(exec 2
+  (, (signed $n))
+  (O (min (min-signed $m) $m $n)))
+
+; Expected: (max-signed 5) (min-signed -5)
+; Order: min-signed fires first (lexicographic: "min" < "max")
+
+; ============================================================================
+; EDGE CASE 4: Single value
+; ============================================================================
+
+(singleton 42)
+
+(exec 3
+  (, (singleton $v))
+  (O (max (max-singleton $m) $m $v)))
+
+; Expected: (max-singleton 42)
+; Max of single value is that value
+
+; ============================================================================
+; EDGE CASE 5: All same values (testing deduplication)
+; ============================================================================
+
+(uniform 7)
+(uniform 7)
+(uniform 7)
+(uniform 7)
+
+(exec 4
+  (, (uniform $u))
+  (O (max (max-uniform $m) $m $u)))
+
+; Expected: (max-uniform 7)
+; Only one (uniform 7) in data (deduplicated by PathMap)
+; So max only "sees" one value
+
+; ============================================================================
+; SUMMARY
+; ============================================================================
+;
+; All edge cases behave deterministically:
+; - Same values → same output
+; - Empty patterns → no output
+; - Negative numbers → correct comparison
+; - Single values → that value is max
+; - Duplicates → deduplicated, max still correct

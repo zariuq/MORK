@@ -1,0 +1,220 @@
+; Test: MaxSink/MinSink Guard Mode
+; ==================================
+;
+; Tests guard mode behavior:
+; - Variable guards: $m gets substituted with max/min
+; - Literal guards: output only if guard matches max/min
+
+; ========================================
+; TEST 1: Variable Guard (Standard Use)
+; ========================================
+(var-data 5)
+(var-data 10)
+(var-data 3)
+(var-data 8)
+
+(exec 0
+  (, (var-data $v))
+  (O (max (var-max $m) $m $v)))
+
+(exec 1
+  (, (var-data $v))
+  (O (min (var-min $m) $m $v)))
+
+; Expected:
+; (var-max 10)  ; $m replaced with 10
+; (var-min 3)   ; $m replaced with 3
+
+; ========================================
+; TEST 2: Literal Guard - Match
+; ========================================
+(literal-match 5)
+(literal-match 10)
+(literal-match 15)
+
+(exec 2
+  (, (literal-match $v))
+  (O (max (guard-matched) 15 $v)))
+
+; Expected:
+; (guard-matched)  ; Max is 15, guard is 15, they match!
+
+; ========================================
+; TEST 3: Literal Guard - No Match
+; ========================================
+(literal-nomatch 5)
+(literal-nomatch 10)
+(literal-nomatch 15)
+
+(exec 3
+  (, (literal-nomatch $v))
+  (O (max (guard-no-match) 20 $v)))
+
+; Expected: NO OUTPUT
+; Max is 15, guard is 20, they don't match
+
+; ========================================
+; TEST 4: Literal Guard with Min - Match
+; ========================================
+(min-literal 3)
+(min-literal 7)
+(min-literal 11)
+
+(exec 4
+  (, (min-literal $v))
+  (O (min (min-guard-match) 3 $v)))
+
+; Expected:
+; (min-guard-match)  ; Min is 3, guard is 3, match!
+
+; ========================================
+; TEST 5: Literal Guard with Min - No Match
+; ========================================
+(min-literal2 5)
+(min-literal2 10)
+(min-literal2 15)
+
+(exec 5
+  (, (min-literal2 $v))
+  (O (min (min-guard-no-match) 3 $v)))
+
+; Expected: NO OUTPUT
+; Min is 5, guard is 3, no match
+
+; ========================================
+; TEST 6: Negative Literal Guard
+; ========================================
+(neg-guard -10)
+(neg-guard -5)
+(neg-guard 0)
+
+(exec 6
+  (, (neg-guard $v))
+  (O (min (neg-guard-match) -10 $v)))
+
+; Expected:
+; (neg-guard-match)  ; Min is -10, guard is -10, match!
+
+; ========================================
+; TEST 7: Zero as Guard
+; ========================================
+(zero-guard -5)
+(zero-guard 0)
+(zero-guard 5)
+
+(exec 7
+  (, (zero-guard $v))
+  (O (max (zero-guard-test) 0 $v)))
+
+; Expected: NO OUTPUT
+; Max is 5, guard is 0, no match
+
+(exec 8
+  (, (zero-guard $v))
+  (O (min (zero-guard-min) 0 $v)))
+
+; Expected: NO OUTPUT
+; Min is -5, guard is 0, no match
+
+; ========================================
+; TEST 8: Guard at Boundary
+; ========================================
+(boundary 1)
+(boundary 5)
+(boundary 10)
+
+(exec 9
+  (, (boundary $v))
+  (O (max (boundary-max-match) 10 $v)))
+
+(exec 10
+  (, (boundary $v))
+  (O (min (boundary-min-match) 1 $v)))
+
+; Expected:
+; (boundary-max-match)  ; Max=10, guard=10
+; (boundary-min-match)  ; Min=1, guard=1
+
+; ========================================
+; TEST 9: Single Value with Guards
+; ========================================
+(single-guard 42)
+
+(exec 11
+  (, (single-guard $v))
+  (O (max (single-max-match) 42 $v)))
+
+(exec 12
+  (, (single-guard $v))
+  (O (min (single-min-match) 42 $v)))
+
+(exec 13
+  (, (single-guard $v))
+  (O (max (single-max-nomatch) 43 $v)))
+
+; Expected:
+; (single-max-match)    ; Max=42, guard=42, match
+; (single-min-match)    ; Min=42, guard=42, match
+; NO OUTPUT from exec 13 ; Max=42, guard=43, no match
+
+; ========================================
+; TEST 10: Complex Report Template
+; ========================================
+(complex 10)
+(complex 20)
+(complex 30)
+
+(exec 14
+  (, (complex $v))
+  (O (max (found-max-value $m in-dataset) $m $v)))
+
+; Expected:
+; (found-max-value 30 in-dataset)  ; Full template substitution
+
+; ========================================
+; TEST 11: Guard Parsing Edge Cases
+; ========================================
+; What if guard itself is malformed?
+(guard-edge 5)
+(guard-edge 10)
+
+(exec 15
+  (, (guard-edge $v))
+  (O (max (guard-parse-test) abc $v)))
+
+; Expected: NO OUTPUT
+; Guard "abc" is non-numeric, parse fails, no match possible
+
+; ========================================
+; TEST 12: Multiple Variables in Report
+; ========================================
+(multi-var 7)
+(multi-var 14)
+(multi-var 21)
+
+(exec 16
+  (, (multi-var $v))
+  (O (max (result $m and-also $m) $m $v)))
+
+; Expected:
+; (result 21 and-also 21)  ; Both $m replaced with 21
+
+; ========================================
+; SUMMARY OF EXPECTED OUTPUT:
+; ========================================
+; (var-max 10)
+; (var-min 3)
+; (guard-matched)
+; No output from TEST 3 (guard no match)
+; (min-guard-match)
+; No output from TEST 5 (min guard no match)
+; (neg-guard-match)
+; No output from TEST 7 (both zero guard tests)
+; (boundary-max-match)
+; (boundary-min-match)
+; (single-max-match)
+; (single-min-match)
+; No output from exec 13 (single no match)
+; (found-max-value 30 in-dataset)
+; No output from TEST 11 (guard parse fail)
+; (result 21 and-also 21)

@@ -1,0 +1,259 @@
+; Test: MaxSink/MinSink Interactions with Other Sinks
+; =====================================================
+;
+; Tests how max/min interact with:
+; - Multiple sinks in one O-wrapper
+; - Different execution phases
+; - Other sink types (add, count, head)
+
+; ========================================
+; TEST 1: Multiple Max/Min in One O-Wrapper
+; ========================================
+(multi-sink 3)
+(multi-sink 7)
+(multi-sink 5)
+
+(exec 0
+  (, (multi-sink $v))
+  (O (max (found-max $m) $m $v)
+     (min (found-min $n) $n $v)))
+
+; Expected:
+; (found-max 7)
+; (found-min 3)
+; Both sinks process independently
+
+; ========================================
+; TEST 2: Max in Phase 0, Min in Phase 1
+; ========================================
+(phased 10)
+(phased 20)
+(phased 30)
+
+(exec 0
+  (, (phased $v))
+  (O (max (phase0-max $m) $m $v)))
+
+(exec 1
+  (, (phased $v))
+  (O (min (phase1-min $m) $m $v)))
+
+; Expected:
+; (phase0-max 30)  ; Executes first
+; (phase1-min 10)  ; Executes second
+; Phases are independent
+
+; ========================================
+; TEST 3: Max with Add Sink
+; ========================================
+(with-add 5)
+(with-add 10)
+(with-add 15)
+
+(exec 2
+  (, (with-add $v))
+  (O (+ (added $v))
+     (max (max-after-add $m) $m $v)))
+
+; Expected:
+; (added 5)
+; (added 10)
+; (added 15)
+; (max-after-add 15)
+
+; ========================================
+; TEST 4: Max with Count Sink
+; ========================================
+(countable 1)
+(countable 2)
+(countable 3)
+
+(exec 3
+  (, (countable $v))
+  (O (count (total $k) $k (item $v))
+     (max (max-val $m) $m $v)))
+
+; Expected:
+; (total 3)  ; Count of unique instantiations
+; (max-val 3)
+
+; ========================================
+; TEST 5: Chaining: Add → Max → Count
+; ========================================
+(chain 7)
+(chain 14)
+(chain 21)
+
+(exec 4
+  (, (chain $v))
+  (O (+ (chained $v))
+     (max (chain-max $m) $m $v)
+     (count (chain-count $k) $k (processed $v))))
+
+; Expected:
+; (chained 7)
+; (chained 14)
+; (chained 21)
+; (chain-max 21)
+; (chain-count 3)
+
+; ========================================
+; TEST 6: Max from Previous Phase Output
+; ========================================
+; Phase 0: Add some values
+(phase-input 5)
+
+(exec 0
+  (, (phase-input $v))
+  (O (+ (intermediate 10))
+     (+ (intermediate 20))
+     (+ (intermediate 30))))
+
+; Phase 1: Find max of intermediate results
+(exec 1
+  (, (intermediate $v))
+  (O (max (final-max $m) $m $v)))
+
+; Expected:
+; (intermediate 10)
+; (intermediate 20)
+; (intermediate 30)
+; (final-max 30)
+
+; ========================================
+; TEST 7: Conditional Add with Max Guard
+; ========================================
+(guarded 8)
+(guarded 15)
+(guarded 12)
+
+(exec 5
+  (, (guarded $v))
+  (O (max (guard-result) 15 $v)
+     (+ (processed-if-max-15))))
+
+; Expected:
+; (guard-result)          ; Max is 15, guard matches
+; (processed-if-max-15)   ; Add executes
+
+(exec 6
+  (, (guarded $v))
+  (O (max (guard-fail) 20 $v)
+     (+ (should-not-appear))))
+
+; Expected: NO OUTPUT
+; Max is 15, guard is 20, no match, add doesn't execute
+
+; ========================================
+; TEST 8: Priority Ordering with Max
+; ========================================
+; Successor table for tracking execution order
+(S 0 1) (S 1 2) (S 2 3) (S 3 4)
+
+(order 0)
+
+(prior-data 5)
+(prior-data 10)
+(prior-data 15)
+
+; Priority 0 runs first
+(exec 0
+  (, (order $n) (S $n $next))
+  (O (+ (step $n executed))
+     (- (order $n))
+     (+ (order $next))))
+
+; Priority 1 finds max
+(exec 1
+  (, (prior-data $v))
+  (O (max (priority-max $m) $m $v)))
+
+; Expected execution order: exec 0 first, then exec 1
+; Output:
+; (step 0 executed)
+; (order 1)
+; (priority-max 15)
+
+; ========================================
+; TEST 9: Remove with Max
+; ========================================
+(removable 100)
+(removable 200)
+(removable 300)
+
+(exec 7
+  (, (removable $v))
+  (O (max (before-remove $m) $m $v)
+     (- (removable $v))))
+
+; Expected:
+; (before-remove 300)
+; All (removable X) facts removed
+
+; ========================================
+; TEST 10: Head Sink with Max
+; ========================================
+(many-vals 1) (many-vals 2) (many-vals 3)
+(many-vals 4) (many-vals 5) (many-vals 6)
+
+(exec 8
+  (, (many-vals $v))
+  (O (head 3 (selected $v))
+     (max (max-of-all $m) $m $v)))
+
+; Expected:
+; (selected 1)  ; Head limits to first 3
+; (selected 2)
+; (selected 3)
+; (max-of-all 6)  ; Max sees all 6 values before head limits
+
+; ========================================
+; TEST 11: Nested Max/Min
+; ========================================
+; Can we use max output as input to another exec?
+(nested-input 5)
+(nested-input 10)
+(nested-input 15)
+
+(exec 9
+  (, (nested-input $v))
+  (O (max (level1-max $m) $m $v)))
+
+(exec 10
+  (, (level1-max $v))
+  (O (+ (max-was $v))))
+
+; Expected:
+; (level1-max 15)
+; (max-was 15)  ; Uses max output as data
+
+; ========================================
+; TEST 12: Independent Max/Min Same Data
+; ========================================
+(independent 2)
+(independent 8)
+(independent 5)
+
+(exec 11
+  (, (independent $v))
+  (O (max (indep-max $m) $m $v)))
+
+(exec 12
+  (, (independent $v))
+  (O (min (indep-min $m) $m $v)))
+
+; Expected:
+; (indep-max 8)
+; (indep-min 2)
+; Complete independence
+
+; ========================================
+; SUMMARY:
+; ========================================
+; Tests demonstrate:
+; - Multiple sinks execute independently
+; - Execution phases are separate
+; - Max/min work correctly with add, count, remove, head
+; - Guard mode can control downstream sinks
+; - Priority ordering maintained
+; - Output can feed into next phase

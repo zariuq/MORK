@@ -1,0 +1,18 @@
+; Test: MaxSink with empty set - USE CASE 3
+; From mmverify-utils.metta line 333:
+; ($e_max_level (if (== $e_levels (())) 0 (max-atom $e_levels)))
+;
+; This handles the case where there are NO ehyps at any level
+; The fallback is 0 (handled in MeTTa with an if-expression)
+;
+; In MORK, we test that max-atom on empty set produces no result
+
+; No level entries - simulating empty e_levels
+
+(exec 0
+  (, (level $l))
+  (O (max (found-max $m) $m $l)))
+
+; Expected: NO OUTPUT (empty result)
+; The MeTTa code handles this with: (if (== $e_levels (())) 0 (max-atom $e_levels))
+; So when max returns nothing, MeTTa defaults to 0

@@ -1,0 +1,20 @@
+; Test: MaxSink for finding max stack number - USE CASE 2
+; From mmverify-utils.metta line 515:
+; ($stack_len (case (matchc $stack ( (Num $n) $s ) $n) ( ( () 0 ) ( $nums (+ 1 (max-atom $nums))) ))
+;
+; In MORK/MM2 this translates to finding the maximum Num in the stack
+; then adding 1 to get the next available stack position
+
+; Simulate stack entries with numeric indices
+(stack-entry (Num 0) (wff ph))
+(stack-entry (Num 1) (wff ps))
+(stack-entry (Num 2) (wff ch))
+(stack-entry (Num 4) (wff th))
+
+(exec 0
+  (, (stack-entry (Num $n) $stmt))
+  (O (max (max-num $m) $m $n)))
+
+; Expected: (max-num 4)
+; Then in MeTTa: stack_len = (+ 1 4) = 5
+; This is used to determine where to push the next stack entry

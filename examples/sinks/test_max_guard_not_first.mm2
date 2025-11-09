@@ -1,0 +1,17 @@
+; Test A: Guard variable not the first new variable in report
+; The guard $m is VarRef to the SECOND new variable in the report
+; Without fix, replacing first $ gives wrong output
+
+(edge a b 5)
+(edge a c 7)
+(edge a d 9)
+(src a)
+
+(exec 0
+  (, (src $s) (edge $s $t $w))
+  ; Report has $s (from comma), then $m (new), then $t (from comma)
+  ; Guard $m should replace the SECOND new variable
+  (O (max (report $s $m $t) $m $w)))
+
+; Expected: (report a 9 d)
+; $s=a (from comma), $m=9 (max), $t=d (from comma with max)

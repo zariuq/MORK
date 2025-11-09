@@ -1,0 +1,20 @@
+; Test: MinSink for finding minimum frame depth - POTENTIAL USE CASE
+; While mmverify-utils.metta doesn't currently use min-atom,
+; it's the natural complement to max-atom for frame stack processing
+;
+; Use case: Find the minimum depth to start processing from
+; (equivalent to finding the "ground" level of nested scopes)
+
+; Simulate frame depths
+(frame-depth 5)
+(frame-depth 2)
+(frame-depth 7)
+(frame-depth 3)
+(frame-depth 1)
+
+(exec 0
+  (, (frame-depth $d))
+  (O (min (min-depth $m) $m $d)))
+
+; Expected: (min-depth 1)
+; This would identify the starting point for bottom-up frame processing

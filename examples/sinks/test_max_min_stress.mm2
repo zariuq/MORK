@@ -1,0 +1,275 @@
+; Test: MaxSink/MinSink Stress and Robustness
+; ===========================================
+;
+; Tests robustness under challenging conditions:
+; - Large datasets
+; - Complex expressions
+; - Performance edge cases
+
+; ========================================
+; TEST 1: Large Dataset (50 values)
+; ========================================
+(large 1) (large 2) (large 3) (large 4) (large 5)
+(large 6) (large 7) (large 8) (large 9) (large 10)
+(large 11) (large 12) (large 13) (large 14) (large 15)
+(large 16) (large 17) (large 18) (large 19) (large 20)
+(large 21) (large 22) (large 23) (large 24) (large 25)
+(large 26) (large 27) (large 28) (large 29) (large 30)
+(large 31) (large 32) (large 33) (large 34) (large 35)
+(large 36) (large 37) (large 38) (large 39) (large 40)
+(large 41) (large 42) (large 43) (large 44) (large 45)
+(large 46) (large 47) (large 48) (large 49) (large 50)
+
+(exec 0
+  (, (large $v))
+  (O (max (large-max $m) $m $v)))
+
+(exec 1
+  (, (large $v))
+  (O (min (large-min $m) $m $v)))
+
+; Expected:
+; (large-max 50)
+; (large-min 1)
+
+; ========================================
+; TEST 2: Sparse Range
+; ========================================
+(sparse 1)
+(sparse 1000)
+(sparse 1000000)
+(sparse 1000000000)
+
+(exec 2
+  (, (sparse $v))
+  (O (max (sparse-max $m) $m $v)))
+
+(exec 3
+  (, (sparse $v))
+  (O (min (sparse-min $m) $m $v)))
+
+; Expected:
+; (sparse-max 1000000000)
+; (sparse-min 1)
+
+; ========================================
+; TEST 3: Very Long Symbol Names
+; ========================================
+(very-long-symbol-name-to-test-handling 42)
+(another-extremely-long-symbol-name-for-testing 99)
+(yet-another-incredibly-long-name-to-stress-test 15)
+
+(exec 4
+  (, (very-long-symbol-name-to-test-handling $v))
+  (O (max (long-name-max $m) $m $v)))
+
+; Expected:
+; (long-name-max 42)
+
+; ========================================
+; TEST 4: Many Duplicates
+; ========================================
+(dup-stress 5) (dup-stress 5) (dup-stress 5) (dup-stress 5)
+(dup-stress 5) (dup-stress 5) (dup-stress 5) (dup-stress 5)
+(dup-stress 10) (dup-stress 10) (dup-stress 10) (dup-stress 10)
+(dup-stress 15) (dup-stress 15) (dup-stress 15) (dup-stress 15)
+
+(exec 5
+  (, (dup-stress $v))
+  (O (max (dup-stress-max $m) $m $v)))
+
+; Expected:
+; (dup-stress-max 15)
+
+; ========================================
+; TEST 5: Alternating Pattern
+; ========================================
+(alt 1) (alt 100) (alt 2) (alt 99) (alt 3) (alt 98)
+(alt 4) (alt 97) (alt 5) (alt 96) (alt 6) (alt 95)
+
+(exec 6
+  (, (alt $v))
+  (O (max (alt-max $m) $m $v)))
+
+(exec 7
+  (, (alt $v))
+  (O (min (alt-min $m) $m $v)))
+
+; Expected:
+; (alt-max 100)
+; (alt-min 1)
+
+; ========================================
+; TEST 6: Sequential vs Random Order
+; ========================================
+; Sequential ascending
+(seq 10) (seq 20) (seq 30) (seq 40) (seq 50)
+
+(exec 8
+  (, (seq $v))
+  (O (max (seq-max $m) $m $v)))
+
+; Random order (same values)
+(rand 40) (rand 10) (rand 50) (rand 20) (rand 30)
+
+(exec 9
+  (, (rand $v))
+  (O (max (rand-max $m) $m $v)))
+
+; Expected:
+; (seq-max 50)
+; (rand-max 50)
+; Order shouldn't matter
+
+; ========================================
+; TEST 7: Clustered Values
+; ========================================
+(cluster 1) (cluster 2) (cluster 3) (cluster 4) (cluster 5)
+(cluster 50) (cluster 51) (cluster 52) (cluster 53) (cluster 54)
+(cluster 100) (cluster 101) (cluster 102) (cluster 103) (cluster 104)
+
+(exec 10
+  (, (cluster $v))
+  (O (max (cluster-max $m) $m $v)))
+
+(exec 11
+  (, (cluster $v))
+  (O (min (cluster-min $m) $m $v)))
+
+; Expected:
+; (cluster-max 104)
+; (cluster-min 1)
+
+; ========================================
+; TEST 8: Powers of 2
+; ========================================
+(pow2 1) (pow2 2) (pow2 4) (pow2 8) (pow2 16)
+(pow2 32) (pow2 64) (pow2 128) (pow2 256) (pow2 512)
+(pow2 1024) (pow2 2048) (pow2 4096) (pow2 8192)
+
+(exec 12
+  (, (pow2 $v))
+  (O (max (pow2-max $m) $m $v)))
+
+; Expected:
+; (pow2-max 8192)
+
+; ========================================
+; TEST 9: Fibonacci-Like Sequence
+; ========================================
+(fib 1) (fib 1) (fib 2) (fib 3) (fib 5)
+(fib 8) (fib 13) (fib 21) (fib 34) (fib 55)
+
+(exec 13
+  (, (fib $v))
+  (O (max (fib-max $m) $m $v)))
+
+; Expected:
+; (fib-max 55)
+
+; ========================================
+; TEST 10: Mixed Magnitude
+; ========================================
+(magnitude -1000000)
+(magnitude -1000)
+(magnitude -1)
+(magnitude 0)
+(magnitude 1)
+(magnitude 1000)
+(magnitude 1000000)
+
+(exec 14
+  (, (magnitude $v))
+  (O (max (mag-max $m) $m $v)))
+
+(exec 15
+  (, (magnitude $v))
+  (O (min (mag-min $m) $m $v)))
+
+; Expected:
+; (mag-max 1000000)
+; (mag-min -1000000)
+
+; ========================================
+; TEST 11: Primes
+; ========================================
+(prime 2) (prime 3) (prime 5) (prime 7) (prime 11)
+(prime 13) (prime 17) (prime 19) (prime 23) (prime 29)
+(prime 31) (prime 37) (prime 41) (prime 43) (prime 47)
+
+(exec 16
+  (, (prime $v))
+  (O (max (prime-max $m) $m $v)))
+
+; Expected:
+; (prime-max 47)
+
+; ========================================
+; TEST 12: All Negative Large Dataset
+; ========================================
+(neg-large -1) (neg-large -2) (neg-large -3) (neg-large -4) (neg-large -5)
+(neg-large -6) (neg-large -7) (neg-large -8) (neg-large -9) (neg-large -10)
+(neg-large -11) (neg-large -12) (neg-large -13) (neg-large -14) (neg-large -15)
+(neg-large -16) (neg-large -17) (neg-large -18) (neg-large -19) (neg-large -20)
+
+(exec 17
+  (, (neg-large $v))
+  (O (max (neg-large-max $m) $m $v)))
+
+(exec 18
+  (, (neg-large $v))
+  (O (min (neg-large-min $m) $m $v)))
+
+; Expected:
+; (neg-large-max -1)  ; -1 is the maximum
+; (neg-large-min -20) ; -20 is the minimum
+
+; ========================================
+; TEST 13: Complex Report Template with Many Variables
+; ========================================
+(complex-report 777)
+(complex-report 888)
+(complex-report 999)
+
+(exec 19
+  (, (complex-report $v))
+  (O (max (the maximum value is $m and also $m repeated $m times) $m $v)))
+
+; Expected:
+; (the maximum value is 999 and also 999 repeated 999 times)
+
+; ========================================
+; TEST 14: Multiple Queries, Same Sink
+; ========================================
+(setA 10)
+(setA 20)
+(setA 30)
+
+(setB 15)
+(setB 25)
+(setB 35)
+
+(exec 20
+  (, (setA $v))
+  (O (max (setA-max $m) $m $v)))
+
+(exec 21
+  (, (setB $v))
+  (O (max (setB-max $m) $m $v)))
+
+; Expected:
+; (setA-max 30)
+; (setB-max 35)
+; Independent queries, independent results
+
+; ========================================
+; SUMMARY:
+; ========================================
+; Stress tests demonstrate:
+; - Handles large datasets (50+ values)
+; - Works with wide numeric ranges
+; - Order-independent (sequential vs random)
+; - Handles many duplicates efficiently
+; - Works with various numeric patterns
+; - Complex report templates work
+; - Multiple independent queries work

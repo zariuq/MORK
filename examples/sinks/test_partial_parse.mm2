@@ -1,0 +1,11 @@
+; Test partial numeric parsing
+(val 1.5)
+(val 1e5)
+(val 123abc)
+(val 10)
+
+(exec 0
+  (, (val $v))
+  (O (max (found-max $m) $m $v)))
+
+; What happens?

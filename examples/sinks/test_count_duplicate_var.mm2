@@ -1,0 +1,13 @@
+; Test: CountSink with duplicate variable in report
+; Does count work when the guard variable appears multiple times?
+
+(item a)
+(item b)
+(item c)
+
+(exec 0
+  (, (item $x))
+  (O (count (found $n items-and $n more) $n (seen $x))))
+
+; If duplicate vars work, should get: (found 3 items-and 3 more)
+; If not, might get: (found 3 items-and $a more) or similar

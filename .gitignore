@@ -3,3 +3,21 @@ Cargo.lock
 .DS_Store
 .vscode
 tmp
+
+# Documentation files (auto-generated or temporary)
+*.md
+!README.md
+!CONTRIBUTING.md
+!LICENSE.md
+
+# Snapshot files
+all_MORK_rs_*.txt
+all_Lean_*.txt
+
+# Temporary output files
+*.out
+out.txt
+err.out
+
+# Resource directories
+resources/

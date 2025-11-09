@@ -1,0 +1,13 @@
+; Test: MaxSink with NewVar guard (simplest case)
+; =================================================
+
+(data 5)
+(data 10)
+(data 3)
+
+(exec 0
+  (, (data $v))
+  (O (max (found-max $) $ $v)))
+
+; Expected: (found-max 10)
+; The $ in report and $ in guard are both NewVar

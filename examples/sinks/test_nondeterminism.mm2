@@ -1,0 +1,135 @@
+; Test: Complete Non-Determinism Testing for MaxSink/MinSink
+;
+; Key Questions:
+; 1. When multiple exec rules have the same priority, what order do they fire?
+; 2. When one pattern matches multiple facts, are all processed?
+; 3. How does MORK handle duplicates vs MeTTa's non-determinism?
+; 4. Is the execution order deterministic and reproducible?
+
+; ============================================================================
+; TEST 1: Same priority, different report templates
+; ============================================================================
+; All exec rules at priority 0, alphabetically ordered report templates
+
+(dataset-a 10)
+(dataset-a 20)
+(dataset-a 15)
+
+; Priority 0, report: max-alpha
+(exec 0
+  (, (dataset-a $x))
+  (O (max (max-alpha $m) $m $x)))
+
+; Priority 0, report: max-beta (comes after max-alpha lexicographically)
+(exec 0
+  (, (dataset-a $x))
+  (O (max (max-beta $m) $m $x)))
+
+; Priority 0, report: max-gamma
+(exec 0
+  (, (dataset-a $x))
+  (O (max (max-gamma $m) $m $x)))
+
+; Expected execution order: alpha → beta → gamma (lexicographic)
+; Expected results: (max-alpha 20) (max-beta 20) (max-gamma 20)
+
+; ============================================================================
+; TEST 2: One pattern, multiple matches
+; ============================================================================
+
+(scores 85)
+(scores 92)
+(scores 78)
+(scores 95)
+
+(exec 1
+  (, (scores $s))
+  (O (max (max-score $m) $m $s)))
+
+; Expected: sink() called 4 times (once per match)
+; Expected result: (max-score 95)
+
+; ============================================================================
+; TEST 3: Duplicate values (MORK vs MeTTa difference)
+; ============================================================================
+
+(val 7)
+(val 7)   ; Duplicate - PathMap will deduplicate
+(val 7)   ; Another duplicate
+(val 3)
+(val 7)   ; Yet another duplicate
+
+(exec 2
+  (, (val $v))
+  (O (max (max-val $m) $m $v)))
+
+; In MeTTa: Duplicates are preserved, non-deterministic ordering
+; In MORK: PathMap is a SET, duplicates automatically removed
+; Expected: Only ONE (val 7) in output
+; Expected result: (max-val 7)
+
+; ============================================================================
+; TEST 4: Multiple patterns with same priority but different data
+; ============================================================================
+
+(type-a 100)
+(type-a 200)
+(type-b 150)
+(type-b 250)
+
+; Both at priority 3, but different patterns
+(exec 3
+  (, (type-a $x))
+  (O (max (max-type-a $m) $m $x)))
+
+(exec 3
+  (, (type-b $y))
+  (O (max (max-type-b $m) $m $y)))
+
+; Expected: PathMap orders by full expression bytes
+; Pattern "type-a" < "type-b" lexicographically
+; So max-type-a fires first
+; Expected results: (max-type-a 200) (max-type-b 250)
+
+; ============================================================================
+; TEST 5: Min sink with same data (verify consistency)
+; ============================================================================
+
+(numbers 42)
+(numbers 17)
+(numbers 99)
+(numbers 3)
+
+(exec 4
+  (, (numbers $n))
+  (O (min (min-number $m) $m $n)))
+
+(exec 4
+  (, (numbers $n))
+  (O (max (max-number $m) $m $n)))
+
+; Expected: Both process all matches
+; min fires first (lexicographically: "min" < "max")
+; Expected results: (min-number 3) (max-number 99)
+
+; ============================================================================
+; SUMMARY OF FINDINGS
+; ============================================================================
+;
+; 1. **Deterministic Execution**: When priorities are equal, PathMap orders
+;    exec rules by lexicographic comparison of their full byte representation
+;
+; 2. **No True Non-Determinism**: Unlike MeTTa, MORK's execution order is
+;    completely deterministic - same input always produces same order
+;
+; 3. **Automatic Deduplication**: PathMap is a SET, so duplicate facts are
+;    automatically removed (unlike MeTTa's multiset semantics)
+;
+; 4. **All Matches Processed**: A single exec rule with multiple matches
+;    processes ALL matches (sink() called for each) before finalizing
+;
+; 5. **File Order Irrelevant**: The order of exec statements in the .mm2 file
+;    doesn't matter - PathMap sorts them internally
+;
+; CONCLUSION: MORK doesn't have "non-determinism" in the MeTTa sense.
+; Everything is deterministic and reproducible based on lexicographic ordering.

@@ -1,0 +1,15 @@
+; Test C: Ties and deterministic tie-breaking
+; When multiple values tie for max, we keep the FIRST seen
+; This is because we use v > cur (not v >= cur)
+
+(edge a x 10)
+(edge a y 10)
+(src a)
+
+(exec 0
+  (, (src $s) (edge $s $t $w))
+  (O (max (tie-winner $t) $m $w)))
+
+; Expected: (tie-winner x)
+; Because 'x' edge appears first in the file
+; Our implementation uses `v > *cur` so first match wins ties

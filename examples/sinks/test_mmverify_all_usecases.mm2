@@ -1,0 +1,87 @@
+; Test: Complete demonstration of MaxSink/MinSink for mmverify-utils.metta
+; This file demonstrates all the actual use cases from the HE interpretation
+; of mmverify.py into MeTTa
+
+; ============================================================================
+; USE CASE 1: Finding maximum frame depth for ehyps (line 333)
+; ============================================================================
+; MeTTa code: ($e_max_level (if (== $e_levels (())) 0 (max-atom $e_levels)))
+; Purpose: Determine the deepest frame level to process essential hypotheses
+
+(ehyp-level 1)
+(ehyp-level 3)
+(ehyp-level 2)
+(ehyp-level 5)
+
+(exec 0
+  (, (ehyp-level $l))
+  (O (max (e-max-level $m) $m $l)))
+
+; Expected: (e-max-level 5)
+
+; ============================================================================
+; USE CASE 2: Finding maximum frame depth for fhyps (line 360)
+; ============================================================================
+; MeTTa code: ($f_max_level (if (== $f_levels (())) 0 (max-atom $f_levels)))
+; Purpose: Determine the deepest frame level to process floating hypotheses
+
+(fhyp-level 2)
+(fhyp-level 4)
+(fhyp-level 1)
+(fhyp-level 3)
+
+(exec 1
+  (, (fhyp-level $l))
+  (O (max (f-max-level $m) $m $l)))
+
+; Expected: (f-max-level 4)
+
+; ============================================================================
+; USE CASE 3: Finding stack length (line 515)
+; ============================================================================
+; MeTTa code: ($stack_len (case (matchc $stack ( (Num $n) $s ) $n)
+;                             ( ( () 0 ) ( $nums (+ 1 (max-atom $nums))) )))
+; Purpose: Find the next available stack position (max index + 1)
+
+(stack-item (Num 0) (wff ph))
+(stack-item (Num 1) (wff ps))
+(stack-item (Num 2) (wff ch))
+(stack-item (Num 5) (wff th))
+(stack-item (Num 3) (wff ta))
+
+(exec 2
+  (, (stack-item (Num $n) $stmt))
+  (O (max (stack-max-num $m) $m $n)))
+
+; Expected: (stack-max-num 5)
+; In MeTTa: stack_len = (+ 1 5) = 6
+
+; ============================================================================
+; POTENTIAL USE CASE: Finding minimum frame depth
+; ============================================================================
+; While not in current mmverify-utils.metta, this is the natural complement
+; Purpose: Find the starting depth for bottom-up frame processing
+
+(frame-depth 7)
+(frame-depth 2)
+(frame-depth 5)
+(frame-depth 1)
+(frame-depth 9)
+
+(exec 3
+  (, (frame-depth $d))
+  (O (min (frame-min-depth $m) $m $d)))
+
+; Expected: (frame-min-depth 1)
+
+; ============================================================================
+; EDGE CASE: Empty set handling
+; ============================================================================
+; The MeTTa code uses (if (== $levels (())) 0 ...) to handle empty sets
+; In MORK, max/min on empty sets produce no output
+
+(exec 4
+  (, (nonexistent-data $x))
+  (O (max (empty-max $m) $m $x)))
+
+; Expected: NO OUTPUT (max on empty set)

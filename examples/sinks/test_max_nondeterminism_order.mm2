@@ -1,0 +1,28 @@
+; Test: Does the ORDER of exec statements in the file matter?
+; Or does PathMap always sort them deterministically?
+
+(value 10)
+(value 20)
+(value 15)
+
+; Put exec rules in REVERSE alphabetical order
+; If file order matters, we'd see: zebra, york, xray
+; If PathMap sorting matters, we'd see: xray, york, zebra
+
+(exec 0
+  (, (value $v))
+  (O (max (result-zebra $m) $m $v)))
+
+(exec 0
+  (, (value $v))
+  (O (max (result-york $m) $m $v)))
+
+(exec 0
+  (, (value $v))
+  (O (max (result-xray $m) $m $v)))
+
+; Expected: PathMap should sort by byte representation
+; So despite file order, we should see:
+; (result-xray 20)
+; (result-york 20)
+; (result-zebra 20)
