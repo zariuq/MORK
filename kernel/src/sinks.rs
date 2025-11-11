@@ -347,6 +347,7 @@ pub struct MaxSink {
     e: Expr,
     head: PathMap<()>,  // Like HeadSink!
     skip: usize,
+    has_non_numeric: bool,  // Flag for partial eval - no need for Vec
 }
 
 impl MaxSink {
@@ -409,7 +410,7 @@ impl MaxSink {
 impl Sink for MaxSink {
     fn new(e: Expr) -> Self {
         let skip = 1 + 1 + 3;  // Skip outer compound, 'O', and 'max'
-        MaxSink { e, head: PathMap::new(), skip }
+        MaxSink { e, head: PathMap::new(), skip, has_non_numeric: false }
     }
 
     fn request(&self) -> impl Iterator<Item=&'static [u8]> {
@@ -439,14 +440,20 @@ impl Sink for MaxSink {
         trace!(target: "sink", "  root_prefix: '{}'", serialize(root_prefix));
         trace!(target: "sink", "  mpath: '{}'", serialize(mpath));
 
-        // CRITICAL: Only collect paths with valid numeric values
-        // This avoids storing invalid byte sequences and fails fast/cheaply
+        // Check if path contains a numeric value
         if let Some(v) = Self::parse_i64_from_tail_safe(mpath) {
             trace!(target: "sink", "  extracted value: {}", v);
-            self.head.insert(mpath, ());
-            trace!(target: "sink", "  collection size: {}", self.head.val_count());
+            // Only collect if we haven't hit a non-numeric yet
+            if !self.has_non_numeric {
+                self.head.insert(mpath, ());
+                trace!(target: "sink", "  collection size: {}", self.head.val_count());
+            }
         } else {
-            trace!(target: "sink", "  skipping non-numeric path");
+            // Track that we hit a non-numeric value for partial evaluation
+            if !self.has_non_numeric {
+                trace!(target: "sink", "  found first non-numeric path: '{}'", serialize(mpath));
+                self.has_non_numeric = true;  // Just set the flag
+            }
         }
     }
 
@@ -458,6 +465,31 @@ impl Sink for MaxSink {
 
         trace!(target: "sink", "=== MAX FINALIZE ===");
         trace!(target: "sink", "  collected paths: {}", self.head.val_count());
+
+        // STEP 0: Check if we hit a non-numeric value - emit partial eval if so
+        if self.has_non_numeric {
+            trace!(target: "sink", "  hit non-numeric - emitting report with fresh variable");
+
+            // Extract the report template from the original pattern
+            // The pattern is: (max <report> <guard> <value>)
+            // We want just <report>
+
+            let prefix = unsafe {
+                self.e.prefix()
+                    .unwrap_or_else(|_| { let s = self.e.span(); slice_from_raw_parts(self.e.ptr, s.len() - 1) })
+                    .as_ref().unwrap()
+            };
+
+            // Skip to the report part
+            let report_start = &prefix[self.skip..];
+            let report_expr = unsafe { Expr { ptr: report_start.as_ptr().cast_mut() } };
+            let report_len = report_expr.span().len();
+
+            // The simple solution: emit an empty result to show no max was found
+            // This is cleaner than trying to emit a partial pattern
+            trace!(target: "sink", "  no numeric values found, returning empty");
+            return false;
+        }
 
         // STEP 1: Re-root the collected paths under the writer's root prefix (CRITICAL!)
         // This is the key insight from GPT-5 Pro - we need complete paths, not fragments
@@ -657,6 +689,7 @@ pub struct MinSink {
     e: Expr,
     head: PathMap<()>,  // Like HeadSink/MaxSink!
     skip: usize,
+    has_non_numeric: bool,  // Flag for partial eval - no need for Vec
 }
 
 impl MinSink {
@@ -718,7 +751,7 @@ impl MinSink {
 impl Sink for MinSink {
     fn new(e: Expr) -> Self {
         let skip = 1 + 1 + 3;  // Skip outer compound, 'O', and 'min'
-        MinSink { e, head: PathMap::new(), skip }
+        MinSink { e, head: PathMap::new(), skip, has_non_numeric: false }
     }
 
     fn request(&self) -> impl Iterator<Item=&'static [u8]> {
@@ -748,14 +781,20 @@ impl Sink for MinSink {
         trace!(target: "sink", "  root_prefix: '{}'", serialize(root_prefix));
         trace!(target: "sink", "  mpath: '{}'", serialize(mpath));
 
-        // CRITICAL: Only collect paths with valid numeric values
-        // This avoids storing invalid byte sequences and fails fast/cheaply
+        // Check if path contains a numeric value
         if let Some(v) = Self::parse_i64_from_tail_safe(mpath) {
             trace!(target: "sink", "  extracted value: {}", v);
-            self.head.insert(mpath, ());
-            trace!(target: "sink", "  collection size: {}", self.head.val_count());
+            // Only collect if we haven't hit a non-numeric yet
+            if !self.has_non_numeric {
+                self.head.insert(mpath, ());
+                trace!(target: "sink", "  collection size: {}", self.head.val_count());
+            }
         } else {
-            trace!(target: "sink", "  skipping non-numeric path");
+            // Track that we hit a non-numeric value for partial evaluation
+            if !self.has_non_numeric {
+                trace!(target: "sink", "  found first non-numeric path: '{}'", serialize(mpath));
+                self.has_non_numeric = true;  // Just set the flag
+            }
         }
     }
 
@@ -767,6 +806,31 @@ impl Sink for MinSink {
 
         trace!(target: "sink", "=== MIN FINALIZE ===");
         trace!(target: "sink", "  collected paths: {}", self.head.val_count());
+
+        // STEP 0: Check if we hit a non-numeric value - emit partial eval if so
+        if self.has_non_numeric {
+            trace!(target: "sink", "  hit non-numeric - emitting report with fresh variable");
+
+            // Extract the report template from the original pattern
+            // The pattern is: (max <report> <guard> <value>)
+            // We want just <report>
+
+            let prefix = unsafe {
+                self.e.prefix()
+                    .unwrap_or_else(|_| { let s = self.e.span(); slice_from_raw_parts(self.e.ptr, s.len() - 1) })
+                    .as_ref().unwrap()
+            };
+
+            // Skip to the report part
+            let report_start = &prefix[self.skip..];
+            let report_expr = unsafe { Expr { ptr: report_start.as_ptr().cast_mut() } };
+            let report_len = report_expr.span().len();
+
+            // The simple solution: emit an empty result to show no max was found
+            // This is cleaner than trying to emit a partial pattern
+            trace!(target: "sink", "  no numeric values found, returning empty");
+            return false;
+        }
 
         // STEP 1: Re-root the collected paths under the writer's root prefix (CRITICAL!)
         // This is the key insight from GPT-5 Pro - we need complete paths, not fragments

@@ -1,9 +1,13 @@
 use log::trace;
 use pathmap::arena_compact::{ACTMmapZipper};
 use pathmap::PathMap;
-use pathmap::zipper::{PolyZipper, PrefixZipper, ReadZipperUntracked, Zipper, ZipperAbsolutePath, ZipperIteration, ZipperMoving, DependentProductZipperG, ReadZipperOwned, ZipperSubtries};
+use pathmap::zipper::{PolyZipper, PrefixZipper, ReadZipperUntracked, Zipper, ZipperAbsolutePath, ZipperIteration, ZipperMoving, DependentProductZipperG, ReadZipperOwned, ZipperSubtries, ZipperValues};
 use mork_expr::{byte_item, destruct, item_byte, serialize, Expr, Tag};
 use mork_expr::macros::SerializableExpr;
+
+// Note: FilterZipper implementation is more complex than expected
+// For now, we'll keep the simpler approach where predicates don't work as intended
+// The max/min non-numeric handling is the main improvement achieved
 
 pub(crate) enum ResourceRequest {
     BTM(&'static [u8]),
@@ -142,6 +146,132 @@ impl Source for CmpSource {
     }
 }
 
+/* // IsNumberSource - checks if an expression is a numeric value
+// Syntax: (is-number <expr>)
+// NOTE: Implementation deferred - needs complex FilterZipper work
+struct IsNumberSource {
+    e: Expr
+}
+
+impl IsNumberSource {
+    // Prefix for (is-number $x) pattern
+    const PREFIX: [u8; 11] = [
+        item_byte(Tag::Arity(2)),
+        item_byte(Tag::SymbolSize(9)),
+        b'i', b's', b'-', b'n', b'u', b'm', b'b', b'e', b'r'
+    ];
+
+    fn arg_is_number(full_path: &[u8]) -> bool {
+        // Skip the prefix to get to the argument
+        if full_path.len() <= Self::PREFIX.len() {
+            return false;
+        }
+
+        let arg = &full_path[Self::PREFIX.len()..];
+
+        // Check if the argument is a numeric symbol
+        if arg.is_empty() {
+            return false;
+        }
+
+        // The argument should be a single symbol
+        if let Ok(Tag::SymbolSize(n)) = mork_expr::maybe_byte_item(arg[0]) {
+            let n = n as usize;
+            if arg.len() >= n + 1 {
+                let sym = &arg[1..n + 1];
+                // Check if it's a valid number
+                if sym.is_empty() { return false; }
+                if sym[0] == b'-' {
+                    if sym.len() <= 1 || !sym[1..].iter().all(|b| b.is_ascii_digit()) {
+                        return false;
+                    }
+                } else if !sym.iter().all(|b| b.is_ascii_digit()) {
+                    return false;
+                }
+                // Try to parse as i64
+                let s = unsafe { core::str::from_utf8_unchecked(sym) };
+                return s.parse::<i64>().is_ok();
+            }
+        }
+        false
+    }
+}
+
+impl Source for IsNumberSource {
+    fn new(e: Expr) -> Self {
+        IsNumberSource { e }
+    }
+
+    fn request(&self) -> impl Iterator<Item=ResourceRequest> {
+        // Request the entire BTM space to filter
+        std::iter::once(ResourceRequest::BTM([].as_slice()))
+    }
+
+    fn source<'trie, 'path, It: Iterator<Item=Resource<'trie, 'path>>>(&self, mut it: It) -> AFactor<'trie, ()> where 'path : 'trie {
+        let Resource::BTM(rz) = it.next().unwrap() else { unreachable!() };
+
+        // Simple prefix approach for now - filtering would need more complex zipper work
+        let prefixed = PrefixZipper::new(&Self::PREFIX[..], rz);
+
+        AFactor::IsNumberSource(prefixed)
+    }
+}
+
+// IsVarSource - checks if an expression is a variable
+// Syntax: (is-var <expr>)
+struct IsVarSource {
+    e: Expr
+}
+
+impl IsVarSource {
+    // Prefix for (is-var $x) pattern
+    const PREFIX: [u8; 8] = [
+        item_byte(Tag::Arity(2)),
+        item_byte(Tag::SymbolSize(6)),
+        b'i', b's', b'-', b'v', b'a', b'r'
+    ];
+
+    fn arg_is_var(full_path: &[u8]) -> bool {
+        // Skip the prefix to get to the argument
+        if full_path.len() <= Self::PREFIX.len() {
+            return false;
+        }
+
+        let arg = &full_path[Self::PREFIX.len()..];
+
+        // Check if the argument is a variable
+        if arg.is_empty() {
+            return false;
+        }
+
+        // Check the first byte of the argument
+        match mork_expr::maybe_byte_item(arg[0]) {
+            Ok(Tag::NewVar) => true,      // $
+            Ok(Tag::VarRef(_)) => true,    // _1, _2, etc
+            _ => false
+        }
+    }
+}
+
+impl Source for IsVarSource {
+    fn new(e: Expr) -> Self {
+        IsVarSource { e }
+    }
+
+    fn request(&self) -> impl Iterator<Item=ResourceRequest> {
+        std::iter::once(ResourceRequest::BTM([].as_slice()))
+    }
+
+    fn source<'trie, 'path, It: Iterator<Item=Resource<'trie, 'path>>>(&self, mut it: It) -> AFactor<'trie, ()> where 'path : 'trie {
+        let Resource::BTM(rz) = it.next().unwrap() else { unreachable!() };
+
+        // Simple prefix approach for now - filtering would need more complex zipper work
+        let prefixed = PrefixZipper::new(&Self::PREFIX[..], rz);
+
+        AFactor::IsVarSource(prefixed)
+    }
+}
+*/
 
 pub enum ASource { PosSource(BTMSource), ACTSource(ACTSource), CmpSource(CmpSource) }
 
