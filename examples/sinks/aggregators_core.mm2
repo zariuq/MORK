@@ -1,0 +1,73 @@
+; Core Aggregator Tests - MAX, MIN, COUNT
+; ========================================
+; Demonstrates the three main aggregators with basic usage
+
+; === Test 1: MAX - Find maximum value ===
+(depth frame-1 3)
+(depth frame-2 7)
+(depth frame-3 2)
+(depth frame-4 9)
+(depth frame-5 5)
+
+(exec (1 test-max)
+  (, (depth $frame $level))
+  (O (max (max-depth $m) $m $level)))
+
+; Expected: (max-depth 9)
+
+; === Test 2: MIN - Find minimum value ===
+(cost task-a 15)
+(cost task-b 8)
+(cost task-c 23)
+(cost task-d 12)
+
+(exec (2 test-min)
+  (, (cost $task $value))
+  (O (min (min-cost $m) $m $value)))
+
+; Expected: (min-cost 8)
+
+; === Test 3: COUNT - Count matches ===
+(color apple red)
+(color banana yellow)
+(color grape purple)
+(color strawberry red)
+(color cherry red)
+
+(exec (3 test-count)
+  (, (color $fruit $c))
+  (O (count (total-fruits $k) $k ($fruit $c))))
+
+; Expected: (total-fruits 5)
+
+; === Test 4: MAX with NewVar (simplest) ===
+(simple-data 5)
+(simple-data 10)
+(simple-data 3)
+
+;; Zar: whoa, just using $ is weird but it seems to work!
+(exec (4 test-max-newvar)
+  (, (simple-data $v))
+  (O (max (found-max $) $ $v)))
+
+; Expected: (found-max 10)
+; The $ is a NewVar - doesn't bind, just aggregates
+
+; === Test 5: HEAD - Limit output ===
+(item 1) (item 2) (item 3) (item 4) (item 5) (item 6)
+(tag a) (tag b)
+
+(exec (5 test-head)
+  (, (item $x) (tag $t))
+  (O (head 5 (result $x $t))
+     (head 3 (result $x))))
+
+; Expected: First 5 of 12 combinations
+; (result a 1) (result a 2) (result a 3) (result a 4) (result a 5)
+
+; Key patterns:
+; - (max <report> <var> <value>) - aggregates max, binds var in report
+; - (min <report> <var> <value>) - aggregates min, binds var in report
+; - (count <report> <var> <template>) - counts matches, binds count to var
+; - (head <N> <template>) - limits output to first N results
+; - Use $ (NewVar) when you don't need the aggregated value in report

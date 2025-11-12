@@ -1,0 +1,56 @@
+
+(item a)
+(item b)
+(item c)
+(item2 a)
+(item2 b)
+(item2 c)
+(item2 d)
+
+;; out: (count 3)
+(exec (0 just-count)
+  (, (item $x))
+  (O (count (count $k) $k (item $x))))
+
+;; out:
+;; (count-item2 4)
+;; (count-item2.2 4)
+(exec (5 two-counts-same-var)
+  (, (item2 $x))
+  (O (count (count-item2 $k) $k $x)
+     (count (count-item2.2 $k) $k $x)))
+
+;; out: 
+;; (count-item-k 3)
+;; (count-item-n (count-item-n $a))
+(exec (5 two-counts-diff-var)
+  (, (item $x))
+  (O (count (count-item-k $k) $k $x)
+     (count (count-item-n $n) $n $x)))
+
+;; out: 
+;; (count-item-vv-k 3)
+;; (count-item2-vv-n (count-item2-vv-n $a))
+(exec (5 two-counts-diff-var-value)
+  (, (item $x) (item2 $y))
+  (O (count (count-item-vv-k $k) $k $x)
+     (count (count-item2-vv-n $n) $n $y)))
+
+; === Test 2: Duplicates - MAX and COUNT with SAME variable ===
+(dup-data 1 7)
+(dup-data 2 3)
+(dup-data 3 7)
+(dup-data 4 9)
+(dup-data 5 7)
+
+(exec (2 test-duplicates)
+  (, (dup-data $c $v))
+  (O (max (max-of-dups $m) $m $v)
+     (min (min-of-dups $m) $m $v)
+     (count (count-dups $m) $m ($c $v))
+     (count (count-dups-unique $m) $m $v)
+     (head 3 (head-dups $c $v))))
+    ;  (+ (love $m)))) ;; (love $a) 
+
+;; head with $v only breaks -- probably due to the duplicates becoming unique.
+;; So we CAN use multiple sinks in one exec -- they just need to use the same variable, even though they'll have different values.

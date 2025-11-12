@@ -1,0 +1,90 @@
+; Practical Aggregator Examples - Real-World Use Cases
+; ====================================================
+
+; === Use Case 1: mmverify - Finding max frame depth ===
+; From mmverify-utils.metta: Find deepest frame level for hypothesis processing
+; Simulates collected frame levels from EList entries
+
+(level 1)
+(level 3)
+(level 2)
+(level 5)
+(level 4)
+
+(exec (1 mmverify-max-level)
+  (, (level $l))
+  (O (max (max-level $m) $m $l)))
+
+; Expected: (max-level 5)
+; Use: Process ehyps in order from deepest to shallowest frame
+
+; === Use Case 2: mmverify - Collecting and counting hypotheses ===
+; Track all hypotheses and count them
+
+(hyp stmt-1 e h1)
+(hyp stmt-1 f h2)
+(hyp stmt-2 e h3)
+(hyp stmt-2 f h4)
+(hyp stmt-2 f h5)
+
+(exec (2 mmverify-collect-hyps)
+  (, (hyp $stmt $type $label))
+  (O (count (total-hyps $n) $n (hyp-record $stmt $type $label))))
+
+; Expected: (total-hyps 5)
+
+; === Use Case 3: Graph analysis - Finding critical paths ===
+; Find the longest/shortest path in a graph
+
+(path-length route-a 10)
+(path-length route-b 7)
+(path-length route-c 15)
+(path-length route-d 12)
+
+(exec (3 graph-longest-path)
+  (, (path-length $route $len))
+  (O (max (longest-path $m) $m $len)
+     (min (shortest-path $m) $m $len)))
+
+; Expected: (longest-path 15), (shortest-path 7)
+; Note: Both use $m - they bind different values but same variable name required
+
+; === Use Case 4: Resource allocation - Finding bottlenecks ===
+; Track resource usage and find peak/minimum
+
+(cpu-usage process-1 45)
+(cpu-usage process-2 89)
+(cpu-usage process-3 23)
+(cpu-usage process-4 67)
+
+(exec (4 resource-analysis)
+  (, (cpu-usage $proc $pct))
+  (O (max (peak-cpu $m) $m $pct)
+     (min (min-cpu $m) $m $pct)
+     (count (active-processes $m) $m (process $proc))))
+
+; Expected: (peak-cpu 89), (min-cpu 23), (active-processes 4)
+; Note: All use $m - each binds different value but same variable required
+
+; === Use Case 5: Proof search - Tracking proof metrics ===
+; Find the shortest proof and count total attempts
+
+(proof-steps theorem-1 12)
+(proof-steps theorem-2 8)
+(proof-steps theorem-3 15)
+(proof-steps theorem-4 10)
+
+(exec (5 proof-analysis)
+  (, (proof-steps $thm $steps))
+  (O (min (shortest-proof $m) $m $steps)
+     (max (longest-proof $m) $m $steps)
+     (count (total-theorems $m) $m (theorem $thm))))
+
+; Expected: (shortest-proof 8), (longest-proof 15), (total-theorems 4)
+; Note: All use $m - each binds different value but same variable required
+
+; Key patterns:
+; 1. Multiple aggregators CAN be combined in one exec
+; 2. They MUST use the SAME variable ($m), even though each binds different values
+; 3. Cannot use these values in premises - only in the output template
+; 4. Real-world: verification, graphs, resources, proofs
