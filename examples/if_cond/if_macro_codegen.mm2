@@ -1,13 +1,13 @@
 ; Dynamic if-then-else via exec creation (macro style)
 ; Data: (if <id> <cond> <then> <else>), gate: (if-make <id>), run: (if-run <id>)
-; The macro creates two execs specific to <id>: (0 if-true <id>) and (1 if-false <id>).
+; The macro creates two execs dynamically: (0 if-true <id>) and (1 if-false <id>).
 
-; --- Tiny demo ---
-; Define an if, materialize its execs, then run it. Toggle (A) to choose branch.
-(if e1 (A) (B) (C))
+; --- Demo: if-statement with code generation ---
+; Define an if-statement, trigger macro expansion, then execute
+(if e1 (condition-holds) (result then-branch) (result else-branch))
 (if-make e1)
 (if-run e1)
-(A)
+(condition-holds)   ; Toggle this to choose branch
 
 ; --- Macro expansion: create per-id execs ---
 (exec (0 if-macro-expand)

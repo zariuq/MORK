@@ -1,7 +1,7 @@
 use log::trace;
 use pathmap::arena_compact::{ACTMmapZipper};
 use pathmap::PathMap;
-use pathmap::zipper::{PolyZipper, PrefixZipper, ReadZipperUntracked, Zipper, ZipperAbsolutePath, ZipperIteration, ZipperMoving, DependentProductZipperG, ReadZipperOwned, ZipperSubtries, ZipperValues};
+use pathmap::zipper::{PolyZipper, PrefixZipper, ReadZipperUntracked, Zipper, ZipperAbsolutePath, ZipperIteration, ZipperMoving, DependentProductZipperG, ReadZipperOwned, ZipperSubtries};
 use mork_expr::{byte_item, destruct, item_byte, serialize, Expr, Tag};
 use mork_expr::macros::SerializableExpr;
 

@@ -1,21 +1,23 @@
 ; Minimal MM2 "if" via two execs and a run token.
-; If (A) is present when (if-run) is set, emit (B); otherwise emit (C).
-; Ordering is enforced by exec name prefix: lower comes first.
+; If (condition-holds) is present, emit (result then-branch); else emit (result else-branch).
+; Priority ordering ensures true-branch (0 ...) is checked before false-branch (1 ...).
 
 ; Toggle this fact to choose the branch:
 (if-run)
-(A)   ; comment this line to test the else branch
+(condition-holds)   ; comment this line to test the else branch
 
-; True branch: requires both (if-run) and (A)
+; True branch: requires both (if-run) and (condition-holds)
 (exec (0 if-true)
-  (, (if-run)
-     (A))
-  (O (+ (B))
+  (, (if-run) (condition-holds))
+  (O (+ (result then-branch))
      (- (if-run))))
 
 ; Else branch: fires only if true branch didn't consume (if-run)
 (exec (1 if-false)
   (, (if-run))
-  (O (+ (C))
+  (O (+ (result else-branch))
      (- (if-run))))
+
+; Expected output: (result then-branch) because (condition-holds) is present
+; If you comment out (condition-holds), output will be: (result else-branch)
 

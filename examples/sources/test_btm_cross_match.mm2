@@ -15,8 +15,3 @@
 
 ; Expected: (MATCHED (foo bar) (foo bar))
 
-(exec (0 cross-match)
-  (, (Something $x $y)
-     (Else $x $y))
-  (O (+ (MATCHED2 $x $y))))
-
