@@ -1,0 +1,85 @@
+; Comprehensive List Operations - Sequential vs Parallel Patterns
+; ===============================================================
+; Demonstrates key patterns for processing lists in MORK
+
+; === Example Data ===
+; Three pairs to process
+(pair 1 (5 cow))
+(pair 2 (3 dog))
+(pair 3 (7 cat))
+
+; Numbers to sum
+(num 0 2)
+(num 1 4)
+(num 2 3)
+
+; === PATTERN 1: PARALLEL Processing (SIMD-style) ===
+; All items process independently at once
+; No dependencies between items
+
+; Swap pairs rule - fires for ALL pairs simultaneously
+(step (0 swap) (, (pair $id ($a $b))) (O (+ (swapped $id ($b $a))) (- (pair $id ($a $b)))))
+
+; === PATTERN 2: SEQUENTIAL Processing (Loop) ===
+; Items must be processed in order with accumulation
+; Uses bootstrap pattern to keep rules active
+
+; Sum with accumulation: start with (sum-state 0 3 0) = index 0, count 3, acc 0
+(sum-state 0 3 0)
+
+; Successor chain
+(S 0 1) (S 1 2) (S 2 3) (S 3 4)
+
+; Addition table
+(add 0 2 2) (add 0 3 3) (add 0 4 4)
+(add 2 4 6) (add 6 3 9)
+
+; Step rule: process one number and continue
+(step (1 sum-step)
+  (, (sum-state $i $rem $acc)
+     (S $rem1 $rem)
+     (S $rem2 $rem1)
+     (num $i $val)
+     (add $acc $val $new_acc)
+     (S $i $i1))
+  (O (+ (sum-state $i1 $rem1 $new_acc))
+     (- (sum-state $i $rem $acc))))
+
+; Stop rule: emit final result
+(step (2 sum-stop)
+  (, (sum-state $i 1 $acc)
+     (num $i $val)
+     (add $acc $val $result))
+  (O (+ (sum-result $result))
+     (- (sum-state $i 1 $acc))))
+
+; === Bootstrap: Activate all rules ===
+(exec (99 bootstrap)
+  (, (step ($priority $name) $premises $conclusions)
+     (exec (99 bootstrap) $p $t))
+  (O (+ (exec ($priority $name) $premises $conclusions))
+     (+ (exec (99 bootstrap) $p $t))))
+
+; Expected output:
+; (swapped 1 (cow 5))  ← All three pairs swap in parallel
+; (swapped 2 (dog 3))
+; (swapped 3 (cat 7))
+; (sum-result 9)       ← Sum computed sequentially: 2+4+3=9
+;
+; Key Takeaways:
+; ==============
+; 1. PARALLEL: Use when items are independent
+;    - One exec rule matches all items simultaneously
+;    - Order doesn't matter
+;    - Example: swapping pairs, doubling numbers
+;
+; 2. SEQUENTIAL: Use when items depend on each other
+;    - Loop with state that accumulates
+;    - Order matters (each step depends on previous)
+;    - Example: sum, product, prefix sum
+;
+; 3. BOOTSTRAP: Required to keep exec rules active
+;    - Store rules as (step ...) data
+;    - Bootstrap exec converts them to active (exec ...)
+;    - Bootstrap persists to keep rules alive after matching
+

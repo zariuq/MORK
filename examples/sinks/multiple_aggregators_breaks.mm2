@@ -46,6 +46,7 @@
 (exec (2 test-duplicates)
   (, (dup-data $c $v))
   (O (max (max-of-dups $m) $m $v)
+     (max (max-of-indices $m) $m $c)
      (min (min-of-dups $m) $m $v)
      (count (count-dups $m) $m ($c $v))
      (count (count-dups-unique $m) $m $v)

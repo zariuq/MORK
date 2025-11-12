@@ -1,0 +1,92 @@
+; === Nil-first dynamic priorities via two-phase scheduling ===
+; Key insight: Compile domain priorities into scheduling keys:
+;   - Urgent/Nil tasks → key (0 name) - runs FIRST
+;   - Regular Cons tasks → key (1 list name) - runs after urgent
+;
+; Phase 0 (priority 0 steps): Manipulate priorities (insertions/escalations)
+; Phase 1 (priority 1 steps): Activate tasks with compiled scheduling keys
+
+; ----- Seed tasks (one urgent, others as Cons-lists) -----
+(task Nil hotfix)
+(task (Cons 1 Nil) setup)
+(task (Cons 2 Nil) test)
+
+; Dynamic insertion triggers
+(insert-task implement)
+(insert-task-before implement design)
+
+; Run triggers for all tasks
+(run hotfix) (run setup) (run implement) (run design) (run test)
+
+; Execution order tracking
+(exec-order 0)
+(S 0 1) (S 1 2) (S 2 3) (S 3 4) (S 4 5) (S 5 6)
+
+; ----- PHASE 0: Build/modify priorities BEFORE activation -----
+
+; Create implement at (Cons 1 (Cons 5 Nil))
+(step (0 insert)
+  (, (insert-task $name))
+  (O (+ (task (Cons 1 (Cons 5 Nil)) $name))
+     (- (insert-task $name))))
+
+; Insert 'design' before 'implement' by deepening the list
+(step (0 insert-before)
+  (, (insert-task-before $target $new)
+     (task (Cons 1 (Cons 5 Nil)) $target))
+  (O (+ (task (Cons 1 (Cons 2 (Cons 5 Nil))) $new))
+     (- (insert-task-before $target $new))))
+
+; Dynamic escalation: mark any task as urgent → flip to Nil
+; Example: Add (urgent setup) to promote setup to run first, before all Cons tasks
+; This happens at priority 0, before activation at priority 1
+(step (0 escalate-urgent)
+  (, (urgent $name) (task $old $name))
+  (O (+ (task Nil $name))
+     (- (task $old $name))
+     (- (urgent $name))))
+
+; ----- PHASE 1: Activation with Nil-first scheduling keys -----
+
+; Nil tasks → key (0 name) - RUNS FIRST
+(step (1 activate-nil)
+  (, (task Nil $name))
+  (O (+ (exec ((0) $name)
+          (, (run $name) (exec-order $n) (S $n $next))
+          (O (+ (executed-at $n Nil $name))
+             (- (run $name))
+             (- (exec-order $n))
+             (+ (exec-order $next)))))
+     (- (task Nil $name))))
+
+; Cons tasks → key (1 list name) - runs after urgent
+(step (1 activate-cons)
+  (, (task (Cons $h $t) $name))
+  (O (+ (exec ((1 (Cons $h $t)) $name)
+          (, (run $name) (exec-order $n) (S $n $next))
+          (O (+ (executed-at $n (Cons $h $t) $name))
+             (- (run $name))
+             (- (exec-order $n))
+             (+ (exec-order $next)))))
+     (- (task (Cons $h $t) $name))))
+
+; Bootstrap: turn every (step (X Y) ...) into (exec (X Y) ...)
+(exec (99 bootstrap)
+  (, (step ($p $label) $prem $conc)
+     (exec (99 bootstrap) $q $t))
+  (O (+ (exec ($p $label) $prem $conc))
+     (+ (exec (99 bootstrap) $q $t))))
+
+; Expected execution order:
+; 1. (executed-at 0 Nil hotfix) - Urgent task runs FIRST with key (0)
+; 2. (executed-at 1 (Cons 1 (Cons 2 (Cons 5 Nil))) design) - Deepest list
+; 3. (executed-at 2 (Cons 1 (Cons 5 Nil)) implement) - Medium depth
+; 4. (executed-at 3 (Cons 1 Nil) setup) - Shallow list
+; 5. (executed-at 4 (Cons 2 Nil) test) - Different head element
+;
+; Key properties:
+; ✓ Nil/urgent tasks always run first (key starts with 0)
+; ✓ Regular tasks run in their cons-list order (key starts with 1)
+; ✓ Can dynamically escalate any task to urgent via (urgent task-name)
+; ✓ Can still insert between any two priorities by extending cons lists
+; ✓ Execution order is tracked with exec-order counter

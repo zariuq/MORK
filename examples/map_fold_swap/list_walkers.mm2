@@ -1,0 +1,42 @@
+; List walkers: foreach, map (via apply), and foldl (reverse) - FIXED VERSION
+; Uses exec bootstrapping pattern to make rules persist
+
+; Demo list: (a b c)
+(foreach (Cons a (Cons b (Cons c Nil))))
+
+; === FOREACH RULES (as data) ===
+(step (0 fe-step) (, (foreach (Cons $h $t))) (O (+ (out $h)) (+ (foreach $t)) (- (foreach (Cons $h $t)))))
+(step (1 fe-stop) (, (foreach Nil)) (O (- (foreach Nil))))
+
+; === MAP RULES (as data) ===
+(map up (Cons a (Cons b (Cons c Nil))))
+(apply up a A)
+(apply up b B)
+(apply up c C)
+
+(step (2 map-step) (, (map $f (Cons $h $t)) (apply $f $h $h2)) (O (+ (mapped $h2)) (+ (map $f $t)) (- (map $f (Cons $h $t)))))
+(step (3 map-stop) (, (map $f Nil)) (O (- (map $f Nil))))
+
+; === FOLDL RULES (as data) ===
+(foldl rev Nil (Cons a (Cons b (Cons c Nil))))
+(apply2 rev $acc $h (Cons $h $acc))
+
+(step (4 fold-step) (, (foldl $f $acc (Cons $h $t)) (apply2 $f $acc $h $acc1)) (O (+ (foldl $f $acc1 $t)) (- (foldl $f $acc (Cons $h $t)))))
+(step (5 fold-stop) (, (foldl $f $acc Nil)) (O (+ (fold-result $acc)) (- (foldl $f $acc Nil))))
+
+; === BOOTSTRAP: Activate rules and keep them active ===
+(exec (99 bootstrap)
+  (, (step ($priority $name) $premises $conclusions)
+     (exec (99 bootstrap) $p $t))
+  (O (+ (exec ($priority $name) $premises $conclusions))
+     (+ (step ($priority $name) $premises $conclusions))
+     (+ (exec (99 bootstrap) $p $t))))
+
+; The bootstrap exec:
+; 1. Matches (step ...) data
+; 2. Creates active (exec ...) from it
+; 3. Keeps the (step ...) data for future re-activation
+; 4. Persists itself to continue bootstrapping
+;
+; This ensures exec rules remain active even after they match and transform data!
+

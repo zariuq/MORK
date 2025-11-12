@@ -1,0 +1,71 @@
+; Widest Path - Simple Static Execs Per Edge
+; ============================================
+; Create separate predicates for each edge to avoid aggregator bug
+
+; ----- Simple Graph: a --5--> b --3--> c -----
+(edge a b 5)
+(edge b c 3)
+
+; ----- Initial capacities -----
+(cap a 10)
+(cap b 0)
+(cap c 0)
+
+; ----- Stage 1a: Emit values for edge a->b -----
+(exec (0 emit-ab)
+  (, (cap a $ucap) (edge a b $w))
+  (O (+ (val-ab $ucap))
+     (+ (val-ab $w))))
+
+; ----- Stage 1b: Emit values for edge b->c -----
+(exec (1 emit-bc)
+  (, (cap b $ucap) (edge b c $w))
+  (O (+ (val-bc $ucap))
+     (+ (val-bc $w))))
+
+; ----- Stage 2a: Find min for a->b -----
+(exec (2 min-ab)
+  (, (val-ab $x))
+  (O (min (bottleneck-ab $m) $m $x)))
+
+; ----- Stage 2b: Find min for b->c -----
+(exec (3 min-bc)
+  (, (val-bc $x))
+  (O (min (bottleneck-bc $m) $m $x)))
+
+; ----- Stage 3: Convert to candidates -----
+(exec (4 make-cand-b)
+  (, (bottleneck-ab $newcap))
+  (O (+ (cand b $newcap))
+     (- (bottleneck-ab $newcap))
+     (- (val-ab $any))))
+
+(exec (5 make-cand-c)
+  (, (bottleneck-bc $newcap))
+  (O (+ (cand c $newcap))
+     (- (bottleneck-bc $newcap))
+     (- (val-bc $any))))
+
+; ----- Stage 4: Find best per node -----
+(exec (6 best-b)
+  (, (cand b $x))
+  (O (max (best b $m) $m $x)))
+
+(exec (7 best-c)
+  (, (cand c $x))
+  (O (max (best c $m) $m $x)))
+
+; ----- Stage 5: Update capacities -----
+(exec (8 update-b)
+  (, (best b $newcap) (cap b $oldcap))
+  (O (+ (cap b $newcap))
+     (- (cap b $oldcap))
+     (- (best b $newcap))
+     (- (cand b $any))))
+
+(exec (9 update-c)
+  (, (best c $newcap) (cap c $oldcap))
+  (O (+ (cap c $newcap))
+     (- (cap c $oldcap))
+     (- (best c $newcap))
+     (- (cand c $any))))
