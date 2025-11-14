@@ -1,21 +1,18 @@
-; Linked List Priorities - Using nested tuples instead of Cons/Nil
-; ==================================================================
-; Instead of (Cons 1 Nil), (Cons 1 (Cons 5 Nil)), etc
-; Use: (1 0), (1 (5 0)), (1 (5 (7 0))), etc
-;
-; Pattern: (head tail) where tail is either 0 or another nested tuple
+; Linked List Priorities - Using nested tuples for infinite subdivision
+; ======================================================================
+; Pattern: Use (n (0)) where (0) acts as terminator, insert (n (m (0))) between
 ; Examples:
-;   (0 0) represents [0]
-;   (1 0) represents [1]
-;   (0 (0 0)) represents [0, 0]
-;   (1 (2 (3 0))) represents [1, 2, 3]
+;   (1 (0)) represents priority [1]
+;   (2 (0)) represents priority [2]
+;   (1 (5 (0))) inserted between (1 (0)) and (2 (0))
+;   (1 (2 (5 (0)))) inserted between (1 (0)) and (1 (5 (0)))
 ;
-; Key insight: Can ALWAYS insert between priorities by extending the list
-; Between (1 0) and (2 0), insert (1 (5 0))
+; Key insight: Can ALWAYS insert between priorities by nesting deeper
+; Between (1 (0)) and (2 (0)), insert (1 (5 (0)))
 
 ; === Initial tasks with nested tuple priorities ===
-(task (1 0) setup)
-(task (2 0) test)
+(task (1 (0)) setup)
+(task (2 (0)) test)
 
 ; === Execution order tracking ===
 (exec-order 0)
@@ -26,17 +23,17 @@
 
 (step (0 insert)
   (, (insert-task $name))
-  (O (+ (task (1 (5 0)) $name))
+  (O (+ (task (1 (5 (0))) $name))
      (- (insert-task $name))))
 
 ; === Further subdivision trigger ===
 (insert-task-before implement design)
 
-; Driver: Insert design before implement by extending the list
+; Driver: Insert design before implement by extending the nesting
 (step (0 insert-before)
   (, (insert-task-before $target $new_name)
-     (task (1 (5 0)) $target))
-  (O (+ (task (1 (2 (5 0))) $new_name))
+     (task (1 (5 (0))) $target))
+  (O (+ (task (1 (2 (5 (0)))) $new_name))
      (- (insert-task-before $target $new_name))))
 
 ; === Run triggers for all tasks ===
@@ -63,15 +60,15 @@
   (O (+ (exec ($priority $name) $premises $conclusions))
      (+ (exec (99 bootstrap) $p $t))))
 
-; Expected execution order (if () comes before 0):
-; (executed-at 0 (1 (2 (5 0))) design)       - First (deepest nesting)
-; (executed-at 1 (1 (5 0)) implement)        - Second
-; (executed-at 2 (1 0) setup)                - Third
-; (executed-at 3 (2 0) test)                 - Last
+; Actual execution order:
+; (executed-at 0 (1 (0)) setup)             - First
+; (executed-at 1 (1 (2 (5 (0)))) design)    - Second
+; (executed-at 2 (1 (5 (0))) implement)     - Third
+; (executed-at 3 (2 (0)) test)              - Last
 ;
 ; This demonstrates:
-; 1. No Cons/Nil clutter - just nested tuples
-; 2. Can insert infinitely: just extend the nesting
-; 3. Dynamic insertion rules create tasks with computed priorities
-; 4. The exec priorities ARE the nested tuples themselves!
+; 1. Clean syntax - (n (0)) as base, (n (m (0))) for subdivision
+; 2. Can insert infinitely by nesting deeper between any two priorities
+; 3. Dynamic insertion creates tasks with intermediate priorities
+; 4. Works like linked lists for infinite priority subdivision!
 
