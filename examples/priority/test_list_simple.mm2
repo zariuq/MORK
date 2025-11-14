@@ -1,0 +1,14 @@
+; Test different list representations
+
+; Try using L as list constructor
+(exec ((L 1 0) test1)
+  ()
+  (O (+ (result test1))))
+
+(exec ((L 1 (L 5 0)) test2)
+  ()
+  (O (+ (result test2))))
+
+(exec ((L 2 0) test3)
+  ()
+  (O (+ (result test3))))

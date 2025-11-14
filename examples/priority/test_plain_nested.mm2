@@ -1,0 +1,17 @@
+; Test plain nested tuples without terminator
+
+(exec ((1) test1)
+  ()
+  (O (+ (result test1))))
+
+(exec ((1 5) test2)
+  ()
+  (O (+ (result test2))))
+
+(exec ((1 2 5) test3)
+  ()
+  (O (+ (result test3))))
+
+(exec ((2) test4)
+  ()
+  (O (+ (result test4))))

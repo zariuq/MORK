@@ -1,17 +1,21 @@
-; Linked List Priorities - Infinite Subdivision Without Hardcoding
-; =================================================================
-; Instead of tuple priorities like (1), (1 5), (1 2 5)
-; Use cons list priorities: (Cons 1 Nil), (Cons 1 (Cons 5 Nil))
+; Linked List Priorities - Using nested tuples instead of Cons/Nil
+; ==================================================================
+; Instead of (Cons 1 Nil), (Cons 1 (Cons 5 Nil)), etc
+; Use: (1 0), (1 (5 0)), (1 (5 (7 0))), etc
 ;
-; Key insight: Can ALWAYS insert between any two priorities by extending the list
-; Example: Between (Cons 1 Nil) and (Cons 2 Nil)
-;          Insert (Cons 1 (Cons 5 Nil))
+; Pattern: (head tail) where tail is either 0 or another nested tuple
+; Examples:
+;   (0 0) represents [0]
+;   (1 0) represents [1]
+;   (0 (0 0)) represents [0, 0]
+;   (1 (2 (3 0))) represents [1, 2, 3]
 ;
-; This demonstrates truly dynamic priority creation!
+; Key insight: Can ALWAYS insert between priorities by extending the list
+; Between (1 0) and (2 0), insert (1 (5 0))
 
-; === Initial tasks with cons list priorities ===
-(task (Cons 1 Nil) setup)
-(task (Cons 2 Nil) test)
+; === Initial tasks with nested tuple priorities ===
+(task (1 0) setup)
+(task (2 0) test)
 
 ; === Execution order tracking ===
 (exec-order 0)
@@ -22,7 +26,7 @@
 
 (step (0 insert)
   (, (insert-task $name))
-  (O (+ (task (Cons 1 (Cons 5 Nil)) $name))
+  (O (+ (task (1 (5 0)) $name))
      (- (insert-task $name))))
 
 ; === Further subdivision trigger ===
@@ -31,8 +35,8 @@
 ; Driver: Insert design before implement by extending the list
 (step (0 insert-before)
   (, (insert-task-before $target $new_name)
-     (task (Cons 1 (Cons 5 Nil)) $target))
-  (O (+ (task (Cons 1 (Cons 2 (Cons 5 Nil))) $new_name))
+     (task (1 (5 0)) $target))
+  (O (+ (task (1 (2 (5 0))) $new_name))
      (- (insert-task-before $target $new_name))))
 
 ; === Run triggers for all tasks ===
@@ -41,7 +45,7 @@
 (run design)
 (run test)
 
-; === Task activation: Convert tasks to execs with cons list priorities ===
+; === Task activation: Convert tasks to execs with nested tuple priorities ===
 ; Each exec will track when it runs using the exec-order counter
 (step (1 activate)
   (, (task $priority $name))
@@ -59,23 +63,15 @@
   (O (+ (exec ($priority $name) $premises $conclusions))
      (+ (exec (99 bootstrap) $p $t))))
 
-; Actual execution results with order tracking (verified):
-; (executed-at 0 (Cons 1 (Cons 2 (Cons 5 Nil))) design)       - First (step 0)
-; (executed-at 1 (Cons 1 (Cons 5 Nil)) implement)             - Second (step 1)
-; (executed-at 2 (Cons 1 Nil) setup)                          - Third (step 2)
-; (executed-at 3 (Cons 2 Nil) test)                           - Last (step 3)
-; Final state: (exec-order 4) - all 4 tasks completed
+; Expected execution order (if () comes before 0):
+; (executed-at 0 (1 (2 (5 0))) design)       - First (deepest nesting)
+; (executed-at 1 (1 (5 0)) implement)        - Second
+; (executed-at 2 (1 0) setup)                - Third
+; (executed-at 3 (2 0) test)                 - Last
 ;
-; Note: The execution order shows that MORK processes deeper cons lists first:
-;   (Cons 1 (Cons 2 (Cons 5 Nil))) executes before (Cons 1 (Cons 5 Nil))
-;   (Cons 1 (Cons 5 Nil)) executes before (Cons 1 Nil)
-; This suggests longer/deeper lists have higher priority in MORK's ordering.
-;
-; Beautiful properties:
-; 1. No hardcoded priorities beyond the base (Cons 1 Nil) and (Cons 2 Nil)
-; 2. Can insert infinitely: just extend the cons list
+; This demonstrates:
+; 1. No Cons/Nil clutter - just nested tuples
+; 2. Can insert infinitely: just extend the nesting
 ; 3. Dynamic insertion rules create tasks with computed priorities
-; 4. The exec priorities ARE the cons lists themselves!
-; 5. Execution order is tracked with (exec-order N) counter
-;
-; This is the "infinite subdivision" pattern with actual cons lists!
+; 4. The exec priorities ARE the nested tuples themselves!
+

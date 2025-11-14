@@ -1,0 +1,77 @@
+; Test if nested tuples work as priorities
+
+(dummy)
+(exec-order 0)
+(S 0 1) (S 1 2) (S 2 3) (S 3 4) (S 4 5) (S 5 6) (S 6 7) (S 7 8) (S 8 9) (S 9 10)
+
+; Simple nested tuple priorities
+(exec ((1 0) test1)
+  (, (dummy) (exec-order $n) (S $n $next))
+  (O (+ (result test1))
+     (+ (executed-at $n (1 0) test1))
+     (- (exec-order $n))
+     (+ (exec-order $next))))
+
+(exec ((2 0) test2)
+  (, (dummy) (exec-order $n) (S $n $next))
+  (O (+ (result test2))
+     (+ (executed-at $n (2 0) test2))
+     (- (exec-order $n))
+     (+ (exec-order $next))))
+
+(exec ((1 (5 0)) test3)
+  (, (dummy) (exec-order $n) (S $n $next))
+  (O (+ (result test3))
+     (+ (executed-at $n (1 (5 0)) test3))
+     (- (exec-order $n))
+     (+ (exec-order $next))))
+
+(exec ((0) test4)
+  (, (dummy) (exec-order $n) (S $n $next))
+  (O (+ (result test4))
+     (+ (executed-at $n ((0) test4) test4))
+     (- (exec-order $n))
+     (+ (exec-order $next))))
+
+(exec ((0))
+  (, (dummy) (exec-order $n) (S $n $next))
+  (O (+ (result test5))
+     (+ (executed-at $n (0) test5))
+     (- (exec-order $n))
+     (+ (exec-order $next))))
+
+(exec (0)
+  (, (dummy) (exec-order $n) (S $n $next))
+  (O (+ (result test6))
+     (+ (executed-at $n 0 test6))
+     (- (exec-order $n))
+     (+ (exec-order $next))))
+
+(exec (1 (5 (0)))
+  (, (dummy) (exec-order $n) (S $n $next))
+  (O (+ (result test7))
+     (+ (executed-at $n (1 (5 (0))) test7))
+     (- (exec-order $n))
+     (+ (exec-order $next))))
+
+(exec (1 (0))
+  (, (dummy) (exec-order $n) (S $n $next))
+  (O (+ (result test1))
+     (+ (executed-at $n (1 (0)) test8))
+     (- (exec-order $n))
+     (+ (exec-order $next))))
+
+(exec ((2 (0)))
+  (, (dummy) (exec-order $n) (S $n $next))
+  (O (+ (result test2))
+     (+ (executed-at $n ((2 (0))) test9))
+     (- (exec-order $n))
+     (+ (exec-order $next))))
+
+(exec (2 (0))
+  (, (dummy) (exec-order $n) (S $n $next))
+  (O (+ (result test2))
+     (+ (executed-at $n (2 (0)) test10))
+     (- (exec-order $n))
+     (+ (exec-order $next))))
+
