@@ -28,6 +28,7 @@ pub static mut unifications: usize = 0;
 pub static mut writes: usize = 0;
 
 pub static ACT_PATH: &'static str = "/dev/shm/";
+// pub static ACT_PATH: &'static str = "/mnt/data/";
 
 pub struct Space {
     pub btm: PathMap<()>,
@@ -35,7 +36,7 @@ pub struct Space {
     pub mmaps: HashMap<&'static str, ArenaCompactTree<memmap2::Mmap>>
 }
 
-const SIZES: [u64; 4] = {
+pub(crate) const SIZES: [u64; 4] = {
     let mut ret = [0u64; 4];
     let mut size = 1;
     while size < 64 {
@@ -45,7 +46,7 @@ const SIZES: [u64; 4] = {
     }
     ret
 };
-const ARITIES: [u64; 4] = {
+pub(crate) const ARITIES: [u64; 4] = {
     let mut ret = [0u64; 4];
     let mut arity = 1;
     while arity < 64 {
@@ -55,7 +56,7 @@ const ARITIES: [u64; 4] = {
     }
     ret
 };
-const VARS: [u64; 4] = {
+pub(crate) const VARS: [u64; 4] = {
     let mut ret = [0u64; 4];
     let nv_byte = item_byte(Tag::NewVar);
     ret[((nv_byte & 0b11000000) >> 6) as usize] |= 1u64 << (nv_byte & 0b00111111);
@@ -546,7 +547,6 @@ impl Space {
         Ok(st.count)
     }
 
-    #[cfg(all(feature = "nightly"))]
     pub fn json_to_paths<W : std::io::Write>(&mut self, r: &[u8], d: &mut W) -> Result<usize, String> {
         let mut sink = pathmap::paths_serialization::paths_serialization_sink(d);
 
@@ -566,7 +566,6 @@ impl Space {
         Ok(st.count)
     }
 
-    #[cfg(all(feature = "nightly"))]
     pub fn jsonl_to_paths<W : std::io::Write>(&mut self, r: &[u8], d: &mut W) -> Result<(usize, usize), String> {
         let mut lines = 0usize;
         let mut count = 0usize;
@@ -1191,6 +1190,34 @@ impl Space {
         out
     }
 
+    // pub fn prefix_subsumption_resources(prefixes: &[crate::sinks::WriteResourceRequest]) -> Vec<usize> {
+    //     let n = prefixes.len();
+    //     let mut out = Vec::with_capacity(n);
+    //
+    //     for (i, &cur) in prefixes.iter().enumerate() {
+    //         let mut best_idx = i;
+    //         let mut best_len = cur.len();
+    //
+    //         for (j, &cand) in prefixes.iter().enumerate() {
+    //             // cand \/ cur == cand
+    //             // x <= y  <=>  (x \/ y) == y
+    //             if pathmap::utils::find_prefix_overlap(cand, cur) == cand.len() {
+    //                 let cand_len = cand.len();
+    //
+    //                 // cand < best || (cand == best &&)
+    //                 if cand_len < best_len || (cand_len == best_len && j < best_idx) {
+    //                     best_idx = j;
+    //                     best_len = cand_len;
+    //                 }
+    //             }
+    //         }
+    //
+    //         out.push(best_idx);
+    //     }
+    //
+    //     out
+    // }
+
     pub fn transform_multi_multi_(&mut self, pat_expr: Expr, tpl_expr: Expr, add: Expr) -> (usize, bool) {
         let mut buffer = Vec::with_capacity(1 << 32);
         unsafe { buffer.set_len(1 << 32); }
@@ -1410,7 +1437,12 @@ impl Space {
         ExprEnv::new(0, tpl_expr).args(&mut tpl_args);
         let mut templates: Vec<_> = tpl_args[1..].iter().map(|ee| ee.subsexpr()).collect();
         let mut sinks: Vec<_> = templates.iter().map(|e| ASink::new(*e)).collect();
-        let mut template_prefixes: Vec<_> = sinks.iter().map(|sink| sink.request().next().unwrap() ).collect();
+        let mut template_prefixes: Vec<_> = sinks.iter().map(|sink|
+            match sink.request().next().unwrap() {
+                WriteResourceRequest::BTM(p) => p,
+                WriteResourceRequest::ACT(_) => unreachable!()
+            }
+        ).collect();
         let mut subsumption = Self::prefix_subsumption(&template_prefixes[..]);
         let mut placements = subsumption.clone();
         let mut read_copy = self.btm.clone();
@@ -1495,7 +1527,7 @@ impl Space {
                         astack.clear();
 
                         trace!(target: "transform", "U {i} out {:?}", oz.root);
-                        sinks[i].sink(std::iter::once(wz), &buffer[..oz.loc]);
+                        sinks[i].sink(std::iter::once(WriteResource::BTM(wz)), &buffer[..oz.loc]);
                     }
                     true
                 }
@@ -1504,7 +1536,7 @@ impl Space {
 
         for (i, s) in sinks.iter_mut().enumerate() {
             let wz = &mut template_wzs[subsumption[i]];
-            any_new |= s.finalize(std::iter::once(wz));
+            any_new |= s.finalize(std::iter::once(WriteResource::BTM(wz)));
         }
         for wz in template_wzs {
             zh.cleanup_write_zipper(wz);
@@ -1521,7 +1553,12 @@ impl Space {
         ExprEnv::new(0, tpl_expr).args(&mut tpl_args);
         let mut templates: Vec<_> = tpl_args[1..].iter().map(|ee| ee.subsexpr()).collect();
         let mut sinks: Vec<_> = templates.iter().map(|e| ASink::new(*e)).collect();
-        let mut template_prefixes: Vec<_> = sinks.iter().map(|sink| sink.request().next().unwrap() ).collect();
+        let mut template_prefixes: Vec<_> = sinks.iter().map(|sink|
+            match sink.request().next().unwrap() {
+                WriteResourceRequest::BTM(p) => p,
+                WriteResourceRequest::ACT(_) => unreachable!()
+            }
+        ).collect();
         let mut subsumption = Self::prefix_subsumption(&template_prefixes[..]);
         let mut placements = subsumption.clone();
         let mut read_copy = self.btm.clone();
@@ -1606,7 +1643,7 @@ impl Space {
                         astack.clear();
 
                         trace!(target: "transform", "U {i} out {:?}", oz.root);
-                        sinks[i].sink(std::iter::once(wz), &buffer[..oz.loc]);
+                        sinks[i].sink(std::iter::once(WriteResource::BTM(wz)), &buffer[..oz.loc]);
                     }
                     true
                 }
@@ -1615,7 +1652,7 @@ impl Space {
 
         for (i, s) in sinks.iter_mut().enumerate() {
             let wz = &mut template_wzs[subsumption[i]];
-            any_new |= s.finalize(std::iter::once(wz));
+            any_new |= s.finalize(std::iter::once(WriteResource::BTM(wz)));
         }
         for wz in template_wzs {
             zh.cleanup_write_zipper(wz);
