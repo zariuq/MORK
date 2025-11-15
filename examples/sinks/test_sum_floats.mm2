@@ -1,0 +1,8 @@
+; Test: SUM with floats (will it panic or truncate?)
+
+(float-val 10.5)
+(float-val 20.3)
+
+(exec (0 test-floats)
+  (, (float-val $v))
+  (O (sum (float-result) 30 $v)))

@@ -1,0 +1,12 @@
+; Test: SUM with overflow (sum > u32::MAX = 4,294,967,295)
+
+(huge-val 3000000000)
+(huge-val 2000000000)
+
+(exec (0 test-overflow)
+  (, (huge-val $v))
+  (O (sum (overflow-result $o) $o $v)))
+
+; Note: 3B + 2B = 5,000,000,000
+; 5,000,000,000 mod 2^32 = 705,032,704 (wraps around)
+; Testing if it wraps or panics -- it wraps!

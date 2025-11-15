@@ -1,0 +1,28 @@
+; MM2 version of push-frame
+; Original MeTTa: (= (push-frame $fd) (adjust-state-additive $fd 1))
+
+(S 0 1)
+(S 1 2)
+(S 2 3)
+
+(state fd 0)
+
+(def push-frame
+  (, (state fd $a) (S $a $b))
+  (O (+ (state fd $b))
+     (- (state fd $a))))
+
+(step (0 push-frame))
+
+(exec bc
+  (, (def $name $premises $conclusions) (step ($priority $name)) (exec bc $p $c))
+  (O (+ (exec ($priority $name) $premises $conclusions))
+     (- (step ($priority $name)))
+     (+ (exec bc $p $c))))
+
+; Test 2: Push from 5 to 6
+(step (1 push-frame))
+
+; Expected output:
+; (state fd 2) - after both pushes (0->1->2)
+; Note: MM2 doesn't have assertions, verify output manually

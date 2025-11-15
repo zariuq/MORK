@@ -1,0 +1,45 @@
+; Test: SUM Sink - Basic Integer Testing
+; =======================================
+;
+; From source code: SUM parses values as u32 base-10 integers
+; Line 456: u32::from_str_radix(str::from_utf8(&p[clen+1..]).unwrap(), 10)
+
+; Test 1: Simple sum that matches
+(score-1 10)
+(score-1 20)
+(score-1 30)
+
+(exec (0 test-sum-match)
+  (, (score-1 $v))
+  (O (sum (total-60) 60 $v)))
+
+; Expected: (total-60)  ; Because 10+20+30=60 matches guard
+
+; Test 2: Sum that doesn't match
+(score-2 5)
+(score-2 15)
+(score-2 25)
+
+(exec (1 test-sum-no-match)
+  (, (score-2 $v))
+  (O (sum (should-not-appear) 100 $v)))
+
+; Expected: NO OUTPUT  ; Because 5+15+25=45, not 100
+
+; Test 3: Single value
+(single 42)
+
+(exec (2 test-sum-single)
+  (, (single $v))
+  (O (sum (single-sum) 42 $v)))
+
+; Expected: (single-sum)  ; 42 = 42
+
+; Test 4: Zero values
+(zero-val 0)
+
+(exec (3 test-sum-zero)
+  (, (zero-val $v))
+  (O (sum (zero-result) 0 $v)))
+
+; Expected: (zero-result)  ; 0 = 0

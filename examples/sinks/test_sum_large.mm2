@@ -1,0 +1,10 @@
+; Test: SUM with large numbers within u32 range
+
+(large-val 1000000)
+(large-val 2000000)
+
+(exec (0 test-large)
+  (, (large-val $v))
+  (O (sum (large-sum) 3000000 $v)))
+
+; Expected: (large-sum) if it works

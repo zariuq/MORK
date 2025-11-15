@@ -1,0 +1,67 @@
+; Test: SUM Sink - Edge Cases
+; ============================
+;
+; Testing: floats, negatives, large numbers, non-numeric
+; All commented out versions lead to a panic:
+; called `Result::unwrap()` on an `Err` value: ParseIntError { kind: InvalidDigit }
+
+; Test 1: What happens with floats?
+; (float-val 10.5)
+; (float-val 20.3)
+
+; (exec (0 test-floats)
+;   (, (float-val $v))
+;   (O (sum (float-result) 30 $v)))
+
+; Hypothesis: Will fail to parse or truncate
+
+; Test 2: What happens with negative numbers?
+; (neg-val -5)
+; (neg-val 10)
+
+; (exec (1 test-negatives)
+;   (, (neg-val $v))
+;   (O (sum (neg-result) 5 $v)))
+
+; Hypothesis: Will fail (u32 is unsigned)
+
+; Test 3: Large numbers (within u32 range)
+(large-1 1000000)
+(large-1 2000000)
+
+(exec (2 test-large)
+  (, (large-1 $v))
+  (O (sum (large-sum) 3000000 $v)))
+
+; Expected: Should work (within u32::MAX = 4,294,967,295)
+
+; Test 4: Very large numbers (exceed u32)
+(huge-1 3000000000)
+(huge-1 2000000000)
+
+(exec (3 test-overflow)
+  (, (huge-1 $v))
+  (O (sum (overflow-result) 5000000000 $v)))
+
+; Hypothesis: Will overflow or panic (sum = 5B > u32::MAX)
+
+; Test 5: Non-numeric values
+; (text-val abc)
+; (text-val def)
+
+; (exec (4 test-non-numeric)
+;   (, (text-val $v))
+;   (O (sum (text-result) 0 $v)))
+
+; Hypothesis: Will panic or silently skip
+
+; Test 6: Mixed valid and invalid
+; (mixed-val 10)
+; (mixed-val abc)
+; (mixed-val 20)
+
+; (exec (5 test-mixed)
+;   (, (mixed-val $v))
+;   (O (sum (mixed-result) 30 $v)))
+
+; Hypothesis: Might skip invalids and sum valids (10+20=30?)
