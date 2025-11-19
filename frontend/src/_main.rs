@@ -241,7 +241,7 @@ fn main() {
     let mut parser = DataParser::new();
 
     let t0 = Instant::now();
-    // let mut btm = BytesTrieMap::new();
+    // let mut btm = PathMap::new();
     let mut i = 0;
     let mut stack = [0; 2 << 19];
     loop {
