@@ -1419,10 +1419,17 @@ impl Sink for SATSink {
                 };
                 if file.write_all(dimacs_content.as_bytes()).is_err() { continue; }
 
-                let output = match process::Command::new("minisat").arg(&temp_file_path).output() {
+                // Run minisat with a 30s timeout
+                // Using `timeout` command on Linux
+                let output = match process::Command::new("timeout")
+                    .arg("30s")
+                    .arg("minisat")
+                    .arg(&temp_file_path)
+                    .output() 
+                {
                     Ok(o) => o,
                     Err(e) => {
-                         error!(target: "sink", "minisat command failed: {}", e);
+                         error!(target: "sink", "minisat execution failed: {}", e);
                          continue
                     },
                 };
@@ -1431,40 +1438,54 @@ impl Sink for SATSink {
                 let _ = std::fs::remove_file(temp_file_path);
 
                 let stdout_str = String::from_utf8_lossy(&output.stdout);
-                trace!(target: "sink", "minisat output: {}", stdout_str);
+                let stderr_str = String::from_utf8_lossy(&output.stderr);
                 
                 if stdout_str.contains("UNSATISFIABLE") {
                     result_tag_bytes = b"UNSAT";
                 } else if stdout_str.contains("SATISFIABLE") {
                     result_tag_bytes = b"SAT";
                 } else {
-                    warn!(target: "sink", "minisat output not recognized");
-                    continue; 
+                    // Check for timeout or other errors
+                    if stderr_str.contains("term") || output.status.code() == Some(124) {
+                         warn!(target: "sink", "minisat timed out");
+                         result_tag_bytes = b"TIMEOUT";
+                    } else {
+                         warn!(target: "sink", "minisat output not recognized or failed");
+                         trace!(target: "sink", "stdout: {}", stdout_str);
+                         continue;
+                    }
                 }
             }
 
-            // Substitution: Replace 'status_bytes' in 'report_bytes' with 'result_tag_bytes'
-            // Simple byte replacement. Since status_bytes is a variable (tag+index/name), it should be unique enough.
-            // We construct the result vector.
+            // Substitution: Replace 'status_bytes' variable in 'report_bytes' with 'result_tag_bytes'.
+            //
+            // NOTE: Variables in MeTTa can be encoded in multiple ways depending on context (bound/free).
+            // - `NewVar` (tag 128 / 0x80): Often used for fresh variables.
+            // - `VarRef` (tag 192 / 0xC0): Reference to a variable by De Bruijn index or offset.
+            //
+            // The `status_bytes` extracted from the sink pattern `(sat ... $s ...)` might be a `NewVar`,
+            // but inside the `report` template `(result $s)`, that same `$s` might be encoded as `VarRef(0)`.
+            // We handle this by checking for both the exact `status_bytes` sequence and, if `status_bytes` looks like a `NewVar`,
+            // checking for a `VarRef(0)` byte (192). This heuristic enables the user to use `$s` naturally in both places.
+            
             let mut result_expr = Vec::new();
             let mut i = 0;
             
-            // eprintln!("DEBUG: Substitution. Report: {:?}, Status: {:?}", report_bytes, status_bytes);
-            
-            let mut substituted = false;
-            // Heuristic: if status is NewVar (128), the report might use VarRef(0) (192)
             let alt_target = if status_bytes.len() == 1 && status_bytes[0] == 128 {
-                Some(vec![192u8])
+                Some(vec![192u8]) // 192 is VarRef(0)
             } else {
                 None
             };
 
             while i < report_bytes.len() {
                 let mut matched = false;
+                // Try exact match first
                 if report_bytes[i..].starts_with(status_bytes) {
                     matched = true;
                     i += status_bytes.len();
-                } else if let Some(ref alt) = alt_target {
+                } 
+                // Fallback to heuristic match
+                else if let Some(ref alt) = alt_target {
                     if report_bytes[i..].starts_with(alt) {
                         matched = true;
                         i += alt.len();
@@ -1473,18 +1494,13 @@ impl Sink for SATSink {
 
                 if matched {
                     // Found variable, replace with result symbol
-                    // result symbol needs to be a proper symbol: [SymbolSize] [Bytes]
-                    // eprintln!("DEBUG: Substituting at index {}", i);
+                    // Symbols are encoded as [SymbolSize] [Bytes...]
                     result_expr.push(item_byte(Tag::SymbolSize(result_tag_bytes.len() as u8)));
                     result_expr.extend_from_slice(result_tag_bytes);
-                    substituted = true;
                 } else {
                     result_expr.push(report_bytes[i]);
                     i += 1;
                 }
-            }
-            if !substituted {
-                // eprintln!("DEBUG: WARNING: No substitution occurred for key {:?}", key);
             }
 
             wz.move_to_path(&result_expr);
