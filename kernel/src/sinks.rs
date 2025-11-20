@@ -1,7 +1,7 @@
 use std::io::{BufRead, Read, Write};
 use std::{mem, process, ptr};
 use std::any::Any;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 use std::fs::File;
 use std::hint::unreachable_unchecked;
 use std::mem::MaybeUninit;
@@ -1187,6 +1187,319 @@ impl Sink for MinSink {
     }
 }
 
+pub struct SATSink {
+    e: Expr,
+    clauses: BTreeMap<Vec<u8>, Vec<Vec<u8>>>,
+    changed: bool,
+}
+
+impl SATSink {
+    // Helper to destruct (clauseset $branch $clause)
+    fn try_destruct_clauseset(ctx: Expr) -> Result<(Vec<u8>, Expr), ExtractFailure> {
+        destruct!(ctx, ("clauseset" branch_expr clause_expr), {
+            // Convert branch_expr to Vec<u8> for the key
+            let branch_id = unsafe { branch_expr.span().as_ref().unwrap().to_vec() };
+            Ok((branch_id, clause_expr))
+        }, _err => Err(ExtractFailure::ExprEarlyMismatch(0, 0)))
+    }
+
+    // Helper to convert an Expr to DIMACS literal
+    // For now, this is a very simplified placeholder.
+    // Real implementation needs to handle propositional variables mapping and negation.
+    fn expr_to_dimacs_literal(expr: Expr, var_map: &mut BTreeMap<Vec<u8>, i32>, next_var_id: &mut i32) -> Option<i32> {
+        let span = unsafe { expr.span().as_ref().unwrap() };
+        
+        // Handle negation first
+        if let Ok(negated_expr) = destruct!(expr, ("not" inner), { Ok(inner) }, _err => Err(())) {
+             if let Some(mut literal) = SATSink::expr_to_dimacs_literal(negated_expr, var_map, next_var_id) {
+                 return Some(-literal);
+             } else {
+                 return None;
+             }
+        }
+
+        // Assume simple symbol for propositional variable
+        if let Some(sym_bytes) = unsafe { expr.symbol() } {
+            let sym_vec = unsafe { sym_bytes.as_ref().unwrap().to_vec() };
+            let var_id = var_map.entry(sym_vec).or_insert_with(|| {
+                *next_var_id += 1;
+                *next_var_id
+            });
+            Some(*var_id)
+        } else {
+            // Not a simple symbol or "not" compound, for now, not supported
+            None
+        }
+    }
+
+    fn expr_to_dimacs_clause(expr: Expr, var_map: &mut BTreeMap<Vec<u8>, i32>, next_var_id: &mut i32) -> Option<String> {
+        // Manual parsing to handle n-ary "or"
+        unsafe {
+            let ptr = expr.ptr;
+            if let Tag::Arity(arity) = byte_item(*ptr) {
+                if arity > 0 {
+                    let mut cursor = ptr.add(1); // Skip Arity byte
+                    // Check first child (head)
+                    if let Tag::SymbolSize(2) = byte_item(*cursor) {
+                        let head_slice = std::slice::from_raw_parts(cursor.add(1), 2);
+                        if head_slice == b"or" {
+                            // Found (or ...), iterate remaining children
+                            let mut literals = Vec::new();
+                            cursor = cursor.add(1 + 2); // Skip symbol header and "or" bytes
+                            
+                            for _ in 0..(arity - 1) {
+                                let child_expr = Expr { ptr: cursor };
+                                if let Some(literal) = SATSink::expr_to_dimacs_literal(child_expr, var_map, next_var_id) {
+                                    literals.push(literal.to_string());
+                                } else {
+                                    return None;
+                                }
+                                cursor = cursor.add(child_expr.span().len());
+                            }
+                            
+                            return if literals.is_empty() {
+                                Some("0".to_string())
+                            } else {
+                                Some(format!("{} 0", literals.join(" ")))
+                            };
+                        }
+                    }
+                }
+            }
+        }
+
+        // Assume single literal clause if not an "or"
+        if let Some(literal) = SATSink::expr_to_dimacs_literal(expr, var_map, next_var_id) {
+            Some(format!("{} 0", literal))
+        } else {
+            None
+        }
+    }
+}
+
+impl Sink for SATSink {
+    fn new(e: Expr) -> Self {
+        SATSink {
+            e,
+            clauses: BTreeMap::new(),
+            changed: false,
+        }
+    }
+
+    fn request(&self) -> impl Iterator<Item=WriteResourceRequest> {
+        // Request permission to write to the root, as we are adding new top-level expressions
+        static EMPTY: [u8; 0] = [];
+        std::iter::once(WriteResourceRequest::BTM(&EMPTY[..]))
+    }
+
+    fn sink<'w, 'a, 'k, It : Iterator<Item=WriteResource<'w, 'a, 'k>>>(&mut self, mut it: It, path: &[u8]) where 'a : 'w, 'k : 'w {
+        let _ = it.next().unwrap();
+
+        // Robustly find the start of the expression by looking for the "sat" symbol
+        let pattern = b"sat";
+        let start_offset = path.windows(pattern.len()).position(|w| w == pattern);
+        
+        if let Some(offset) = start_offset {
+            if offset >= 2 {
+                let expr_start = offset - 2;
+                let ctx = unsafe { Expr { ptr: path[expr_start..].as_ptr().cast_mut() } };
+                
+                // Manual parsing of (sat report status clause)
+                let parse_result = unsafe {
+                    let ptr = ctx.ptr;
+                    if let Tag::Arity(4) = byte_item(*ptr) {
+                        let mut cursor = ptr.add(1);
+                        // Check Head "sat"
+                        if let Tag::SymbolSize(3) = byte_item(*cursor) {
+                            // We already found "sat" at offset, so we can assume it matches or check strict
+                            let head_bytes = std::slice::from_raw_parts(cursor.add(1), 3);
+                            if head_bytes == b"sat" {
+                                cursor = cursor.add(1 + 3);
+                                
+                                let report_expr = Expr { ptr: cursor };
+                                let report_len = report_expr.span().len();
+                                cursor = cursor.add(report_len);
+                                
+                                let status_expr = Expr { ptr: cursor };
+                                let status_len = status_expr.span().len();
+                                cursor = cursor.add(status_len);
+                                
+                                let clause_expr = Expr { ptr: cursor };
+                                
+                                Some((report_expr, status_expr, clause_expr))
+                            } else { None }
+                        } else { None }
+                    } else { None }
+                };
+
+                if let Some((report, status, clause)) = parse_result {
+                    // eprintln!("DEBUG: SATSink manual parse success");
+                    let report_bytes = unsafe { report.span().as_ref().unwrap().to_vec() };
+                    let clause_bytes = unsafe { clause.span().as_ref().unwrap().to_vec() };
+                    let status_bytes = unsafe { status.span().as_ref().unwrap().to_vec() };
+                    
+                    let mut key = Vec::new();
+                    let r_len = report_bytes.len() as u32;
+                    key.extend_from_slice(&r_len.to_le_bytes());
+                    key.extend_from_slice(&report_bytes);
+                    key.extend_from_slice(&status_bytes);
+                    
+                    self.clauses.entry(key).or_default().push(clause_bytes);
+                } else {
+                     trace!(target: "sink", "SATSink manual parse failed for ctx span: {:?}", unsafe { ctx.span().as_ref() });
+                }
+            }
+        } else {
+            trace!(target: "sink", "SATSink 'sat' symbol not found in path");
+        }
+    }
+
+    fn finalize<'w, 'a, 'k, It : Iterator<Item=WriteResource<'w, 'a, 'k>>>(&mut self, mut it: It) -> bool where 'a : 'w, 'k : 'w {
+        let WriteResource::BTM(wz) = it.next().unwrap() else { unreachable!() };
+        wz.reset();
+        for _ in it {} 
+        
+        trace!(target: "sink", "SATSink finalize. Clauses keys: {}", self.clauses.len());
+
+        let mut overall_changed = false;
+
+        for (key, clause_bytes_list) in std::mem::take(&mut self.clauses) {
+            // Unpack key: [len: u32][report][status]
+            if key.len() < 4 { continue; }
+            let r_len = u32::from_le_bytes(key[0..4].try_into().unwrap()) as usize;
+            if 4 + r_len > key.len() { continue; }
+            let report_bytes = &key[4..4+r_len];
+            let status_bytes = &key[4+r_len..];
+
+            trace!(target: "sink", "SATSink: processing report '{}' with {} clauses", serialize(report_bytes), clause_bytes_list.len());
+
+            let mut dimacs_clauses = Vec::new();
+            let mut var_map: BTreeMap<Vec<u8>, i32> = BTreeMap::new();
+            let mut next_var_id = 0;
+
+            for clause_bytes in clause_bytes_list {
+                let clause_expr = unsafe { Expr { ptr: clause_bytes.as_ptr() as *mut u8 } };
+                if let Some(dimacs_clause) = SATSink::expr_to_dimacs_clause(clause_expr, &mut var_map, &mut next_var_id) {
+                    dimacs_clauses.push(dimacs_clause);
+                } else {
+                    trace!(target: "sink", "Failed to convert clause to DIMACS");
+                    dimacs_clauses.clear();
+                    dimacs_clauses.push("0".to_string());
+                    next_var_id = 0;
+                    break;
+                }
+            }
+
+            let result_tag_bytes: &'static [u8];
+            if dimacs_clauses.is_empty() {
+                // No clauses = SAT
+                result_tag_bytes = b"SAT";
+            } else {
+                let num_vars = next_var_id;
+                let num_clauses = dimacs_clauses.len();
+                let mut dimacs_content = format!("p cnf {} {}\n", num_vars, num_clauses);
+                dimacs_content.extend(dimacs_clauses.into_iter().map(|s| format!("{}\n", s)));
+
+                // Use hash of content for temp filename to avoid collision/length issues
+                use std::hash::{Hash, Hasher};
+                use std::collections::hash_map::DefaultHasher;
+                let mut hasher = DefaultHasher::new();
+                dimacs_content.hash(&mut hasher);
+                let hash = hasher.finish();
+                let temp_file_path = format!("{}/sat_{:x}.cnf", crate::space::ACT_PATH, hash);
+                
+                debug!(target: "sink", "Writing DIMACS to {}", temp_file_path);
+
+                let mut file = match File::create(&temp_file_path) {
+                    Ok(f) => f,
+                    Err(e) => {
+                        error!(target: "sink", "File create failed: {}", e);
+                        continue
+                    },
+                };
+                if file.write_all(dimacs_content.as_bytes()).is_err() { continue; }
+
+                let output = match process::Command::new("minisat").arg(&temp_file_path).output() {
+                    Ok(o) => o,
+                    Err(e) => {
+                         error!(target: "sink", "minisat command failed: {}", e);
+                         continue
+                    },
+                };
+                
+                // Cleanup temp file
+                let _ = std::fs::remove_file(temp_file_path);
+
+                let stdout_str = String::from_utf8_lossy(&output.stdout);
+                trace!(target: "sink", "minisat output: {}", stdout_str);
+                
+                if stdout_str.contains("UNSATISFIABLE") {
+                    result_tag_bytes = b"UNSAT";
+                } else if stdout_str.contains("SATISFIABLE") {
+                    result_tag_bytes = b"SAT";
+                } else {
+                    warn!(target: "sink", "minisat output not recognized");
+                    continue; 
+                }
+            }
+
+            // Substitution: Replace 'status_bytes' in 'report_bytes' with 'result_tag_bytes'
+            // Simple byte replacement. Since status_bytes is a variable (tag+index/name), it should be unique enough.
+            // We construct the result vector.
+            let mut result_expr = Vec::new();
+            let mut i = 0;
+            
+            // eprintln!("DEBUG: Substitution. Report: {:?}, Status: {:?}", report_bytes, status_bytes);
+            
+            let mut substituted = false;
+            // Heuristic: if status is NewVar (128), the report might use VarRef(0) (192)
+            let alt_target = if status_bytes.len() == 1 && status_bytes[0] == 128 {
+                Some(vec![192u8])
+            } else {
+                None
+            };
+
+            while i < report_bytes.len() {
+                let mut matched = false;
+                if report_bytes[i..].starts_with(status_bytes) {
+                    matched = true;
+                    i += status_bytes.len();
+                } else if let Some(ref alt) = alt_target {
+                    if report_bytes[i..].starts_with(alt) {
+                        matched = true;
+                        i += alt.len();
+                    }
+                }
+
+                if matched {
+                    // Found variable, replace with result symbol
+                    // result symbol needs to be a proper symbol: [SymbolSize] [Bytes]
+                    // eprintln!("DEBUG: Substituting at index {}", i);
+                    result_expr.push(item_byte(Tag::SymbolSize(result_tag_bytes.len() as u8)));
+                    result_expr.extend_from_slice(result_tag_bytes);
+                    substituted = true;
+                } else {
+                    result_expr.push(report_bytes[i]);
+                    i += 1;
+                }
+            }
+            if !substituted {
+                // eprintln!("DEBUG: WARNING: No substitution occurred for key {:?}", key);
+            }
+
+            wz.move_to_path(&result_expr);
+            trace!(target: "sink", "SATSink: writing result_expr {:?} to path '{}'", result_expr, serialize(wz.path()));
+            let res = wz.set_val(());
+            trace!(target: "sink", "SATSink: set_val returned {:?}", res);
+            if res.is_none() {
+                overall_changed = true;
+            }
+            wz.reset();
+        }
+
+        overall_changed
+    }
+}
 // MaxSink_dep - DEPRECATED: Does not handle duplicate variables correctly
 // finds maximum numeric value from matched patterns
 // Syntax: (O (max <report-template-with-$m> $m <value-expression>))
@@ -1624,7 +1937,7 @@ impl Sink for PureSink {
 }
 
 
-pub enum ASink { AddSink(AddSink), RemoveSink(RemoveSink), HeadSink(HeadSink), CountSink(CountSink), SumSink(SumSink), MaxSink(MaxSink), MinSink(MinSink), ACTSink(ACTSink),
+pub enum ASink { AddSink(AddSink), RemoveSink(RemoveSink), HeadSink(HeadSink), CountSink(CountSink), SumSink(SumSink), MaxSink(MaxSink), MinSink(MinSink), ACTSink(ACTSink), SATSink(SATSink),
     #[cfg(feature = "wasm")]
     WASMSink(WASMSink),
     #[cfg(feature = "grounding")]
@@ -1667,6 +1980,9 @@ impl Sink for ASink {
             return ASink::PureSink(PureSink::new(e));
             #[cfg(not(feature = "grounding"))]
             panic!("MORK was not built with the grounding feature, yet trying to call {:?}", e);
+        } else if unsafe { *e.ptr == item_byte(Tag::Arity(4)) && *e.ptr.offset(1) == item_byte(Tag::SymbolSize(3)) &&
+            *e.ptr.offset(2) == b's' && *e.ptr.offset(3) == b'a' && *e.ptr.offset(4) == b't' } {
+            ASink::SATSink(SATSink::new(e))
         } else {
             unreachable!()
         }
@@ -1683,6 +1999,7 @@ impl Sink for ASink {
                 ASink::MaxSink(s) => { for i in s.request().into_iter() { yield i } }
                 ASink::MinSink(s) => { for i in s.request().into_iter() { yield i } }
                 ASink::ACTSink(s) => { for i in s.request().into_iter() { yield i } }
+                ASink::SATSink(s) => { for i in s.request().into_iter() { yield i } }
                 #[cfg(feature = "wasm")]
                 ASink::WASMSink(s) => { for i in s.request().into_iter() { yield i } }
                 #[cfg(feature = "grounding")]
@@ -1700,6 +2017,7 @@ impl Sink for ASink {
             ASink::MaxSink(s) => { s.sink(it, path) }
             ASink::MinSink(s) => { s.sink(it, path) }
             ASink::ACTSink(s) => { s.sink(it, path) }
+            ASink::SATSink(s) => { s.sink(it, path) }
             #[cfg(feature = "wasm")]
             ASink::WASMSink(s) => { s.sink(it, path) }
             #[cfg(feature = "grounding")]
@@ -1717,6 +2035,7 @@ impl Sink for ASink {
             ASink::MaxSink(s) => { s.finalize(it) }
             ASink::MinSink(s) => { s.finalize(it) }
             ASink::ACTSink(s) => { s.finalize(it) }
+            ASink::SATSink(s) => { s.finalize(it) }
             #[cfg(feature = "wasm")]
             ASink::WASMSink(s) => { s.finalize(it) }
             #[cfg(feature = "grounding")]
