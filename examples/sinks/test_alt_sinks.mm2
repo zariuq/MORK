@@ -1,0 +1,105 @@
+;; ============================================================
+;; AltSinks Showcase: MaxSink, MinSink, SATSink
+;; ============================================================
+
+;; ------------------------------------------------------------
+;; 1. MaxSink Examples
+;; ------------------------------------------------------------
+;; Syntax: (O (max <report-template> <guard-var> <value-expression>))
+
+;; Example 1.1: Basic Maximum Finding
+;; Find the maximum 'value' associated with 'item'
+(value item 10)
+(value item 50)
+(value item 5)
+
+(exec (max-test-1)
+  (, (value item $v))
+  (O (max (result-max-1 $v) $v $v)))
+;; Expected: (result-max-1 50)
+
+;; Example 1.2: Pattern Matching Max
+;; Find the path with the highest weight
+(path a 100)
+(path b 200)
+(path c 50)
+
+(exec (max-test-2)
+  (, (path $p $w))
+  (O (max (heaviest-path $w) $w $w)))
+;; Expected: (heaviest-path 200) -- Note: report uses $w, so we get the weight. 
+;; If we wanted the path name, we'd need to structure the sink differently or use a composite key, 
+;; but MaxSink aggregates by template structure.
+
+;; Example 1.3: Negative Numbers
+(score p1 -10)
+(score p2 -5)
+(score p3 -20)
+
+(exec (max-test-3)
+  (, (score $p $s))
+  (O (max (best-score $s) $s $s)))
+;; Expected: (best-score -5)
+
+
+;; ------------------------------------------------------------
+;; 2. MinSink Examples
+;; ------------------------------------------------------------
+;; Syntax: (O (min <report-template> <guard-var> <value-expression>))
+
+;; Example 2.1: Basic Minimum Finding
+(cost option-A 50)
+(cost option-B 10)
+(cost option-C 100)
+
+(exec (min-test-1)
+  (, (cost $o $c))
+  (O (min (lowest-cost $c) $c $c)))
+;; Expected: (lowest-cost 10)
+
+;; Example 2.2: Depth Finding
+(depth 5)
+(depth 2)
+(depth 8)
+
+(exec (min-test-2)
+  (, (depth $d))
+  (O (min (shallowest $d) $d $d)))
+;; Expected: (shallowest 2)
+
+
+;; ------------------------------------------------------------
+;; 3. SATSink Examples
+;; ------------------------------------------------------------
+;; Syntax: (O (sat <report-template> <status-var> <clause-formula>))
+;; <clause-formula> must be a literal number/symbol or (not <lit>) or (or <lit> ...)
+
+;; Example 3.1: Simple SAT (Unit Propagation)
+;; Problem: p1 must be true
+(clauseset sat-prob-1 1)
+
+(exec (sat-test-1)
+  (, (clauseset sat-prob-1 $c))
+  (O (sat (result-sat-1 $s) $s $c)))
+;; Expected: (result-sat-1 SAT)
+
+;; Example 3.2: Simple UNSAT (Contradiction)
+;; Problem: p2 must be true AND p2 must be false
+(clauseset sat-prob-2 1)
+(clauseset sat-prob-2 (not 1))
+
+(exec (sat-test-2)
+  (, (clauseset sat-prob-2 $c))
+  (O (sat (result-sat-2 $s) $s $c)))
+;; Expected: (result-sat-2 UNSAT)
+
+;; Example 3.3: Mixed Clauses
+;; (1 v 2) & (!1 v 3) & (!2 v !3)
+(clauseset sat-prob-3 (or 1 2))
+(clauseset sat-prob-3 (or (not 1) 3))
+(clauseset sat-prob-3 (or (not 2) (not 3)))
+
+(exec (sat-test-3)
+  (, (clauseset sat-prob-3 $c))
+  (O (sat (result-sat-3 $s) $s $c)))
+;; Expected: (result-sat-3 SAT)

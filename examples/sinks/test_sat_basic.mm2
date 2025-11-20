@@ -1,0 +1,33 @@
+; sat_test.mm2
+
+; --- UNSAT 1: p AND not p ---
+(clauseset B0 p)
+(clauseset B0 (not p))
+
+; --- SAT 1: p OR q ---
+(clauseset B1 (or p q))
+
+; --- UNSAT 2: (p OR q) AND (not p OR q) AND (not q) ---
+(clauseset B2 (or p q))
+(clauseset B2 (or (not p) q))
+(clauseset B2 (not q))
+
+; --- SAT 2: (p OR q) AND (not p OR r) ---
+(clauseset B3 (or p q))
+(clauseset B3 (or (not p) r))
+
+; --- UNSAT 3: Empty clause check ---
+(clauseset B4 p)
+(clauseset B4 q)
+(clauseset B4 (or (not p) (not q)))
+
+; Control test: Count the clausesets to ensure matching works
+(exec (test-count)
+  (, (clauseset $b $c))
+  (O (count (total-clauses $k) $k (clauseset $b $c))))
+
+; Run the SAT check with new generic aggregation syntax
+; (sat <report-template> <status-var> <clause-formula>)
+(exec (check-sat)
+  (, (clauseset $b $c))
+  (O (sat (result $b $s) $s $c)))
