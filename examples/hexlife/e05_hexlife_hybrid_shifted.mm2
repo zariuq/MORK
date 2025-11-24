@@ -78,3 +78,50 @@
 (neighbor $q (P $r) $q $r)
 (neighbor $q Z $q (S Z))
 (neighbor $q (S $r) $q (S (S $r)))
+
+;; Gemini 3 Pro Preview explanation:
+; These 30 rules are a compiled state machine that performs vector addition on Peano numbers.
+
+;   The Didactic Point
+;   Instead of calculating q + 1 and r - 1 using general-purpose arithmetic, we have pre-calculated every possible structural transition that can happen to a Peano term when you move in one of the 6 hexagonal directions.
+
+;   The "Compilation"
+;   We are adding a direction vector (dq, dr) to a coordinate (q, r).
+;   Since dq and dr are always -1, 0, or +1, we only need to handle three operations: Increment, Decrement, and Same.
+
+;   The rules break down the cross-product of these operations on the structure of q and r.
+
+;   1. The "Same" Operation (The easiest)
+;   If a direction is (+1, 0), we change q but keep r exactly the same.
+;    * Rule: (neighbor ... $r ... $r)
+;    * Logic: "Whatever $r$ is, just copy it to the output."
+;    * This is why you see simple variables like $r passing through unchanged in many rules.
+
+;   2. The "Increment" Operation (+1)
+;   This depends on what the number looks like right now:
+;    * If it's Negative `(P $x)`: "Cancel out" one Predecessor. Result: $x.
+;        * Example Rule 1: (neighbor (P $q) ... $q ...)
+;    * If it's Zero `Z`: It becomes One (S Z).
+;        * Example Rule 2: (neighbor Z ... (S Z) ...)
+;    * If it's Positive `(S $x)`: Add another Successor. Result: (S (S $x)).
+;        * Example Rule 3: (neighbor (S $q) ... (S (S $q)) ...)
+
+;   3. The "Decrement" Operation (-1)
+;   Symmetric to Increment:
+;    * If Positive `(S $x)`: Cancel out one Successor. Result: $x.
+;        * Rule 16: (neighbor (S $q) ... $q ...)
+;    * If Zero `Z`: Become Negative One (P Z).
+;        * Rule 17: (neighbor Z ... (P Z) ...)
+;    * If Negative `(P $x)`: Add another Predecessor. Result: (P (P $x)).
+;        * Rule 18: (neighbor (P $q) ... (P (P $q)) ...)
+
+;   Summary of the 30 Rules
+;   The 30 rules are simply the 6 Directions $\times$ the necessary Structural Patterns.
+
+;    * Directions that change 1 coordinate: Need 3 rules (Inc/Dec logic for one var, pass-through for the other). There are 4 such directions. $4 \times 3 = 12$ rules.
+;    * Directions that change 2 coordinates: Need 9 rules (Cross product of Inc/Dec logic for both vars). There are 2 such directions. $2 \times 9 = 18$ rules.
+
+;   $12 + 18 = 30$ rules.
+
+;   Didactic Takeaway: This demonstrates Partial Evaluation. We specialized the general concept of "Vector Addition" for the specific case of "Unit Vectors on a Peano Term", resulting in a constant-time, constant-memory rewriting system
+;   that handles an infinite grid.
