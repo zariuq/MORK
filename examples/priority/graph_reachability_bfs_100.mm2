@@ -1,0 +1,72 @@
+; Graph Reachability - BFS (Priority Fix / Sink Cleanup)
+; =============================================================
+; Pattern: Node-Triggered Rules with Explicit Sink Cleanup
+; Uses nested priorities to ensure Propagate runs before Delete.
+;
+; Graph: 100 Nodes in /dev/shm/graph_100.act
+; =============================================================
+
+; VISUALIZATION:
+;
+;       (Ring: Nodes 0-49)
+;      N49 <--- ... <--- N0 <---> N1 ---> ... ---> N4
+;       ^   ^             ^        ^               |
+;       |   |             |        |               |
+;       |   |             v        v               v
+;       |   |           (HUB N50) <---> N5 <---> ...
+;       |   |             ^
+;       |   |             | (Shortcuts every 5 nodes)
+;       |   +--- ... <--- N25 ---> N26 ---> ...
+;       |                  |
+;       |                  | (Tail: Nodes 51-70)
+;       |                  +---> N51 ---> N52 ---> ... ---> N70 <
+;       |                                                    ^      
+;       +--------------------------------------------------+ |      
+;                                                          | |      
+;       (Island: Nodes 80-99) [UNREACHABLE FROM N0]        | |      
+;       N80 ---> N81 ---> ... ---> N99 --------------------|-+
+;        ^                          |                      |
+;        +--------------------------+                      |
+;        |                                                 |
+;        +---(Connects to N49)-----------------------------+
+;
+; =============================================================
+
+; === State ===
+(reached N0)
+(active N0)
+(graph-name graph_100)
+
+; === Bootstrap: Load Propagate Logic with Graph Name ===
+; This creates the specific 'step-data' for the graph defined in (graph-name).
+(exec ((0 (0)) LoadLogic)
+  (I (BTM (graph-name $name)))
+  (O (+ (step-data ((0 (0)) Propagate)
+          (I (BTM (active $u))
+             (ACT $name (edge $u $v)))
+          (O (+ (candidate $v))
+             (- (active $u)))))
+     (+ (step-data ((0 (5 (0))) Delete)
+          (I (BTM (active $u)))
+          (O (- (active $u))))))) ; delete active nodes even if they don't generate anything. 
+
+; === Logic Templates (Static) ===
+
+(step-data ((1 (0)) Filter)
+      (, (candidate $v) (reached $v))
+      (O (- (candidate $v))))
+
+(step-data ((2 (0)) Commit)
+      (, (candidate $v))
+      (O (- (candidate $v)) (+ (reached $v)) (+ (active $v))))
+
+; === The Runner ===
+; Trigger: (active $node)
+; Action: Instantiates rules specifically for this node ($node).
+; Result: (exec (0 (Propagate N0)) ...), (exec (0 (Propagate N1)) ...)
+(exec ((99 (0)) Runner)
+      (, (active $node)
+         (step-data ($prio $name) $p $c)
+         (exec ((99 (0)) Runner) $rp $rc)) ; Match self (updated priority)
+      (O (+ (exec ((99 (0)) Runner) $rp $rc))
+         (+ (exec ($prio ($name $node)) $p $c))))

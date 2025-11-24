@@ -1,0 +1,37 @@
+; Graph Reachability - BFS Wavefront (ACT Join Version)
+; =============================================================
+; Graph is stored in /dev/shm/graph_1.act
+; We use (I (BTM ...) (ACT ...)) to join active nodes with edges.
+; =============================================================
+
+; Initial State
+(reached A)
+(active A)
+(graph-name graph_1)
+
+; === Logic Templates ===
+
+; 0. Set graph name and load propagate (JOIN VERSION)
+; Joins (active $u) from Workspace with (edge $u $v) from ACT.
+(exec (0)
+  (I (BTM (graph-name $name)))
+  (O (+ (step-data (0 Propagate)
+          (I (BTM (active $u))
+             (ACT $name (edge $u $v)))
+          (O (+ (candidate $v))
+             (- (active $u)))))))
+
+(step-data (1 Filter)
+      (, (candidate $v) (reached $v))
+      (O (- (candidate $v))))
+
+(step-data (2 Commit)
+      (, (candidate $v))
+      (O (- (candidate $v)) (+ (reached $v)) (+ (active $v))))
+
+(exec (99 Runner)
+      (, (active $node)
+         (step-data ($prio $name) $p $c)
+         (exec (99 Runner) $rp $rc))
+      (O (+ (exec (99 Runner) $rp $rc))
+         (+ (exec ($prio ($name $node)) $p $c))))
