@@ -1,0 +1,34 @@
+; ACT Math Demo - Using External Addition Table
+; ==============================================
+;
+; Prerequisites:
+; Create the ACT file first:
+;   ./examples/misc/make_math_facts_act.sh
+;
+; This demonstrates using an ACT file as an external lookup table.
+; The math_facts.act file contains pre-computed addition results.
+
+; Use case 1: Find what 2 + 2 equals
+(exec (0 lookup-two-plus-two)
+  (I (ACT math_facts (add 2 2 $result)))
+  (O (+ (result two-plus-two-equals $result))))
+
+; Use case 2: Find all additions that equal 4
+(exec (0 find-sums-to-four)
+  (I (ACT math_facts (add $a $b 4)))
+  (O (+ (ways-to-make-four $a and $b))))
+
+; Use case 3: Find all results when adding 3 to something
+(exec (0 add-three-to-things)
+  (I (ACT math_facts (add $x 3 $result)))
+  (O (+ (three-plus $x gives $result))))
+
+; Expected output:
+; (answer 2 plus 3 equals 5)
+; (ways-to-make 4 are 1 and 3)
+; (ways-to-make 4 are 2 and 2)
+; (ways-to-make 4 are 3 and 1)
+; (three-plus 0 gives 3)
+; (three-plus 1 gives 4)
+; (three-plus 2 gives 5)
+; (three-plus 3 gives 6)

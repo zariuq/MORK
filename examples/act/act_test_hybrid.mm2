@@ -1,0 +1,9 @@
+; Test Hybrid Join (Workspace + ACT)
+; Prerequisite: fruit_colors.act exists (red, yellow, etc.)
+
+(want-color red)
+
+(exec (0 find-wanted)
+      (I (BTM (want-color $c))
+         (ACT fruit_colors (color $f $c)))
+      (O (+ (found $f))))

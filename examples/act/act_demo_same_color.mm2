@@ -1,0 +1,35 @@
+; ACT Demo - Finding Same Color Fruits (Working Version)
+; ========================================================
+;
+; Prerequisites:
+; Create the ACT file first:
+;   ./examples/misc/make_fruit_colors_act.sh
+;
+; Problem: Multiple ACT queries in conjunction don't work yet!
+; Solution: Two-stage approach - bring data into space first, then cross-match
+
+; Stage 1: Fetch all colors from ACT into main space
+(exec (0 fetch-colors)
+  (I (ACT fruit_colors (color $fruit $c)))
+  (O (+ (fruit-color $fruit $c))))
+
+; Stage 2: Cross-match fruits in the main space
+; Now we can find pairs with the same color
+(exec (1 find-same-color)
+  (, (fruit-color $f1 $c)
+     (fruit-color $f2 $c))
+  (O (+ (same-color $f1 $f2 $c))))
+
+; Expected output:
+; Stage 1 brings in 6 fruit-color facts
+; Stage 2 finds all pairs:
+; (same-color apple apple red)
+; (same-color apple strawberry red)
+; (same-color strawberry apple red)
+; (same-color strawberry strawberry red)
+; (same-color banana banana yellow)
+; (same-color banana lemon yellow)
+; (same-color lemon banana yellow)
+; (same-color lemon lemon yellow)
+; (same-color grape grape purple)
+; (same-color orange orange orange)
