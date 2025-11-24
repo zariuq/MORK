@@ -1,0 +1,18 @@
+; Test Count Group By
+; Can 'count' aggregate per key?
+
+(color apple red)
+(color strawberry red)
+(color cherry red)
+(color banana yellow)
+(color lemon yellow)
+(color grape purple)
+
+; We want:
+; (count-by-color red 3)
+; (count-by-color yellow 2)
+; (count-by-color purple 1)
+
+(exec (test-groupby)
+      (, (color $fruit $c))
+      (O (count (count-by-color $c $k) $k $fruit)))

@@ -1,0 +1,66 @@
+; Hexlife Loop e02 - Integer IO (Fixed)
+; Fixed: Added Peano definitions for steps 5-10 to allow loop to run 10 steps.
+
+; Peano number definitions
+(peano 0 Z)
+(peano 1 (S Z))
+(peano 2 (S (S Z)))
+(peano 3 (S (S (S Z))))
+(peano 4 (S (S (S (S Z)))))
+(peano 5 (S (S (S (S (S Z))))))
+(peano 6 (S (S (S (S (S (S Z)))))))
+(peano 7 (S (S (S (S (S (S (S Z))))))))
+(peano 8 (S (S (S (S (S (S (S (S Z)))))))))
+(peano 9 (S (S (S (S (S (S (S (S (S Z))))))))))
+(peano 10 (S (S (S (S (S (S (S (S (S (S Z)))))))))))
+
+; Human-readable input
+(input-alive (2 1 1))
+(input-alive (1 2 1))
+(input-alive (1 3 0))
+
+; 1. Import Phase
+(exec (A_import)
+      (, (input-alive ($q $r $s)) 
+         (peano $q $pq) 
+         (peano $r $pr) 
+         (peano $s $ps))
+      (O (+ (alive ($pq $pr $ps))) 
+         (- (input-alive ($q $r $s)))))
+
+
+; Neighbor definitions
+(neighbors ($q $r (S $s)) ($q (S $r) $s))
+(neighbors ($q $r (S $s)) ((S $q) $r $s))
+(neighbors ($q (S $r) $s) ((S $q) $r $s))
+(neighbors ($q (S $r) $s) ($q $r (S $s)))
+(neighbors ((S $q) $r $s) ($q (S $r) $s))
+(neighbors ((S $q) $r $s) ($q $r (S $s)))
+
+(cell lives 2)
+
+; Steps to simulate (0 to 9)
+(step 0) (step 1) (step 2) (step 3) (step 4)
+(step 5) (step 6) (step 7) (step 8) (step 9)
+
+; Rule Definitions
+(rule 0 (, (alive $co) (neighbors $co $nco) (alive $nco)) (O (count (anbs $co $k) $k $nco)))
+(rule 0 (, (alive $co) (neighbors $co $nco) (neighbors $nco $nnco) (alive $nnco)) (O (count (anbs $nco $k) $k $nnco)))
+(rule 1 (, (alive $co)) (O (- (alive $co))))
+(rule 2 (, (anbs $co $c) (cell lives $c)) (O (+ (alive $co))))
+(rule 3 (, (anbs $co $c)) (O (- (anbs $co $c))))
+
+; 2. Generator Phase
+(exec (B_gen)
+      (, (step $s)
+         (peano $s $p_step)
+         (rule $p $lhs $rhs))
+      (, (exec (C_step $s $p) $lhs $rhs)))
+
+; 4. Export Phase
+(exec (D_export)
+      (, (alive ($pq $pr $ps))
+         (peano $q $pq)
+         (peano $r $pr)
+         (peano $s $ps))
+      (O (+ (output-alive ($q $r $s)))))

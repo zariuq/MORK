@@ -1,17 +1,19 @@
 ; Test plain nested tuples without terminator
 
+(trigger)
+
 (exec ((1) test1)
-  ()
+  (, (trigger))
   (O (+ (result test1))))
 
 (exec ((1 5) test2)
-  ()
+  (, (trigger))
   (O (+ (result test2))))
 
 (exec ((1 2 5) test3)
-  ()
+  (, (trigger))
   (O (+ (result test3))))
 
 (exec ((2) test4)
-  ()
+  (, (trigger))
   (O (+ (result test4))))

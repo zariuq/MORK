@@ -1,0 +1,45 @@
+; Hexlife Loop - 5 steps
+; Metaprogramming approach to generate N steps of simulation
+
+; Initial Grid
+(alive ((S (S Z)) (S Z) (S Z)))
+(alive ((S Z) (S (S Z)) (S Z)))
+(alive ((S Z) (S (S (S Z))) Z))
+
+; Neighbor definitions
+(neighbors ($q $r (S $s)) ($q (S $r) $s))
+(neighbors ($q $r (S $s)) ((S $q) $r $s))
+(neighbors ($q (S $r) $s) ((S $q) $r $s))
+(neighbors ($q (S $r) $s) ($q $r (S $s)))
+(neighbors ((S $q) $r $s) ($q (S $r) $s))
+(neighbors ((S $q) $r $s) ($q $r (S $s)))
+
+(cell lives 2)
+
+; Steps to simulate (0 to 4)
+(step 0) (step 1) (step 2) (step 3) (step 4)
+
+; Rule Definitions as Data
+; Phase 0: Count neighbors (2 rules)
+(rule 0
+      (, (alive $co) (neighbors $co $nco) (alive $nco))
+      (O (count (anbs $co $k) $k $nco)))
+(rule 0
+      (, (alive $co) (neighbors $co $nco) (neighbors $nco $nnco) (alive $nnco))
+      (O (count (anbs $nco $k) $k $nnco)))
+
+; Phase 1: Remove old alive
+(rule 1 (, (alive $co)) (O (- (alive $co))))
+
+; Phase 2: Add new alive
+(rule 2 (, (anbs $co $c) (cell lives $c)) (O (+ (alive $co))))
+
+; Phase 3: Cleanup neighbor counts
+(rule 3 (, (anbs $co $c)) (O (- (anbs $co $c))))
+
+; Generator Exec
+; Matches all (step, rule) pairs and generates specific exec commands
+; ID structure ($s $p) ensures correct execution order: (0 0), (0 1), (0 2), (0 3), (1 0)...
+(exec generator
+      (, (step $s) (rule $p $lhs $rhs))
+      (, (exec ($s $p) $lhs $rhs)))
