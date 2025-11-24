@@ -1,0 +1,45 @@
+; Loop Sum Sink - Canonical Bootstrap
+; Uses (sum) sink inside a Bootstrapped loop to sum 0..14 = 105.
+
+; === 0. Definitions ===
+(S 0 1) (S 1 2) (S 2 3) (S 3 4) (S 4 5)
+(S 5 6) (S 6 7) (S 7 8) (S 8 9) (S 9 10)
+(S 10 11) (S 11 12) (S 12 13) (S 13 14) (S 14 15)
+
+; === 1. State ===
+(val 0)
+(current 0)
+(running)
+
+; === 2. Logic Data ===
+
+; Rule 1: Check Sum
+; Sums ALL (val $v) in the DB.
+; Note: We match (running) to ensure it's tied to the loop lifecycle.
+(step-data (1 Check)
+           (, (running) (val $v))
+           (O (sum (total $s) $s $v)))
+
+; Rule 2: Stop
+; If total is 105, we are done. Consume running.
+(step-data (2 Stop)
+           (, (running) (total 105))
+           (O (+ (DONE 105)) 
+              (- (running))
+              (- (total 105))))
+
+; Rule 4: Step
+; If running, add next value.
+(step-data (4 Step)
+           (, (running) (current $c) (S $c $next) (total $s))
+           (O (+ (val $next))
+              (+ (current $next))
+              (- (current $c))
+              (- (total $s))))
+
+; === 3. Runner (Bootstrap) ===
+(exec (99 Runner)
+      (, (step-data $name $p $c)
+         (exec (99 Runner) $rp $rc))
+      (O (+ (exec $name $p $c))
+         (+ (exec (99 Runner) $rp $rc))))

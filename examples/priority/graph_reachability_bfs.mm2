@@ -1,0 +1,40 @@
+; Graph Reachability - BFS Wavefront (Clean Template)
+(S 0 1) (S 1 2) (S 2 3) (S 3 4) (S 4 5) (S 5 6) (S 6 7) (S 7 8) (S 8 9) (S 9 10)
+(S 10 11) (S 11 12) (S 12 13) (S 13 14) (S 14 15)
+
+(edge A B) (edge B C) (edge C A)
+(edge A D) (edge D E) (edge E F) (edge F D)
+(edge E F) (edge H G) (edge G A)
+
+; Graph:
+;          +-> B -> C --+
+;           |            |
+; H -> G -> A <----------+ (Cycle 1)
+;           |
+;          +-> D -> E -> F -> D (Cycle 2)
+;
+;     H -> G (Unreachable)
+; ============================================================= 
+
+(reached A)
+(active A)
+
+(step-data (0 Propagate)
+      (, (active $u) (edge $u $v))
+      (O (+ (candidate $v))
+         (- (active $u))))
+
+(step-data (1 Filter)
+      (, (candidate $v) (reached $v))
+      (O (- (candidate $v))))
+
+(step-data (2 Commit)
+      (, (candidate $v))
+      (O (- (candidate $v)) (+ (reached $v)) (+ (active $v))))
+
+(exec (99 Runner)
+      (, (active $node)
+         (step-data ($prio $name) $p $c)
+         (exec (99 Runner) $rp $rc))
+      (O (+ (exec (99 Runner) $rp $rc))
+         (+ (exec ($prio ($name $node)) $p $c))))
