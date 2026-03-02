@@ -1,24 +1,23 @@
+use mork::space::{ACT_PATH, Space, transitions, unifications, writes};
 use mork::{expr, prefix, sexpr};
-use mork::space::{transitions, unifications, writes, Space, ACT_PATH};
+use mork_expr::{Tag, item_byte, serialize};
 use mork_frontend::bytestring_parser::Parser;
-use mork_expr::{item_byte, serialize, Tag};
 use pathmap::PathMap;
 use pathmap::zipper::{Zipper, ZipperAbsolutePath, ZipperIteration, ZipperMoving};
 use std::collections::{BTreeSet, HashSet};
-use std::time::Instant;
 use std::ffi::OsStr;
 use std::ffi::OsString;
 use std::hash::{Hash, Hasher};
 use std::io::Read;
 use std::ops::Add;
+use std::time::Instant;
 // use std::future::Future;
 // use std::task::Poll;
-use itertools::Itertools;
 use base64::Engine;
-use serde::{Serialize, Deserialize};
-use clap::{Args, Parser as CLAParser, Subcommand, ValueEnum};
 use clap::builder::TypedValueParser;
-
+use clap::{Args, Parser as CLAParser, Subcommand, ValueEnum};
+use itertools::Itertools;
+use serde::{Deserialize, Serialize};
 
 /*fn main() {
     let mut s = Space::new();
@@ -34,7 +33,6 @@ use clap::builder::TypedValueParser;
     println!("loaded {} edges in {} seconds", loaded, t1.elapsed().as_secs());
     s.done();
 }*/
-
 
 // fn main() {
 //     let mut s = Space::new();
@@ -55,9 +53,16 @@ fn bench_flybase() {
     let mut s = Space::new();
 
     let add_gene_name_index_start = Instant::now();
-    s.add_all_sexpr("(exec P0 (I (ACT whole_flybase (NKV $x gene_name $y))) (, (gene_name_of $y $x)))".as_bytes());
+    s.add_all_sexpr(
+        "(exec P0 (I (ACT whole_flybase (NKV $x gene_name $y))) (, (gene_name_of $y $x)))"
+            .as_bytes(),
+    );
     s.metta_calculus(0);
-    println!("add gene name index took {} ms added {}", add_gene_name_index_start.elapsed().as_millis(), s.btm.val_count());
+    println!(
+        "add gene name index took {} ms added {}",
+        add_gene_name_index_start.elapsed().as_millis(),
+        s.btm.val_count()
+    );
 
     // let all_related_to_gene_start = Instant::now();
     // s.transform_multi(&[
@@ -113,7 +118,6 @@ fn bench_flybase() {
     //     count += 1
     // });
     // println!("res2 count {}", count);
-
 }
 
 const work_mm2: &str = r#"
@@ -152,15 +156,30 @@ const work_mm2: &str = r#"
 fn work_mm2_run() {
     let mut s = Space::new();
     let restore_paths_start = Instant::now();
-    println!("restored paths {:?}", s.restore_paths("/dev/shm/combined_ni.paths.gz").unwrap());
-    println!("paths restore took {}", restore_paths_start.elapsed().as_secs());
+    println!(
+        "restored paths {:?}",
+        s.restore_paths("/dev/shm/combined_ni.paths.gz").unwrap()
+    );
+    println!(
+        "paths restore took {}",
+        restore_paths_start.elapsed().as_secs()
+    );
     s.statistics();
 
     s.metta_calculus(100);
 
     let backup_paths_start = Instant::now();
-    println!("{:?}", s.backup_paths("/run/media/adam/43323a1c-ad7e-4d9a-b3c0-cf84e69ec61a/whole_flybase.paths.gz").unwrap());
-    println!("paths backup took {}", backup_paths_start.elapsed().as_secs());
+    println!(
+        "{:?}",
+        s.backup_paths(
+            "/run/media/adam/43323a1c-ad7e-4d9a-b3c0-cf84e69ec61a/whole_flybase.paths.gz"
+        )
+        .unwrap()
+    );
+    println!(
+        "paths backup took {}",
+        backup_paths_start.elapsed().as_secs()
+    );
 }
 
 /*
@@ -183,13 +202,16 @@ query BRCA2
  151956 atoms
  */
 
-fn set_from_newlines(input : &str) -> BTreeSet<&str> {
+fn set_from_newlines(input: &str) -> BTreeSet<&str> {
     BTreeSet::from_iter(input.split('\n').filter(|s| !s.is_empty()))
 }
 
 fn peano(x: usize) -> String {
-    if x == 0 { "Z".to_string() }
-    else { format!("(S {})", peano(x - 1)) }
+    if x == 0 {
+        "Z".to_string()
+    } else {
+        format!("(S {})", peano(x - 1))
+    }
 }
 
 fn basic() {
@@ -210,7 +232,8 @@ fn basic() {
     // (exec P1 (, (Straight $x $y) (Straight $y $z)) (, (Transitive $x $z)))
     //
 
-    s.add_sexpr(space.as_bytes(), expr!(s, "$"), expr!(s, "_1")).unwrap();
+    s.add_sexpr(space.as_bytes(), expr!(s, "$"), expr!(s, "_1"))
+        .unwrap();
 
     s.metta_calculus(100);
 
@@ -218,15 +241,14 @@ fn basic() {
     s.dump_sexpr(expr!(s, "$"), expr!(s, "_1"), &mut v);
 
     println!("out {}", String::from_utf8(v).unwrap());
-
-
 }
 
 fn process_calculus_bench(steps: usize, x: usize, y: usize) {
     let mut s = Space::new();
 
     // note 'idle' MM2-like statement that can be activated by moving it to the exec space
-    let space_exprs = format!(r#"
+    let space_exprs = format!(
+        r#"
 (exec (IC 0 1 {})
                (, (exec (IC $x $y (S $c)) $sp $st)
                   ((exec $x) $p $t))
@@ -246,9 +268,14 @@ fn process_calculus_bench(steps: usize, x: usize, y: usize) {
                                     (? (PN $x $y) $z (! $ret (S $z)))  )  ))
 (petri (? (add $ret) (Z $y) (! $ret $y)))
 (petri (! (add result) ({} {})))
-    "#, peano(steps), peano(x), peano(y));
+    "#,
+        peano(steps),
+        peano(x),
+        peano(y)
+    );
 
-    s.add_sexpr(space_exprs.as_bytes(), expr!(s, "$"), expr!(s, "_1")).unwrap();
+    s.add_sexpr(space_exprs.as_bytes(), expr!(s, "$"), expr!(s, "_1"))
+        .unwrap();
 
     let t0 = Instant::now();
     let mcalc_steps = s.metta_calculus(1000000000000000); // big number to show the MM2 inference control working
@@ -260,9 +287,17 @@ fn process_calculus_bench(steps: usize, x: usize, y: usize) {
     s.dump_sexpr(expr!(s, "[2] petri [3] ! result $"), expr!(s, "_1"), &mut v);
     let res = String::from_utf8(v).unwrap();
 
-    println!("{x}+{y} ({} steps) in {} µs result: {res}", steps, elapsed.as_micros());
-    assert_eq!(res, format!("{}\n", peano(x+y)));
-    println!("unifications {}, instructions {}", unsafe { unifications }, unsafe { transitions });
+    println!(
+        "{x}+{y} ({} steps) in {} µs result: {res}",
+        steps,
+        elapsed.as_micros()
+    );
+    assert_eq!(res, format!("{}\n", peano(x + y)));
+    println!(
+        "unifications {}, instructions {}",
+        unsafe { unifications },
+        unsafe { transitions }
+    );
     // (badbad)
     // 200+200 (1000 steps) in 42716559 µs
 }
@@ -271,7 +306,8 @@ fn process_calculus_source_sink_bench(steps: usize, x: usize, y: usize) {
     let mut s = Space::new();
 
     // note 'idle' MM2-like statement that can be activated by moving it to the exec space
-    let space_exprs = format!(r#"
+    let space_exprs = format!(
+        r#"
 (exec (IC 0 1 {})
                (, (exec (IC $x $y (S $c)) $sp $st)
                   ((exec $x) $p $t))
@@ -293,9 +329,14 @@ fn process_calculus_source_sink_bench(steps: usize, x: usize, y: usize) {
                                     (? (PN $x $y) $z (! $ret (S $z)))  )  ))
 (petri (? (add $ret) (Z $y) (! $ret $y)))
 (petri (! (add result) ({} {})))
-    "#, peano(steps), peano(x), peano(y));
+    "#,
+        peano(steps),
+        peano(x),
+        peano(y)
+    );
 
-    s.add_sexpr(space_exprs.as_bytes(), expr!(s, "$"), expr!(s, "_1")).unwrap();
+    s.add_sexpr(space_exprs.as_bytes(), expr!(s, "$"), expr!(s, "_1"))
+        .unwrap();
 
     let t0 = Instant::now();
     let mcalc_steps = s.metta_calculus(1000000000000000); // big number to show the MM2 inference control working
@@ -307,13 +348,20 @@ fn process_calculus_source_sink_bench(steps: usize, x: usize, y: usize) {
     s.dump_sexpr(expr!(s, "[2] petri [3] ! result $"), expr!(s, "_1"), &mut v);
     let res = String::from_utf8(v).unwrap();
 
-    println!("{x}+{y} ({} steps) in {} µs result: {res}", steps, elapsed.as_micros());
-    assert_eq!(res, format!("{}\n", peano(x+y)));
-    println!("unifications {}, instructions {}", unsafe { unifications }, unsafe { transitions });
+    println!(
+        "{x}+{y} ({} steps) in {} µs result: {res}",
+        steps,
+        elapsed.as_micros()
+    );
+    assert_eq!(res, format!("{}\n", peano(x + y)));
+    println!(
+        "unifications {}, instructions {}",
+        unsafe { unifications },
+        unsafe { transitions }
+    );
     // (badbad)
     // 200+200 (1000 steps) in 42716559 µs
 }
-
 
 fn process_calculus_reverse() {
     let mut s = Space::new();
@@ -341,7 +389,8 @@ fn process_calculus_reverse() {
 (petri (! (add result) ( (S (S Z)) (S (S Z)) )))
     "#;
 
-    s.add_sexpr(SPACE_EXPRS.as_bytes(), expr!(s, "$"), expr!(s, "_1")).unwrap();
+    s.add_sexpr(SPACE_EXPRS.as_bytes(), expr!(s, "$"), expr!(s, "_1"))
+        .unwrap();
 
     let steps = s.metta_calculus(1000000000000000); // big number to show the MM2 inference control working
 
@@ -366,7 +415,12 @@ fn lookup() {
 
     let mut t0 = Instant::now();
     let steps = s.metta_calculus(1000000000000000);
-    println!("elapsed {} steps {} size {}", t0.elapsed().as_millis(), steps, s.btm.val_count());
+    println!(
+        "elapsed {} steps {} size {}",
+        t0.elapsed().as_millis(),
+        steps,
+        s.btm.val_count()
+    );
 
     let mut v = vec![];
     s.dump_all_sexpr(&mut v).unwrap();
@@ -389,7 +443,12 @@ fn positive() {
 
     let mut t0 = Instant::now();
     let steps = s.metta_calculus(1000000000000000);
-    println!("elapsed {} steps {} size {}", t0.elapsed().as_millis(), steps, s.btm.val_count());
+    println!(
+        "elapsed {} steps {} size {}",
+        t0.elapsed().as_millis(),
+        steps,
+        s.btm.val_count()
+    );
 
     let mut v = vec![];
     s.dump_all_sexpr(&mut v).unwrap();
@@ -412,7 +471,12 @@ fn positive_equal() {
 
     let mut t0 = Instant::now();
     let steps = s.metta_calculus(1000000000000000);
-    println!("elapsed {} steps {} size {}", t0.elapsed().as_millis(), steps, s.btm.val_count());
+    println!(
+        "elapsed {} steps {} size {}",
+        t0.elapsed().as_millis(),
+        steps,
+        s.btm.val_count()
+    );
 
     let mut v = vec![];
     s.dump_all_sexpr(&mut v).unwrap();
@@ -433,11 +497,17 @@ fn negative() {
 
     "#;
 
-    s.add_sexpr(SPACE_EXPRS.as_bytes(), expr!(s, "$"), expr!(s, "_1")).unwrap();
+    s.add_sexpr(SPACE_EXPRS.as_bytes(), expr!(s, "$"), expr!(s, "_1"))
+        .unwrap();
 
     let mut t0 = Instant::now();
     let steps = s.metta_calculus(1000000000000000); // big number to show the MM2 inference control working
-    println!("elapsed {} steps {} size {}", t0.elapsed().as_millis(), steps, s.btm.val_count());
+    println!(
+        "elapsed {} steps {} size {}",
+        t0.elapsed().as_millis(),
+        steps,
+        s.btm.val_count()
+    );
 
     let mut v = vec![];
     s.dump_all_sexpr(&mut v).unwrap();
@@ -458,11 +528,17 @@ fn negative_equal() {
 
     "#;
 
-    s.add_sexpr(SPACE_EXPRS.as_bytes(), expr!(s, "$"), expr!(s, "_1")).unwrap();
+    s.add_sexpr(SPACE_EXPRS.as_bytes(), expr!(s, "$"), expr!(s, "_1"))
+        .unwrap();
 
     let mut t0 = Instant::now();
     let steps = s.metta_calculus(1000000000000000); // big number to show the MM2 inference control working
-    println!("elapsed {} steps {} size {}", t0.elapsed().as_millis(), steps, s.btm.val_count());
+    println!(
+        "elapsed {} steps {} size {}",
+        t0.elapsed().as_millis(),
+        steps,
+        s.btm.val_count()
+    );
 
     let mut v = vec![];
     s.dump_all_sexpr(&mut v).unwrap();
@@ -483,11 +559,17 @@ fn bipolar() {
 
     "#;
 
-    s.add_sexpr(SPACE_EXPRS.as_bytes(), expr!(s, "$"), expr!(s, "_1")).unwrap();
+    s.add_sexpr(SPACE_EXPRS.as_bytes(), expr!(s, "$"), expr!(s, "_1"))
+        .unwrap();
 
     let mut t0 = Instant::now();
     let steps = s.metta_calculus(1000000000000000); // big number to show the MM2 inference control working
-    println!("elapsed {} steps {} size {}", t0.elapsed().as_millis(), steps, s.btm.val_count());
+    println!(
+        "elapsed {} steps {} size {}",
+        t0.elapsed().as_millis(),
+        steps,
+        s.btm.val_count()
+    );
 
     let mut v = vec![];
     s.dump_all_sexpr(&mut v).unwrap();
@@ -508,11 +590,17 @@ fn bipolar_equal() {
 
     "#;
 
-    s.add_sexpr(SPACE_EXPRS.as_bytes(), expr!(s, "$"), expr!(s, "_1")).unwrap();
+    s.add_sexpr(SPACE_EXPRS.as_bytes(), expr!(s, "$"), expr!(s, "_1"))
+        .unwrap();
 
     let mut t0 = Instant::now();
     let steps = s.metta_calculus(1000000000000000); // big number to show the MM2 inference control working
-    println!("elapsed {} steps {} size {}", t0.elapsed().as_millis(), steps, s.btm.val_count());
+    println!(
+        "elapsed {} steps {} size {}",
+        t0.elapsed().as_millis(),
+        steps,
+        s.btm.val_count()
+    );
 
     let mut v = vec![];
     s.dump_all_sexpr(&mut v).unwrap();
@@ -536,7 +624,12 @@ fn two_positive_equal() {
 
     let mut t0 = Instant::now();
     let steps = s.metta_calculus(1000000000000000);
-    println!("elapsed {} steps {} size {}", t0.elapsed().as_millis(), steps, s.btm.val_count());
+    println!(
+        "elapsed {} steps {} size {}",
+        t0.elapsed().as_millis(),
+        steps,
+        s.btm.val_count()
+    );
 
     let mut v = vec![];
     s.dump_all_sexpr(&mut v).unwrap();
@@ -560,7 +653,12 @@ fn two_positive_equal_crossed() {
 
     let mut t0 = Instant::now();
     let steps = s.metta_calculus(1000000000000000);
-    println!("elapsed {} steps {} size {}", t0.elapsed().as_millis(), steps, s.btm.val_count());
+    println!(
+        "elapsed {} steps {} size {}",
+        t0.elapsed().as_millis(),
+        steps,
+        s.btm.val_count()
+    );
 
     let mut v = vec![];
     s.dump_all_sexpr(&mut v).unwrap();
@@ -584,7 +682,12 @@ fn two_bipolar_equal_crossed() {
 
     let mut t0 = Instant::now();
     let steps = s.metta_calculus(1000000000000000);
-    println!("elapsed {} steps {} size {}", t0.elapsed().as_millis(), steps, s.btm.val_count());
+    println!(
+        "elapsed {} steps {} size {}",
+        t0.elapsed().as_millis(),
+        steps,
+        s.btm.val_count()
+    );
 
     let mut v = vec![];
     s.dump_all_sexpr(&mut v).unwrap();
@@ -627,21 +730,31 @@ fn roman_disjoin_initial() {
 
     let mut t0 = Instant::now();
     let steps = s.metta_calculus(1000000000000000);
-    println!("elapsed {} steps {} size {}", t0.elapsed().as_millis(), steps, s.btm.val_count());
+    println!(
+        "elapsed {} steps {} size {}",
+        t0.elapsed().as_millis(),
+        steps,
+        s.btm.val_count()
+    );
 
     let mut v = vec![];
     // s.dump_all_sexpr(&mut v).unwrap();
-    s.dump_sexpr(expr!(s, "[4] intersection $ $ $"), expr!(s, "[4] intersection _1 _2 _3"), &mut v);
+    s.dump_sexpr(
+        expr!(s, "[4] intersection $ $ $"),
+        expr!(s, "[4] intersection _1 _2 _3"),
+        &mut v,
+    );
     let res = String::from_utf8(v).unwrap();
 
     println!("result: {res}");
-    assert!(res.contains("(intersection 1 2 Nil)
+    assert!(res.contains(
+        "(intersection 1 2 Nil)
 (intersection 1 3 a)
 (intersection 1 3 b)
 (intersection 2 3 Nil)
-"));
+"
+    ));
 }
-
 
 fn roman_disjoin_final() {
     let mut s = Space::new();
@@ -670,17 +783,28 @@ fn roman_disjoin_final() {
 
     let mut t0 = Instant::now();
     let steps = s.metta_calculus(1000000000000000);
-    println!("elapsed {} steps {} size {}", t0.elapsed().as_millis(), steps, s.btm.val_count());
+    println!(
+        "elapsed {} steps {} size {}",
+        t0.elapsed().as_millis(),
+        steps,
+        s.btm.val_count()
+    );
 
     let mut v = vec![];
     // s.dump_all_sexpr(&mut v).unwrap();
-    s.dump_sexpr(expr!(s, "[3] disjoint $ $"), expr!(s, "[3] disjoint _1 _2"), &mut v);
+    s.dump_sexpr(
+        expr!(s, "[3] disjoint $ $"),
+        expr!(s, "[3] disjoint _1 _2"),
+        &mut v,
+    );
     let res = String::from_utf8(v).unwrap();
 
     println!("result: {res}");
-    assert!(res.contains("(disjoint 1 2)
+    assert!(res.contains(
+        "(disjoint 1 2)
 (disjoint 2 3)
-"));
+"
+    ));
 }
 
 fn func_type_unification() {
@@ -697,7 +821,12 @@ fn func_type_unification() {
 
     let mut t0 = Instant::now();
     let steps = s.metta_calculus(1000000000000000);
-    println!("elapsed {} steps {} size {}", t0.elapsed().as_millis(), steps, s.btm.val_count());
+    println!(
+        "elapsed {} steps {} size {}",
+        t0.elapsed().as_millis(),
+        steps,
+        s.btm.val_count()
+    );
 
     let mut v = vec![];
     s.dump_all_sexpr(&mut v).unwrap();
@@ -722,7 +851,12 @@ f
 
     let mut t0 = Instant::now();
     let steps = s.metta_calculus(1000000000000000);
-    println!("elapsed {} steps {} size {}", t0.elapsed().as_millis(), steps, s.btm.val_count());
+    println!(
+        "elapsed {} steps {} size {}",
+        t0.elapsed().as_millis(),
+        steps,
+        s.btm.val_count()
+    );
 
     let mut v = vec![];
     s.dump_all_sexpr(&mut v).unwrap();
@@ -784,13 +918,19 @@ fn bench_lr() {
     "#;
 
     // s.add_sexpr(GRAMMAR.as_bytes(), expr!(s, "$"), expr!(s, "[2] grammar _1")).unwrap();
-    s.add_sexpr(PARSER.as_bytes(), expr!(s, "$"), expr!(s, "[2] parser _1")).unwrap();
+    s.add_sexpr(PARSER.as_bytes(), expr!(s, "$"), expr!(s, "[2] parser _1"))
+        .unwrap();
     // s.add_all_sexpr(PARSER.as_bytes()).unwrap();
     s.add_all_sexpr(PARSING.as_bytes()).unwrap();
 
     let mut t0 = Instant::now();
     let steps = s.metta_calculus(1000000000000000);
-    println!("elapsed {} steps {} size {}", t0.elapsed().as_millis(), steps, s.btm.val_count());
+    println!(
+        "elapsed {} steps {} size {}",
+        t0.elapsed().as_millis(),
+        steps,
+        s.btm.val_count()
+    );
 
     let mut v = vec![];
     s.dump_all_sexpr(&mut v).unwrap();
@@ -834,12 +974,21 @@ fn pattern_mining() {
 
     s.add_all_sexpr(SPACE_EXPRS.as_bytes()).unwrap();
 
-    s.btm.iter().for_each(|(p, k)| println!("{}", serialize(&p[..])));
+    s.btm
+        .iter()
+        .for_each(|(p, k)| println!("{}", serialize(&p[..])));
 
     let mut t0 = Instant::now();
     let steps = s.metta_calculus(1000000000000000);
-    println!("elapsed {} steps {} size {}", t0.elapsed().as_millis(), steps, s.btm.val_count());
-    s.btm.iter().for_each(|(p, k)| println!("{}", serialize(&p[..])));
+    println!(
+        "elapsed {} steps {} size {}",
+        t0.elapsed().as_millis(),
+        steps,
+        s.btm.val_count()
+    );
+    s.btm
+        .iter()
+        .for_each(|(p, k)| println!("{}", serialize(&p[..])));
 
     let mut v = vec![];
     // s.dump_all_sexpr(&mut v).unwrap();
@@ -882,12 +1031,21 @@ fn pattern_mining_lensy() {
 
     s.add_all_sexpr(SPACE_EXPRS.as_bytes()).unwrap();
 
-    s.btm.iter().for_each(|(p, k)| println!("{}", serialize(&p[..])));
+    s.btm
+        .iter()
+        .for_each(|(p, k)| println!("{}", serialize(&p[..])));
 
     let mut t0 = Instant::now();
     let steps = s.metta_calculus(1000000000000000);
-    println!("elapsed {} steps {} size {}", t0.elapsed().as_millis(), steps, s.btm.val_count());
-    s.btm.iter().for_each(|(p, k)| println!("{}", serialize(&p[..])));
+    println!(
+        "elapsed {} steps {} size {}",
+        t0.elapsed().as_millis(),
+        steps,
+        s.btm.val_count()
+    );
+    s.btm
+        .iter()
+        .for_each(|(p, k)| println!("{}", serialize(&p[..])));
 
     let mut v = vec![];
     s.dump_all_sexpr(&mut v).unwrap();
@@ -932,33 +1090,55 @@ fn bench_pattern_mining_lensy() {
     "#;
 
     use std::os::unix::fs::MetadataExt;
-    let dir = std::fs::read_dir("/mnt/data/scholarly-trees-main/constituency-agreed/jourals/corr/").unwrap();
+    let dir = std::fs::read_dir("/mnt/data/scholarly-trees-main/constituency-agreed/jourals/corr/")
+        .unwrap();
     for file in dir {
         let filen = file.unwrap();
-        if filen.metadata().unwrap().size() == 0 { continue}
+        if filen.metadata().unwrap().size() == 0 {
+            continue;
+        }
         let mut data = std::fs::File::open(filen.path()).unwrap();
         let mut v = vec![];
         data.read_to_end(&mut v).unwrap();
-        match s.add_sexpr(&v[..],expr!(s, "$"), expr!(s, "[2] data _1")) {
+        match s.add_sexpr(&v[..], expr!(s, "$"), expr!(s, "[2] data _1")) {
             Ok(_) => {}
             Err(err) => {
                 println!("err {:?}", err);
-                println!("file {:?}: {}", filen.file_name(), std::str::from_utf8(&v[..]).unwrap());
+                println!(
+                    "file {:?}: {}",
+                    filen.file_name(),
+                    std::str::from_utf8(&v[..]).unwrap()
+                );
             }
         }
     }
 
     s.add_all_sexpr(SPACE_EXPRS.as_bytes()).unwrap();
-    s.add_all_sexpr((0..10).map(|i| format!("(succ {} {})", i, i+1)).join(" ").as_bytes()).unwrap();
+    s.add_all_sexpr(
+        (0..10)
+            .map(|i| format!("(succ {} {})", i, i + 1))
+            .join(" ")
+            .as_bytes(),
+    )
+    .unwrap();
 
     let mut t0 = Instant::now();
     let steps = s.metta_calculus(1000000000000000);
-    println!("elapsed {} steps {} size {}", t0.elapsed().as_millis(), steps, s.btm.val_count());
+    println!(
+        "elapsed {} steps {} size {}",
+        t0.elapsed().as_millis(),
+        steps,
+        s.btm.val_count()
+    );
 
     let mut v = vec![];
     // s.dump_all_sexpr(&mut v).unwrap();
     // s.dump_sexpr(expr!(s, "[4] [2] peel $ $ $ $"), expr!(s, "[3] _2 -> _4"), &mut v);
-    s.dump_sexpr(expr!(s, "[4] found the_proposed $ $"), expr!(s, "[3] _1 -> _2"), &mut v);
+    s.dump_sexpr(
+        expr!(s, "[4] found the_proposed $ $"),
+        expr!(s, "[3] _1 -> _2"),
+        &mut v,
+    );
     let res = String::from_utf8(v).unwrap();
 
     println!("result:\n{res}");
@@ -995,12 +1175,22 @@ fn meta_ana() {
 (exec (2 0) (, (tmp $value)) (O (+ (space-example $value)) (- (tmp $value)) ))
     "#;
 
-    s.add_sexpr(input.as_bytes(), expr!(s, "$"), expr!(s, "[2] tree-example _1")).unwrap();
+    s.add_sexpr(
+        input.as_bytes(),
+        expr!(s, "$"),
+        expr!(s, "[2] tree-example _1"),
+    )
+    .unwrap();
     s.add_all_sexpr(SPACE.as_bytes()).unwrap();
 
     let mut t0 = Instant::now();
     let steps = s.metta_calculus(1000000000000000);
-    println!("elapsed {} steps {} size {}", t0.elapsed().as_millis(), steps, s.btm.val_count());
+    println!(
+        "elapsed {} steps {} size {}",
+        t0.elapsed().as_millis(),
+        steps,
+        s.btm.val_count()
+    );
 
     let mut v = vec![];
     // s.dump_all_sexpr(&mut v).unwrap();
@@ -1014,7 +1204,8 @@ fn meta_ana() {
 fn meta_ana_exec() {
     let mut s = Space::new();
 
-    let input = "(branch (branch (branch (leaf 111) (leaf 112)) (leaf 12)) (branch (leaf 21) (leaf 22)))";
+    let input =
+        "(branch (branch (branch (leaf 111) (leaf 112)) (leaf 12)) (branch (leaf 21) (leaf 22)))";
     let desired_output = r#"(value (cons (cons nil L) R) 12)
 (value (cons (cons nil R) L) 21)
 (value (cons (cons nil R) R) 22)
@@ -1055,11 +1246,21 @@ fn meta_ana_exec() {
     )
     "#;
 
-    s.add_sexpr(input.as_bytes(), expr!(s, "$"), expr!(s, "[2] tree-example _1")).unwrap();
+    s.add_sexpr(
+        input.as_bytes(),
+        expr!(s, "$"),
+        expr!(s, "[2] tree-example _1"),
+    )
+    .unwrap();
     s.add_all_sexpr(space.as_bytes()).unwrap();
     let mut t0 = Instant::now();
     let steps = s.metta_calculus(1000000000000000);
-    println!("elapsed {} steps {} size {}", t0.elapsed().as_millis(), steps, s.btm.val_count());
+    println!(
+        "elapsed {} steps {} size {}",
+        t0.elapsed().as_millis(),
+        steps,
+        s.btm.val_count()
+    );
 
     let mut v = vec![];
     // s.dump_all_sexpr(&mut v).unwrap();
@@ -1210,7 +1411,8 @@ fn bench_tile_puzzle_states() {
 
     s.add_all_sexpr(space.as_bytes()).unwrap();
 
-    s.add_all_sexpr(r"
+    s.add_all_sexpr(
+        r"
 (exec 0
   (, ($_1 != $_2)
      ($_2 != $_3) ($_3 != $_1)
@@ -1223,13 +1425,21 @@ fn bench_tile_puzzle_states() {
   )
   (, (state1 $state))
 )
-".as_bytes()).unwrap();
+"
+        .as_bytes(),
+    )
+    .unwrap();
     let mut t0 = Instant::now();
     let steps = s.metta_calculus(1000000000000000);
-    println!("elapsed {} steps {} size {}", t0.elapsed().as_millis(), steps, s.btm.val_count());
+    println!(
+        "elapsed {} steps {} size {}",
+        t0.elapsed().as_millis(),
+        steps,
+        s.btm.val_count()
+    );
 
-
-    s.add_all_sexpr(r"
+    s.add_all_sexpr(
+        r"
 ((step 0) (, (new $state) (move $state $a $new_state) )
           (O (+ (new_reachable $new_state)) (+ (state2 $state)) (- (new $state)) (- (some todo)) ))
 
@@ -1248,10 +1458,18 @@ fn bench_tile_puzzle_states() {
            (exec fixpoint $p1 $t1) )
         (, (exec $x $p0 $t0)
            (exec fixpoint $p1 $t1) ))
-".as_bytes()).unwrap();
+"
+        .as_bytes(),
+    )
+    .unwrap();
     let mut t0 = Instant::now();
     let steps = s.metta_calculus(1000000000000000);
-    println!("elapsed {} steps {} size {}", t0.elapsed().as_millis(), steps, s.btm.val_count());
+    println!(
+        "elapsed {} steps {} size {}",
+        t0.elapsed().as_millis(),
+        steps,
+        s.btm.val_count()
+    );
 
     let mut v1 = vec![];
     // s.dump_all_sexpr(&mut v).unwrap();
@@ -1263,8 +1481,14 @@ fn bench_tile_puzzle_states() {
     s.dump_sexpr(expr!(s, "[2] state2 $"), expr!(s, "_1"), &mut v2);
     let res2 = String::from_utf8(v2).unwrap();
 
-    println!("State enumeration {}", res1.as_bytes().into_iter().filter(|c| **c == b'\n').count());
-    println!("State exploration {}", res2.as_bytes().into_iter().filter(|c| **c == b'\n').count());
+    println!(
+        "State enumeration {}",
+        res1.as_bytes().into_iter().filter(|c| **c == b'\n').count()
+    );
+    println!(
+        "State exploration {}",
+        res2.as_bytes().into_iter().filter(|c| **c == b'\n').count()
+    );
     // println!("{res2}");
     // assert_eq!(res1, res2);
 }
@@ -1283,7 +1507,12 @@ fn source_space_two_bipolar_equal_crossed() {
 
     let mut t0 = Instant::now();
     let steps = s.metta_calculus(1000000000000000);
-    println!("elapsed {} steps {} size {}", t0.elapsed().as_millis(), steps, s.btm.val_count());
+    println!(
+        "elapsed {} steps {} size {}",
+        t0.elapsed().as_millis(),
+        steps,
+        s.btm.val_count()
+    );
 
     let mut v = vec![];
     s.dump_all_sexpr(&mut v).unwrap();
@@ -1303,7 +1532,9 @@ fn source_act_two_bipolar_equal_crossed() {
     "#;
 
         act_s.add_all_sexpr(SPACE_EXPRS.as_bytes()).unwrap();
-        act_s.backup_tree(format!("{ACT_PATH}two_bipolar_equal_crossed.act")).unwrap();
+        act_s
+            .backup_tree(format!("{ACT_PATH}two_bipolar_equal_crossed.act"))
+            .unwrap();
     };
 
     let mut s = Space::new();
@@ -1316,7 +1547,12 @@ fn source_act_two_bipolar_equal_crossed() {
 
     let mut t0 = Instant::now();
     let steps = s.metta_calculus(1000000000000000);
-    println!("elapsed {} steps {} size {}", t0.elapsed().as_millis(), steps, s.btm.val_count());
+    println!(
+        "elapsed {} steps {} size {}",
+        t0.elapsed().as_millis(),
+        steps,
+        s.btm.val_count()
+    );
 
     let mut v = vec![];
     s.dump_all_sexpr(&mut v).unwrap();
@@ -1335,7 +1571,9 @@ fn source_space_act_two_bipolar_equal_crossed() {
     "#;
 
         act_s.add_all_sexpr(SPACE_EXPRS.as_bytes()).unwrap();
-        act_s.backup_tree(format!("{ACT_PATH}space_two_bipolar_equal_crossed.act")).unwrap();
+        act_s
+            .backup_tree(format!("{ACT_PATH}space_two_bipolar_equal_crossed.act"))
+            .unwrap();
     };
 
     let mut s = Space::new();
@@ -1349,7 +1587,12 @@ fn source_space_act_two_bipolar_equal_crossed() {
 
     let mut t0 = Instant::now();
     let steps = s.metta_calculus(1000000000000000);
-    println!("elapsed {} steps {} size {}", t0.elapsed().as_millis(), steps, s.btm.val_count());
+    println!(
+        "elapsed {} steps {} size {}",
+        t0.elapsed().as_millis(),
+        steps,
+        s.btm.val_count()
+    );
 
     let mut v = vec![];
     s.dump_all_sexpr(&mut v).unwrap();
@@ -1373,7 +1616,12 @@ fn source_cmp_eq() {
 
     let mut t0 = Instant::now();
     let steps = s.metta_calculus(1000000000000000);
-    println!("elapsed {} steps {} size {}", t0.elapsed().as_millis(), steps, s.btm.val_count());
+    println!(
+        "elapsed {} steps {} size {}",
+        t0.elapsed().as_millis(),
+        steps,
+        s.btm.val_count()
+    );
 
     let mut v = vec![];
     s.dump_all_sexpr(&mut v).unwrap();
@@ -1396,7 +1644,12 @@ fn source_sink_cmp_eq_remove() {
 
     let mut t0 = Instant::now();
     let steps = s.metta_calculus(1000000000000000);
-    println!("elapsed {} steps {} size {}", t0.elapsed().as_millis(), steps, s.btm.val_count());
+    println!(
+        "elapsed {} steps {} size {}",
+        t0.elapsed().as_millis(),
+        steps,
+        s.btm.val_count()
+    );
 
     let mut v = vec![];
     s.dump_all_sexpr(&mut v).unwrap();
@@ -1420,7 +1673,12 @@ fn source_sink_cmp_eq_remove_both() {
 
     let mut t0 = Instant::now();
     let steps = s.metta_calculus(1000000000000000);
-    println!("elapsed {} steps {} size {}", t0.elapsed().as_millis(), steps, s.btm.val_count());
+    println!(
+        "elapsed {} steps {} size {}",
+        t0.elapsed().as_millis(),
+        steps,
+        s.btm.val_count()
+    );
 
     let mut v = vec![];
     s.dump_all_sexpr(&mut v).unwrap();
@@ -1453,7 +1711,12 @@ fn source_sink_annihilate() {
 
     let mut t0 = Instant::now();
     let steps = s.metta_calculus(1000000000000000);
-    println!("elapsed {} steps {} size {}", t0.elapsed().as_millis(), steps, s.btm.val_count());
+    println!(
+        "elapsed {} steps {} size {}",
+        t0.elapsed().as_millis(),
+        steps,
+        s.btm.val_count()
+    );
 
     let mut v = vec![];
     s.dump_all_sexpr(&mut v).unwrap();
@@ -1478,7 +1741,12 @@ fn source_cmp_eq_var_constraint() {
 
     let mut t0 = Instant::now();
     let steps = s.metta_calculus(1000000000000000);
-    println!("elapsed {} steps {} size {}", t0.elapsed().as_millis(), steps, s.btm.val_count());
+    println!(
+        "elapsed {} steps {} size {}",
+        t0.elapsed().as_millis(),
+        steps,
+        s.btm.val_count()
+    );
 
     let mut v = vec![];
     s.dump_all_sexpr(&mut v).unwrap();
@@ -1500,7 +1768,12 @@ fn source_cmp_ne() {
 
     let mut t0 = Instant::now();
     let steps = s.metta_calculus(1000000000000000);
-    println!("elapsed {} steps {} size {}", t0.elapsed().as_millis(), steps, s.btm.val_count());
+    println!(
+        "elapsed {} steps {} size {}",
+        t0.elapsed().as_millis(),
+        steps,
+        s.btm.val_count()
+    );
 
     let mut v = vec![];
     // s.dump_all_sexpr(&mut v).unwrap();
@@ -1508,13 +1781,15 @@ fn source_cmp_ne() {
     let res = String::from_utf8(v).unwrap();
 
     println!("result: {res}");
-    assert!(res.contains("(X != Y)
+    assert!(res.contains(
+        "(X != Y)
 (X != Z)
 (Y != X)
 (Y != Z)
 (Z != X)
 (Z != Y)
-"));
+"
+    ));
 }
 
 fn source_cmp_rel() {
@@ -1530,7 +1805,12 @@ fn source_cmp_rel() {
 
     let mut t0 = Instant::now();
     let steps = s.metta_calculus(1000000000000000);
-    println!("elapsed {} steps {} size {}", t0.elapsed().as_millis(), steps, s.btm.val_count());
+    println!(
+        "elapsed {} steps {} size {}",
+        t0.elapsed().as_millis(),
+        steps,
+        s.btm.val_count()
+    );
 
     let mut v = vec![];
     s.dump_all_sexpr(&mut v).unwrap();
@@ -1538,7 +1818,8 @@ fn source_cmp_rel() {
     let res = String::from_utf8(v).unwrap();
 
     println!("result: {res}");
-    assert!(res.contains("(rel X X ==)
+    assert!(res.contains(
+        "(rel X X ==)
 (rel X Y !=)
 (rel X Z !=)
 (rel Y X !=)
@@ -1547,7 +1828,8 @@ fn source_cmp_rel() {
 (rel Z X !=)
 (rel Z Y !=)
 (rel Z Z ==)
-"));
+"
+    ));
 }
 
 fn source_map_reverse() {
@@ -1563,15 +1845,22 @@ fn source_map_reverse() {
 
     let mut t0 = Instant::now();
     let steps = s.metta_calculus(1000000000000000);
-    println!("elapsed {} steps {} size {}", t0.elapsed().as_millis(), steps, s.btm.val_count());
+    println!(
+        "elapsed {} steps {} size {}",
+        t0.elapsed().as_millis(),
+        steps,
+        s.btm.val_count()
+    );
 
     let mut v = vec![];
     s.dump_all_sexpr(&mut v).unwrap();
     let res = String::from_utf8(v).unwrap();
 
     println!("result: {res}");
-    assert!(res.contains("(res Z) (res R)
-"));
+    assert!(res.contains(
+        "(res Z) (res R)
+"
+    ));
 }
 
 fn source_map_oom() {
@@ -1589,15 +1878,22 @@ fn source_map_oom() {
 
     let mut t0 = Instant::now();
     let steps = s.metta_calculus(1000000000000000);
-    println!("elapsed {} steps {} size {}", t0.elapsed().as_millis(), steps, s.btm.val_count());
+    println!(
+        "elapsed {} steps {} size {}",
+        t0.elapsed().as_millis(),
+        steps,
+        s.btm.val_count()
+    );
 
     let mut v = vec![];
     s.dump_all_sexpr(&mut v).unwrap();
     let res = String::from_utf8(v).unwrap();
 
     println!("result: {res}");
-    assert!(res.contains("(oom_of 103904 6) (oom_of 293 3)
-"));
+    assert!(res.contains(
+        "(oom_of 103904 6) (oom_of 293 3)
+"
+    ));
 }
 
 fn sink_two_bipolar_equal_crossed() {
@@ -1614,7 +1910,12 @@ fn sink_two_bipolar_equal_crossed() {
 
     let mut t0 = Instant::now();
     let steps = s.metta_calculus(1000000000000000);
-    println!("elapsed {} steps {} size {}", t0.elapsed().as_millis(), steps, s.btm.val_count());
+    println!(
+        "elapsed {} steps {} size {}",
+        t0.elapsed().as_millis(),
+        steps,
+        s.btm.val_count()
+    );
 
     let mut v = vec![];
     s.dump_all_sexpr(&mut v).unwrap();
@@ -1638,7 +1939,12 @@ fn sink_two_positive_equal_crossed() {
 
     let mut t0 = Instant::now();
     let steps = s.metta_calculus(1000000000000000);
-    println!("elapsed {} steps {} size {}", t0.elapsed().as_millis(), steps, s.btm.val_count());
+    println!(
+        "elapsed {} steps {} size {}",
+        t0.elapsed().as_millis(),
+        steps,
+        s.btm.val_count()
+    );
 
     let mut v = vec![];
     s.dump_all_sexpr(&mut v).unwrap();
@@ -1661,7 +1967,12 @@ A
 
     let mut t0 = Instant::now();
     let steps = s.metta_calculus(1000000000000000);
-    println!("elapsed {} steps {} size {}", t0.elapsed().as_millis(), steps, s.btm.val_count());
+    println!(
+        "elapsed {} steps {} size {}",
+        t0.elapsed().as_millis(),
+        steps,
+        s.btm.val_count()
+    );
 
     let mut v = vec![];
     s.dump_all_sexpr(&mut v).unwrap();
@@ -1690,7 +2001,12 @@ fn sink_remove_many() {
 
     let mut t0 = Instant::now();
     let steps = s.metta_calculus(1000000000000000);
-    println!("elapsed {} steps {} size {}", t0.elapsed().as_millis(), steps, s.btm.val_count());
+    println!(
+        "elapsed {} steps {} size {}",
+        t0.elapsed().as_millis(),
+        steps,
+        s.btm.val_count()
+    );
 
     let mut v = vec![];
     s.dump_all_sexpr(&mut v).unwrap();
@@ -1722,7 +2038,12 @@ fn cross_join_tuple() {
 
     let mut t0 = Instant::now();
     let steps = s.metta_calculus(1000000000000000);
-    println!("elapsed {} steps {} size {}", t0.elapsed().as_millis(), steps, s.btm.val_count());
+    println!(
+        "elapsed {} steps {} size {}",
+        t0.elapsed().as_millis(),
+        steps,
+        s.btm.val_count()
+    );
 
     let mut v = vec![];
     // s.dump_all_sexpr(&mut v).unwrap();
@@ -1730,13 +2051,15 @@ fn cross_join_tuple() {
     let res = String::from_utf8(v).unwrap();
 
     println!("result: {res}");
-    assert_eq!(res, r#"(, Cheat 3489 Marketing 1 2)
+    assert_eq!(
+        res,
+        r#"(, Cheat 3489 Marketing 1 2)
 (, Cheat 3489 Marketing 10 20)
 (, Harry 3415 Finance 1 2)
 (, Harry 3415 Finance 10 20)
-"#)
+"#
+    )
 }
-
 
 fn cross_join_dict() {
     let mut s = Space::new();
@@ -1768,7 +2091,12 @@ fn cross_join_dict() {
 
     let mut t0 = Instant::now();
     let steps = s.metta_calculus(1000000000000000);
-    println!("elapsed {} steps {} size {}", t0.elapsed().as_millis(), steps, s.btm.val_count());
+    println!(
+        "elapsed {} steps {} size {}",
+        t0.elapsed().as_millis(),
+        steps,
+        s.btm.val_count()
+    );
 
     let mut v = vec![];
     s.dump_all_sexpr(&mut v).unwrap();
@@ -1776,13 +2104,12 @@ fn cross_join_dict() {
     let res = String::from_utf8(v).unwrap();
 
     println!("result: {res}");
-//     assert_eq!(res, r#"(, Cheat 3489 Marketing 1 2)
-// (, Cheat 3489 Marketing 10 20)
-// (, Harry 3415 Finance 1 2)
-// (, Harry 3415 Finance 10 20)
-// "#)
+    //     assert_eq!(res, r#"(, Cheat 3489 Marketing 1 2)
+    // (, Cheat 3489 Marketing 10 20)
+    // (, Harry 3415 Finance 1 2)
+    // (, Harry 3415 Finance 10 20)
+    // "#)
 }
-
 
 fn sink_add_remove_var() {
     let mut s = Space::new();
@@ -1799,7 +2126,12 @@ fn sink_add_remove_var() {
 
     let mut t0 = Instant::now();
     let steps = s.metta_calculus(1000000000000000);
-    println!("elapsed {} steps {} size {}", t0.elapsed().as_millis(), steps, s.btm.val_count());
+    println!(
+        "elapsed {} steps {} size {}",
+        t0.elapsed().as_millis(),
+        steps,
+        s.btm.val_count()
+    );
 
     let mut v = vec![];
     s.dump_all_sexpr(&mut v).unwrap();
@@ -1841,7 +2173,12 @@ fn sink_odd_even_sort() {
 
     let mut t0 = Instant::now();
     let steps = s.metta_calculus(1000000000000000);
-    println!("elapsed {} steps {} size {}", t0.elapsed().as_millis(), steps, s.btm.val_count());
+    println!(
+        "elapsed {} steps {} size {}",
+        t0.elapsed().as_millis(),
+        steps,
+        s.btm.val_count()
+    );
 
     let mut v = vec![];
     // s.dump_all_sexpr(&mut v).unwrap();
@@ -1866,7 +2203,12 @@ fn sink_head() {
 
     let mut t0 = Instant::now();
     let steps = s.metta_calculus(1000000000000000);
-    println!("elapsed {} steps {} size {}", t0.elapsed().as_millis(), steps, s.btm.val_count());
+    println!(
+        "elapsed {} steps {} size {}",
+        t0.elapsed().as_millis(),
+        steps,
+        s.btm.val_count()
+    );
 
     let mut v = vec![];
     s.dump_sexpr(expr!(s, "[4] cux $ $ $"), expr!(s, "[3] _3 _2 _1"), &mut v);
@@ -1874,7 +2216,10 @@ fn sink_head() {
     let res = String::from_utf8(v).unwrap();
 
     println!("result: {res}");
-    assert_eq!(res, "(1 x P)\n(2 x P)\n(3 x P)\n(1 y P)\n(2 y P)\n(3 y P)\n(1 x Q)\n")
+    assert_eq!(
+        res,
+        "(1 x P)\n(2 x P)\n(3 x P)\n(1 y P)\n(2 y P)\n(3 y P)\n(1 x Q)\n"
+    )
 }
 
 fn sink_count_literal() {
@@ -1892,7 +2237,12 @@ fn sink_count_literal() {
 
     let mut t0 = Instant::now();
     let steps = s.metta_calculus(1000000000000000);
-    println!("elapsed {} steps {} size {}", t0.elapsed().as_millis(), steps, s.btm.val_count());
+    println!(
+        "elapsed {} steps {} size {}",
+        t0.elapsed().as_millis(),
+        steps,
+        s.btm.val_count()
+    );
 
     let mut v = vec![];
     s.dump_sexpr(expr!(s, "[2] all $"), expr!(s, "_1"), &mut v);
@@ -1916,7 +2266,12 @@ fn sink_sum_literal() {
 
     let mut t0 = Instant::now();
     let steps = s.metta_calculus(1000000000000000);
-    println!("elapsed {} steps {} size {}", t0.elapsed().as_millis(), steps, s.btm.val_count());
+    println!(
+        "elapsed {} steps {} size {}",
+        t0.elapsed().as_millis(),
+        steps,
+        s.btm.val_count()
+    );
 
     let mut v = vec![];
     s.dump_all_sexpr(&mut v).unwrap();
@@ -1943,10 +2298,19 @@ fn sink_sum_sets() {
 
     let mut t0 = Instant::now();
     let steps = s.metta_calculus(1000000000000000);
-    println!("elapsed {} steps {} size {}", t0.elapsed().as_millis(), steps, s.btm.val_count());
+    println!(
+        "elapsed {} steps {} size {}",
+        t0.elapsed().as_millis(),
+        steps,
+        s.btm.val_count()
+    );
 
     let mut v = vec![];
-    s.dump_sexpr(expr!(s, "[5] set $ contains $ elements"), expr!(s, "[2] _1 _2"), &mut v);
+    s.dump_sexpr(
+        expr!(s, "[5] set $ contains $ elements"),
+        expr!(s, "[2] _1 _2"),
+        &mut v,
+    );
     // s.dump_all_sexpr(&mut v).unwrap();
     let res = String::from_utf8(v).unwrap();
 
@@ -1968,7 +2332,12 @@ fn sink_count_constant() {
 
     let mut t0 = Instant::now();
     let steps = s.metta_calculus(1000000000000000);
-    println!("elapsed {} steps {} size {}", t0.elapsed().as_millis(), steps, s.btm.val_count());
+    println!(
+        "elapsed {} steps {} size {}",
+        t0.elapsed().as_millis(),
+        steps,
+        s.btm.val_count()
+    );
 
     let mut v = vec![];
     s.dump_sexpr(expr!(s, "[2] all $"), expr!(s, "_1"), &mut v);
@@ -1993,7 +2362,12 @@ fn sink_count() {
 
     let mut t0 = Instant::now();
     let steps = s.metta_calculus(1000000000000000);
-    println!("elapsed {} steps {} size {}", t0.elapsed().as_millis(), steps, s.btm.val_count());
+    println!(
+        "elapsed {} steps {} size {}",
+        t0.elapsed().as_millis(),
+        steps,
+        s.btm.val_count()
+    );
 
     let mut v = vec![];
     s.dump_sexpr(expr!(s, "[2] all $"), expr!(s, "_1"), &mut v);
@@ -2029,7 +2403,12 @@ fn sink_exec_remove_trigger() {
 
     let mut t0 = Instant::now();
     let steps = s.metta_calculus(1000000000000000);
-    println!("elapsed {} steps {} size {}", t0.elapsed().as_millis(), steps, s.btm.val_count());
+    println!(
+        "elapsed {} steps {} size {}",
+        t0.elapsed().as_millis(),
+        steps,
+        s.btm.val_count()
+    );
 
     let mut v = vec![];
     s.dump_all_sexpr(&mut v).unwrap();
@@ -2054,7 +2433,12 @@ fn sink_act_readback() {
 
     let mut t0 = Instant::now();
     let steps = s.metta_calculus(1000000000000000);
-    println!("elapsed {} steps {} size {}", t0.elapsed().as_millis(), steps, s.btm.val_count());
+    println!(
+        "elapsed {} steps {} size {}",
+        t0.elapsed().as_millis(),
+        steps,
+        s.btm.val_count()
+    );
 
     {
         let mut s = Space::new();
@@ -2091,7 +2475,12 @@ fn sink_count_double() {
 
     let mut t0 = Instant::now();
     let steps = s.metta_calculus(1000000000000000);
-    println!("elapsed {} steps {} size {}", t0.elapsed().as_millis(), steps, s.btm.val_count());
+    println!(
+        "elapsed {} steps {} size {}",
+        t0.elapsed().as_millis(),
+        steps,
+        s.btm.val_count()
+    );
 
     let mut v = vec![];
     // s.dump_sexpr(expr!(s, "[2] all $"), expr!(s, "_1"), &mut v);
@@ -2121,12 +2510,17 @@ fn sink_count_double_repeated() {
   (O (count (count-1 $k) $k $x)
      (count (count-2 $k) $k $y)))
     "#;
-    
+
     s.add_all_sexpr(SPACE_EXPRS.as_bytes()).unwrap();
 
     let mut t0 = Instant::now();
     let steps = s.metta_calculus(1000000000000000);
-    println!("elapsed {} steps {} size {}", t0.elapsed().as_millis(), steps, s.btm.val_count());
+    println!(
+        "elapsed {} steps {} size {}",
+        t0.elapsed().as_millis(),
+        steps,
+        s.btm.val_count()
+    );
 
     let mut v = vec![];
     // s.dump_sexpr(expr!(s, "[2] all $"), expr!(s, "_1"), &mut v);
@@ -2180,7 +2574,12 @@ fn sink_hexlife_symbolic() {
 
     let mut t0 = Instant::now();
     let steps = s.metta_calculus(1000000000000000);
-    println!("elapsed {} steps {} size {}", t0.elapsed().as_millis(), steps, s.btm.val_count());
+    println!(
+        "elapsed {} steps {} size {}",
+        t0.elapsed().as_millis(),
+        steps,
+        s.btm.val_count()
+    );
 
     let mut v = vec![];
     // s.dump_sexpr(expr!(s, "[2] all $"), expr!(s, "_1"), &mut v);
@@ -2238,19 +2637,28 @@ fn bench_sink_hexlife_axial() {
 
     let mut numbers = String::new();
     for i in -1000..=1000 {
-        numbers.push_str(format!("(offset {i} ++ {})\n", i+1).as_str());
+        numbers.push_str(format!("(offset {i} ++ {})\n", i + 1).as_str());
         numbers.push_str(format!("(offset {i} == {})\n", i).as_str());
-        numbers.push_str(format!("(offset {i} -- {})\n", i-1).as_str());
+        numbers.push_str(format!("(offset {i} -- {})\n", i - 1).as_str());
     }
     s.add_all_sexpr(numbers.as_bytes()).unwrap();
     s.add_all_sexpr(SPACE_EXPRS.as_bytes()).unwrap();
 
     let mut t0 = Instant::now();
     let steps = s.metta_calculus(1000000000000000);
-    println!("elapsed {} steps {} size {}", t0.elapsed().as_millis(), steps, s.btm.val_count());
+    println!(
+        "elapsed {} steps {} size {}",
+        t0.elapsed().as_millis(),
+        steps,
+        s.btm.val_count()
+    );
 
     let mut v = vec![];
-    s.dump_sexpr(expr!(s, "[3] alive $ $"), expr!(s, "[3] alive _1 _2"), &mut v);
+    s.dump_sexpr(
+        expr!(s, "[3] alive $ $"),
+        expr!(s, "[3] alive _1 _2"),
+        &mut v,
+    );
     // s.dump_all_sexpr(&mut v).unwrap();
     let res = String::from_utf8(v).unwrap();
 
@@ -2288,10 +2696,15 @@ fn sink_wasm_add() {
     let options = ["x", "y"];
     for (k, a) in options.iter().enumerate() {
         for i in 0i32..nargs {
-            let value = (options.len() as i32)*i + (k as i32);
+            let value = (options.len() as i32) * i + (k as i32);
 
             // BOTH: bytestring insert (Arity 3) AND S-expression
-            let mut e = vec![item_byte(Tag::Arity(3)), item_byte(Tag::SymbolSize(2)), a.as_bytes()[0], b's'];
+            let mut e = vec![
+                item_byte(Tag::Arity(3)),
+                item_byte(Tag::SymbolSize(2)),
+                a.as_bytes()[0],
+                b's',
+            ];
             let is = i.to_string();
             e.push(item_byte(Tag::SymbolSize(is.len() as _)));
             e.extend_from_slice(is.as_bytes());
@@ -2307,7 +2720,12 @@ fn sink_wasm_add() {
 
     let mut t0 = Instant::now();
     let steps = s.metta_calculus(1);
-    println!("elapsed {} steps {} size {}", t0.elapsed().as_millis(), steps, s.btm.val_count());
+    println!(
+        "elapsed {} steps {} size {}",
+        t0.elapsed().as_millis(),
+        steps,
+        s.btm.val_count()
+    );
 
     let mut v = vec![];
     // s.dump_sexpr(expr!(s, "[4] cux $ $ $"), expr!(s, "[3] _3 _2 _1"), &mut v);
@@ -2318,8 +2736,6 @@ fn sink_wasm_add() {
     // assert_eq!(res, "(1 x P)\n(2 x P)\n(3 x P)\n(1 y P)\n(2 y P)\n(3 y P)\n(1 x Q)\n")
 }
 
-
-
 fn bench_sink_odd_even_sort(elements: usize) {
     let mut s = Space::new();
     const SPACE_EXPRS: &str = r#"
@@ -2329,23 +2745,43 @@ fn bench_sink_odd_even_sort(elements: usize) {
 (exec repeat (, (A $k $_) (phase $kp $phase) ((phase $phase) $p0 $t0))
              (, (exec ($k $kp) $p0 $t0)))
     "#;
-    let mut arr: Vec<_> = (0..elements).map(|i| { let mut hs = std::hash::DefaultHasher::new(); i.hash(&mut hs); base64::engine::general_purpose::STANDARD_NO_PAD.encode((hs.finish() as u32).to_be_bytes()) }).collect();
-    let mut ARRAY: String = (0..elements).map(|x| format!("(A {x} {})\n", arr[x])).collect();
+    let mut arr: Vec<_> = (0..elements)
+        .map(|i| {
+            let mut hs = std::hash::DefaultHasher::new();
+            i.hash(&mut hs);
+            base64::engine::general_purpose::STANDARD_NO_PAD
+                .encode((hs.finish() as u32).to_be_bytes())
+        })
+        .collect();
+    let mut ARRAY: String = (0..elements)
+        .map(|x| format!("(A {x} {})\n", arr[x]))
+        .collect();
     // println!("array {ARRAY}");
     s.add_all_sexpr(ARRAY.as_bytes()).unwrap();
-    let mut SUCCS: String = (0..elements).map(|x| format!("(succ {x} {})\n", x+1)).collect();
+    let mut SUCCS: String = (0..elements)
+        .map(|x| format!("(succ {x} {})\n", x + 1))
+        .collect();
     s.add_all_sexpr(SUCCS.as_bytes()).unwrap();
-    let mut PARITY: String = (0..elements).map(|x| format!("(parity {x} {})\n", if x % 2 == 0 { "even" } else { "odd" })).collect();
+    let mut PARITY: String = (0..elements)
+        .map(|x| format!("(parity {x} {})\n", if x % 2 == 0 { "even" } else { "odd" }))
+        .collect();
     s.add_all_sexpr(PARITY.as_bytes()).unwrap();
     arr.sort();
     let arr_ptr = &arr;
-    let mut ORDER: String = (0..elements).flat_map(|x| (0..x).map(move |y| format!("(lt {} {})\n", arr_ptr[y], arr_ptr[x]))).collect();
+    let mut ORDER: String = (0..elements)
+        .flat_map(|x| (0..x).map(move |y| format!("(lt {} {})\n", arr_ptr[y], arr_ptr[x])))
+        .collect();
     s.add_all_sexpr(ORDER.as_bytes()).unwrap();
     s.add_all_sexpr(SPACE_EXPRS.as_bytes()).unwrap();
 
     let mut t0 = Instant::now();
     let steps = s.metta_calculus(1000000000000000);
-    println!("elapsed {} steps {} size {}", t0.elapsed().as_millis(), steps, s.btm.val_count());
+    println!(
+        "elapsed {} steps {} size {}",
+        t0.elapsed().as_millis(),
+        steps,
+        s.btm.val_count()
+    );
 
     let mut v = vec![];
     // s.dump_all_sexpr(&mut v).unwrap();
@@ -2353,9 +2789,11 @@ fn bench_sink_odd_even_sort(elements: usize) {
     let res = String::from_utf8(v).unwrap();
 
     // println!("result:\n{res}");
-    assert_eq!(res[..res.len()-1], arr.iter().map(|i| i.to_string()).join("\n"));
+    assert_eq!(
+        res[..res.len() - 1],
+        arr.iter().map(|i| i.to_string()).join("\n")
+    );
 }
-
 
 fn logic_query() {
     let mut s = Space::new();
@@ -2387,7 +2825,12 @@ fn logic_query() {
     "#;
 
     s.add_all_sexpr(SPACE_EXPRS.as_bytes()).unwrap();
-    s.add_sexpr(AXIOM_EXPRS.as_bytes(),expr!(s, "$"), expr!(s, "[2] axiom _1")).unwrap();
+    s.add_sexpr(
+        AXIOM_EXPRS.as_bytes(),
+        expr!(s, "$"),
+        expr!(s, "[2] axiom _1"),
+    )
+    .unwrap();
 
     let steps = s.metta_calculus(1000000000000000);
 
@@ -2399,19 +2842,34 @@ fn bench_logic_query() {
     let mut s = Space::new();
 
     let mut expr_buf = vec![];
-    std::fs::File::open("resources/big.metta").unwrap().read_to_end(&mut expr_buf).unwrap();
+    std::fs::File::open("resources/big.metta")
+        .unwrap()
+        .read_to_end(&mut expr_buf)
+        .unwrap();
     s.add_all_sexpr(&expr_buf[..]).unwrap();
 
     let mut t0 = Instant::now();
-    s.add_all_sexpr(b"(exec 0 (, (axiom $x) (axiom $x)) (, (combined $x)))").unwrap();
+    s.add_all_sexpr(b"(exec 0 (, (axiom $x) (axiom $x)) (, (combined $x)))")
+        .unwrap();
     s.metta_calculus(1);
-    println!("combined elapsed {} ms size {}", t0.elapsed().as_millis(), s.btm.val_count());
+    println!(
+        "combined elapsed {} ms size {}",
+        t0.elapsed().as_millis(),
+        s.btm.val_count()
+    );
 
     let mut t1 = Instant::now();
-    s.add_all_sexpr(b"(exec 0 (, (axiom (= $lhs $rhs)) (axiom (= $rhs $lhs))) (, (reversed $lhs $rhs)))").unwrap();
+    s.add_all_sexpr(
+        b"(exec 0 (, (axiom (= $lhs $rhs)) (axiom (= $rhs $lhs))) (, (reversed $lhs $rhs)))",
+    )
+    .unwrap();
     s.metta_calculus(1);
-    println!("reversed elapsed {} ms size {}", t1.elapsed().as_millis(), s.btm.val_count());
-    
+    println!(
+        "reversed elapsed {} ms size {}",
+        t1.elapsed().as_millis(),
+        s.btm.val_count()
+    );
+
     // yikes, this is much slower than the old bidirectional transition in `server`?
     // combined elapsed 236156 ms size 1677208
     // reversed elapsed 435670 ms size 3348972
@@ -2422,18 +2880,30 @@ fn bench_logic_query_act() {
     let mut s = Space::new();
 
     let mut expr_buf = vec![];
-    std::fs::File::open("resources/big.act").unwrap().read_to_end(&mut expr_buf).unwrap();
+    std::fs::File::open("resources/big.act")
+        .unwrap()
+        .read_to_end(&mut expr_buf)
+        .unwrap();
     std::fs::copy("resources/big.act", format!("{}big.act", ACT_PATH));
 
     let mut t0 = Instant::now();
-    s.add_all_sexpr(b"(exec 0 (I (ACT big (axiom $x)) (ACT big (axiom $x))) (, (combined $x)))").unwrap();
+    s.add_all_sexpr(b"(exec 0 (I (ACT big (axiom $x)) (ACT big (axiom $x))) (, (combined $x)))")
+        .unwrap();
     s.metta_calculus(1);
-    println!("combined elapsed {} ms size {}", t0.elapsed().as_millis(), s.btm.val_count());
+    println!(
+        "combined elapsed {} ms size {}",
+        t0.elapsed().as_millis(),
+        s.btm.val_count()
+    );
 
     let mut t1 = Instant::now();
     s.add_all_sexpr(b"(exec 0 (I (ACT big (axiom (= $lhs $rhs))) (ACT big (axiom (= $rhs $lhs)))) (, (reversed $lhs $rhs)))").unwrap();
     s.metta_calculus(1);
-    println!("reversed elapsed {} ms size {}", t1.elapsed().as_millis(), s.btm.val_count());
+    println!(
+        "reversed elapsed {} ms size {}",
+        t1.elapsed().as_millis(),
+        s.btm.val_count()
+    );
 }
 
 fn bc0() {
@@ -2477,7 +2947,12 @@ fn bc0() {
 
     let mut t0 = Instant::now();
     let steps = s.metta_calculus(50);
-    println!("elapsed {} steps {} size {}", t0.elapsed().as_millis(), steps, s.btm.val_count());
+    println!(
+        "elapsed {} steps {} size {}",
+        t0.elapsed().as_millis(),
+        steps,
+        s.btm.val_count()
+    );
 
     let mut v = vec![];
     s.dump_all_sexpr(&mut v).unwrap();
@@ -2525,7 +3000,12 @@ fn bc1() {
 
     let mut t0 = Instant::now();
     let steps = s.metta_calculus(100);
-    println!("elapsed {} steps {} size {}", t0.elapsed().as_millis(), steps, s.btm.val_count());
+    println!(
+        "elapsed {} steps {} size {}",
+        t0.elapsed().as_millis(),
+        steps,
+        s.btm.val_count()
+    );
 
     let mut v = vec![];
     s.dump_all_sexpr(&mut v).unwrap();
@@ -2546,7 +3026,7 @@ fn bc2() {
     ((step rec2)
       (, (goal (: (@ $f $a $b) $conclusion)))
       (, (goal (: $f (-> $syntha $synthb $conclusion))) (goal (: $a $syntha)) (goal (: $b $synthb)) ))
-    
+
      */
     const SPACE_EXPRS: &str = r#"
     ((step base)
@@ -2602,7 +3082,12 @@ fn bc2() {
 
     let mut t0 = Instant::now();
     let steps = s.metta_calculus(30);
-    println!("elapsed {} steps {} size {}", t0.elapsed().as_millis(), steps, s.btm.val_count());
+    println!(
+        "elapsed {} steps {} size {}",
+        t0.elapsed().as_millis(),
+        steps,
+        s.btm.val_count()
+    );
 
     let mut v = vec![];
     // s.dump_all_sexpr(&mut v).unwrap();
@@ -2654,12 +3139,10 @@ fn bc3() {
     (goal Z (: $proof C))
     "#;
 
-
     // (kb (: a A))
     //     (kb (: ab (-> A B)))
     //
     //     (goal Z (: $proof B))
-
 
     // (kb (: b B))
     //     (kb (: ab_c (-> A (-> B C))))
@@ -2669,7 +3152,6 @@ fn bc3() {
     // (kb (: curry (-> (-> (* $a $b) $c) (-> $a (-> $b $c)))))
     //
     // (goal Z (: $proof (-> A C)))
-
 
     // P1:  (exec $p (, pat) (, (- temp) (+ x)))
     // add subtracts to SUB space, and remove them at the end
@@ -2682,13 +3164,17 @@ fn bc3() {
     s.add_all_sexpr(SPACE_EXPRS.as_bytes()).unwrap();
     s.add_all_sexpr(KB_EXPRS.as_bytes()).unwrap();
 
-
     // let mut t0 = Instant::now();
     // println!("elapsed {} steps {} size {}", t0.elapsed().as_millis(), steps, s.btm.val_count());
 
     let mut t0 = Instant::now();
     let steps = s.metta_calculus(60);
-    println!("elapsed {} steps {} size {}", t0.elapsed().as_millis(), steps, s.btm.val_count());
+    println!(
+        "elapsed {} steps {} size {}",
+        t0.elapsed().as_millis(),
+        steps,
+        s.btm.val_count()
+    );
 
     let mut v = vec![];
     // s.dump_all_sexpr(&mut v).unwrap();
@@ -2696,7 +3182,6 @@ fn bc3() {
     let res = String::from_utf8(v).unwrap();
 
     println!("proof: {res}");
-
 
     // for i in 0..14 {
     //     println!("GEN {i}");
@@ -2715,16 +3200,17 @@ fn bc3() {
 
 fn bench_cm0(to_copy: usize) {
     let mut s = Space::new();
-    
+
     // Follow along https://en.wikipedia.org/wiki/Counter_machine#Program
-    
+
     // non-peano csv version see cm1
     /*
     s.load_csv(INSTRS_CSV.as_bytes(), expr!(s, "$"), expr!(s, "[2] program _1"), b',').unwrap();
     s.load_csv(REGS_CSV.as_bytes(), expr!(s, "[2] $ $"), expr!(s, "[3] state 0 [3] REG _1 _2"), b',').unwrap();
     JZ,2,5\nDEC,2,2INC,3,3\nINC,1,4\nJZ,0,0\nJZ,1,9\nDEC,1,7\nINC,2,8\nJZ,0,5\nH,0,0
      */
-    let SPACE_MACHINE = format!(r#"
+    let SPACE_MACHINE = format!(
+        r#"
     (program Z (JZ 2 (S (S (S (S (S Z))))) ))
     (program (S Z) (DEC 2))
     (program (S (S Z)) (INC 3))
@@ -2767,23 +3253,34 @@ fn bench_cm0(to_copy: usize) {
                ((step $k $ts) $p0 $t0))
             (, (exec ($k $ts) $p0 $t0)
                (exec (clocked (S $ts)) $p1 $t1)))
-    "#, peano(to_copy));
+    "#,
+        peano(to_copy)
+    );
 
     s.add_all_sexpr(SPACE_MACHINE.as_bytes()).unwrap();
 
     let mut t0 = Instant::now();
     let steps = s.metta_calculus(1000000000000000);
-    println!("elapsed {} steps {} size {}", t0.elapsed().as_millis(), steps, s.btm.val_count());
+    println!(
+        "elapsed {} steps {} size {}",
+        t0.elapsed().as_millis(),
+        steps,
+        s.btm.val_count()
+    );
 
     let mut v_ts = vec![];
     s.dump_sexpr(expr!(s, "[3] state $ $"), expr!(s, "_1"), &mut v_ts);
-    let last_ts_tmp = String::from_utf8(v_ts).unwrap(); 
+    let last_ts_tmp = String::from_utf8(v_ts).unwrap();
     let last_ts = last_ts_tmp.split("\n").max_by_key(|x| x.len()).unwrap();
     let mut v = vec![];
     // s.dump_all_sexpr(&mut v).unwrap();
-    s.dump_sexpr(expr!(s, "[3] state $ [3] REG 3 $"), expr!(s, "[2] _1 _2"), &mut v);
+    s.dump_sexpr(
+        expr!(s, "[3] state $ [3] REG 3 $"),
+        expr!(s, "[2] _1 _2"),
+        &mut v,
+    );
     let res = String::from_utf8(v).unwrap();
-    
+
     // println!("{res}");
     assert!(res.contains(format!("({} {})", last_ts, peano(to_copy)).as_str()));
 }
@@ -2864,7 +3361,12 @@ fn lens_aunt() {
 
     let mut t0 = Instant::now();
     let steps = s.metta_calculus(1);
-    println!("elapsed {} steps {} size {}", t0.elapsed().as_millis(), steps, s.btm.val_count());
+    println!(
+        "elapsed {} steps {} size {}",
+        t0.elapsed().as_millis(),
+        steps,
+        s.btm.val_count()
+    );
 
     let mut v = vec![];
     // s.dump_all_sexpr(&mut v).unwrap();
@@ -2893,7 +3395,12 @@ fn lens_composition() {
 
     let mut t0 = Instant::now();
     let steps = s.metta_calculus(1);
-    println!("elapsed {} steps {} size {}", t0.elapsed().as_millis(), steps, s.btm.val_count());
+    println!(
+        "elapsed {} steps {} size {}",
+        t0.elapsed().as_millis(),
+        steps,
+        s.btm.val_count()
+    );
 
     let mut v = vec![];
     s.dump_all_sexpr(&mut v).unwrap();
@@ -2904,7 +3411,7 @@ fn lens_composition() {
 }
 
 fn bench_transitive_no_unify(nnodes: usize, nedges: usize) {
-    use rand::{rngs::StdRng, SeedableRng, Rng};
+    use rand::{Rng, SeedableRng, rngs::StdRng};
     let mut rng = StdRng::from_seed([0; 32]);
     let mut s = Space::new();
 
@@ -2920,19 +3427,28 @@ fn bench_transitive_no_unify(nnodes: usize, nedges: usize) {
     println!("constructed {} nodes {} edges", nnodes, nedges);
 
     let t0 = Instant::now();
-    s.interpret(expr!(s, "[4] exec 0 [3] , [3] edge $ $ [3] edge _2 $ [2] , [3] trans _1 _3"));
+    s.interpret(expr!(
+        s,
+        "[4] exec 0 [3] , [3] edge $ $ [3] edge _2 $ [2] , [3] trans _1 _3"
+    ));
     println!("trans elapsed {} µs", t0.elapsed().as_micros());
 
     let t1 = Instant::now();
-    s.interpret(expr!(s, "[4] exec 0 [4] , [3] edge $ $ [3] edge _2 $ [3] edge _1 _3 [2] , [4] dtrans _1 _2 _3"));
+    s.interpret(expr!(
+        s,
+        "[4] exec 0 [4] , [3] edge $ $ [3] edge _2 $ [3] edge _1 _3 [2] , [4] dtrans _1 _2 _3"
+    ));
     println!("detect trans elapsed {} µs", t1.elapsed().as_micros());
-
 
     let mut v = vec![];
     s.dump_sexpr(expr!(s, "[3] trans $ $"), expr!(s, "[2] _1 _2"), &mut v);
     let ntrans: usize = v.iter().map(|c| if *c == b'\n' { 1 } else { 0 }).sum();
     v.clear();
-    s.dump_sexpr(expr!(s, "[4] dtrans $ $ $"), expr!(s, "[3] _1 _2 _3"), &mut v);
+    s.dump_sexpr(
+        expr!(s, "[4] dtrans $ $ $"),
+        expr!(s, "[3] _1 _2 _3"),
+        &mut v,
+    );
     let ndtrans: usize = v.iter().map(|c| if *c == b'\n' { 1 } else { 0 }).sum();
     println!("trans {} detected trans {}", ntrans, ndtrans);
 
@@ -2943,10 +3459,11 @@ fn bench_transitive_no_unify(nnodes: usize, nedges: usize) {
     // trans 19917429 detected trans 8716
 }
 
-
 fn bench_clique_no_unify(nnodes: usize, nedges: usize, max_clique: usize) {
     fn binom_as_f64(n: u64, k: u64) -> f64 {
-        if k > n { return 0.0; }
+        if k > n {
+            return 0.0;
+        }
         let k = std::cmp::min(k, n - k);
         let mut res = 1.0f64;
         for i in 1..=k {
@@ -2961,8 +3478,12 @@ fn bench_clique_no_unify(nnodes: usize, nedges: usize, max_clique: usize) {
         let m = n * (n - 1) / 2; // total possible edges
         assert!(e <= m, "E must be <= C(n,2)");
         let kk = k * (k - 1) / 2; // number of edges inside a k-clique
-        if kk == 0 { return 1.0; } // k=0 or 1
-        if e < kk { return 0.0; }  // not enough edges to cover a clique
+        if kk == 0 {
+            return 1.0;
+        } // k=0 or 1
+        if e < kk {
+            return 0.0;
+        } // not enough edges to cover a clique
         let mut num = 1.0f64;
         let mut den = 1.0f64;
         for i in 0..kk {
@@ -2977,14 +3498,17 @@ fn bench_clique_no_unify(nnodes: usize, nedges: usize, max_clique: usize) {
     }
 
     fn clique_query(k: usize) -> String {
-        format!("(exec 0 (,{}) (, ({}-clique{})))",
-            (0..k).flat_map(|i| ((i + 1)..k).map(move |j| format!(" (edge $x{} $x{})", i, j))).collect::<String>(),
+        format!(
+            "(exec 0 (,{}) (, ({}-clique{})))",
+            (0..k)
+                .flat_map(|i| ((i + 1)..k).map(move |j| format!(" (edge $x{} $x{})", i, j)))
+                .collect::<String>(),
             k,
             (0..k).map(|i| format!(" $x{}", i)).collect::<String>()
         )
     }
 
-    use rand::{rngs::StdRng, SeedableRng, Rng};
+    use rand::{Rng, SeedableRng, rngs::StdRng};
     let mut rng = StdRng::from_seed([0; 32]);
     let mut s = Space::new();
 
@@ -2994,22 +3518,36 @@ fn bench_clique_no_unify(nnodes: usize, nedges: usize, max_clique: usize) {
     while edges.len() < nedges {
         let i = rng.random_range(0..nnodes);
         let j = rng.random_range(0..nnodes);
-        if i == j { continue }
-        if i < j { edges.insert(format!("(edge {i} {j})\n")); }
-        else { edges.insert(format!("(edge {j} {i})\n")); }
+        if i == j {
+            continue;
+        }
+        if i < j {
+            edges.insert(format!("(edge {i} {j})\n"));
+        } else {
+            edges.insert(format!("(edge {j} {i})\n"));
+        }
     }
 
-    s.add_all_sexpr(edges.into_iter().collect::<String>().as_bytes()).unwrap();
+    s.add_all_sexpr(edges.into_iter().collect::<String>().as_bytes())
+        .unwrap();
     println!("constructed {} nodes {} edges", nnodes, nedges);
 
-    for k in 3..(max_clique+1) {
+    for k in 3..(max_clique + 1) {
         let query = clique_query(k);
         println!("executing query {}", query);
         let t0 = Instant::now();
         s.add_sexpr(query.as_bytes(), expr!(s, "$"), expr!(s, "_1"));
         s.metta_calculus(1);
-        let nkcliques: usize = s.btm.read_zipper_at_path([item_byte(Tag::Arity((k+1) as _))]).val_count();
-        println!("found {} {k}-cliques (expected {}) in {} µs", nkcliques, expected_num_kclique_gne(nnodes as _, nedges as _, k as _).round(), t0.elapsed().as_micros());
+        let nkcliques: usize = s
+            .btm
+            .read_zipper_at_path([item_byte(Tag::Arity((k + 1) as _))])
+            .val_count();
+        println!(
+            "found {} {k}-cliques (expected {}) in {} µs",
+            nkcliques,
+            expected_num_kclique_gne(nnodes as _, nedges as _, k as _).round(),
+            t0.elapsed().as_micros()
+        );
     }
     // constructed 200 nodes 3600 edges
     // executing query (exec 0 (, (edge $x0 $x1) (edge $x0 $x2) (edge $x1 $x2)) (, (3-clique $x0 $x1 $x2)))
@@ -3023,29 +3561,38 @@ fn bench_clique_no_unify(nnodes: usize, nedges: usize, max_clique: usize) {
 }
 
 fn bench_finite_domain(terms: usize) {
-    use rand::{rngs::StdRng, SeedableRng, Rng};
+    use rand::{Rng, SeedableRng, rngs::StdRng};
     let mut rng = StdRng::from_seed([0; 32]);
     const DS: usize = 64;
-    const SYM: [&'static str; 64] = ["0","1","2","3","4","5","6","7","8","9","?","@","A","B","C","D","E","F","G","H","I","J","K","L","M","N","O","P","Q","R","S","T","U","V","W","X","Y","Z","a","b","c","d","e","f","g","h","i","j","k","l","m","n","o","p","q","r","s","t","u","v","w","x","y","z"];
+    const SYM: [&'static str; 64] = [
+        "0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "?", "@", "A", "B", "C", "D", "E", "F",
+        "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R", "S", "T", "U", "V", "W", "X",
+        "Y", "Z", "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p",
+        "q", "r", "s", "t", "u", "v", "w", "x", "y", "z",
+    ];
     // const SYM: [&'static str; 64] = ["À", "Á", "Â", "Ã", "Ä", "Å", "Æ", "Ç", "È", "É", "Ê", "Ë", "Ì", "Í", "Î", "Ï", "Ð", "Ñ", "Ò", "Ó", "Ô", "Õ", "Ö", "×", "Ø", "Ù", "Ú", "Û", "Ü", "Ý", "Þ", "ß", "à", "á", "â", "ã", "ä", "å", "æ", "ç", "è", "é", "ê", "ë", "ì", "í", "î", "ï", "ð", "ñ", "ò", "ó", "ô", "õ", "ö", "÷", "ø", "ù", "ú", "û", "ü", "ý", "þ", "ÿ"];
     // const SYM: [&'static str; 64] = ["䷁","䷗","䷆","䷒","䷎","䷣","䷭","䷊","䷏","䷲","䷧","䷵","䷽","䷶","䷟","䷡","䷇","䷂","䷜","䷻","䷦","䷾","䷯","䷄","䷬","䷐","䷮","䷹","䷞","䷰","䷛","䷪","䷖","䷚","䷃","䷨","䷳","䷕","䷑","䷙","䷢","䷔","䷿","䷥","䷷","䷝","䷱","䷍","䷓","䷩","䷺","䷼","䷴","䷤","䷸","䷈","䷋","䷘","䷅","䷉","䷠","䷌","䷫","䷀"];
 
-    fn uop<F : Fn(usize) -> usize>(sym: &str, f: F) -> String {
+    fn uop<F: Fn(usize) -> usize>(sym: &str, f: F) -> String {
         let mut s = String::new();
         for x in 0..DS {
             let z = f(x);
-            if z == usize::MAX { continue }
+            if z == usize::MAX {
+                continue;
+            }
             s.push_str(format!("({} {} = {})\n", sym, SYM[x], SYM[z]).as_str());
         }
         s
     }
 
-    fn bop<F : Fn(usize, usize) -> usize>(sym: &str, f: F) -> String {
+    fn bop<F: Fn(usize, usize) -> usize>(sym: &str, f: F) -> String {
         let mut s = String::new();
         for x in 0..DS {
             for y in 0..DS {
                 let z = f(x, y);
-                if z == usize::MAX { continue }
+                if z == usize::MAX {
+                    continue;
+                }
                 s.push_str(format!("({} {} {} = {})\n", SYM[x], sym, SYM[y], SYM[z]).as_str());
             }
         }
@@ -3092,7 +3639,10 @@ fn bench_finite_domain(terms: usize) {
     let res = String::from_utf8(v).unwrap();
 
     println!("{}", s.btm.val_count());
-    println!("{res} ({terms} inputs) in {} µs", t1.duration_since(t0).as_micros());
+    println!(
+        "{res} ({terms} inputs) in {} µs",
+        t1.duration_since(t0).as_micros()
+    );
     // (badbad)
     // (10_000 inputs) in 85833 µs
 }
@@ -3127,7 +3677,9 @@ fn json_upaths_smoke() {
     s.dump_all_sexpr(&mut v).unwrap();
     let res = String::from_utf8(v).unwrap();
     println!("res {res}");
-    assert_eq!(res, r#"(age 27)
+    assert_eq!(
+        res,
+        r#"(age 27)
 (spouse null)
 (address (city New York))
 (address (state NY))
@@ -3143,12 +3695,19 @@ fn json_upaths_smoke() {
 (phone_numbers (0 (number 212 555-1234)))
 (phone_numbers (1 (type office)))
 (phone_numbers (1 (number 646 555-4567)))
-"#);
+"#
+    );
 }
 
-fn json_upaths<IPath: AsRef<std::path::Path>, OPath : AsRef<std::path::Path>>(json_path: IPath, upaths_path: OPath) {
+fn json_upaths<IPath: AsRef<std::path::Path>, OPath: AsRef<std::path::Path>>(
+    json_path: IPath,
+    upaths_path: OPath,
+) {
     println!("mmapping JSON file {:?}", json_path.as_ref().as_os_str());
-    println!("writing out unordered .paths file {:?}", upaths_path.as_ref().as_os_str());
+    println!(
+        "writing out unordered .paths file {:?}",
+        upaths_path.as_ref().as_os_str()
+    );
     let json_file = std::fs::File::open(json_path).unwrap();
     let json_mmap = unsafe { memmap2::Mmap::map(&json_file).unwrap() };
     let upaths_file = std::fs::File::create_new(upaths_path).unwrap();
@@ -3171,9 +3730,15 @@ fn json_upaths<IPath: AsRef<std::path::Path>, OPath : AsRef<std::path::Path>>(js
 }
 
 #[cfg(all(feature = "nightly"))]
-fn jsonl_upaths<IPath: AsRef<std::path::Path>, OPath : AsRef<std::path::Path>>(jsonl_path: IPath, upaths_path: OPath) {
+fn jsonl_upaths<IPath: AsRef<std::path::Path>, OPath: AsRef<std::path::Path>>(
+    jsonl_path: IPath,
+    upaths_path: OPath,
+) {
     println!("mmapping JSONL file {:?}", jsonl_path.as_ref().as_os_str());
-    println!("writing out unordered .paths file {:?}", upaths_path.as_ref().as_os_str());
+    println!(
+        "writing out unordered .paths file {:?}",
+        upaths_path.as_ref().as_os_str()
+    );
     let json_file = std::fs::File::open(jsonl_path).unwrap();
     let json_mmap = unsafe { memmap2::Mmap::map(&json_file).unwrap() };
     let upaths_file = std::fs::File::create_new(upaths_path).unwrap();
@@ -3181,8 +3746,13 @@ fn jsonl_upaths<IPath: AsRef<std::path::Path>, OPath : AsRef<std::path::Path>>(j
 
     let mut s = Space::new();
     let t0 = Instant::now();
-    let (lines, written) = s.jsonl_to_paths(&*json_mmap, &mut upaths_bufwriter).unwrap();
-    println!("written {written} ({lines} lines) in {} ms", t0.elapsed().as_millis());
+    let (lines, written) = s
+        .jsonl_to_paths(&*json_mmap, &mut upaths_bufwriter)
+        .unwrap();
+    println!(
+        "written {written} ({lines} lines) in {} ms",
+        t0.elapsed().as_millis()
+    );
     // (zephy)
 }
 
@@ -3195,7 +3765,12 @@ fn pddl_ts<IPath: AsRef<std::path::Path>>(ts_path: IPath) {
         let name = file_name.to_str().unwrap();
         let metta_file = std::fs::File::open(de.path()).unwrap();
         let metta_mmap = unsafe { memmap2::Mmap::map(&metta_file).unwrap() };
-        s.add_sexpr(&*metta_mmap, expr!(s, "$"), expr!(s, format!("[3] U {} _1", &name[..name.len()-6]).as_str())).unwrap();
+        s.add_sexpr(
+            &*metta_mmap,
+            expr!(s, "$"),
+            expr!(s, format!("[3] U {} _1", &name[..name.len() - 6]).as_str()),
+        )
+        .unwrap();
     }
 
     let SPACE = r#"
@@ -3229,13 +3804,17 @@ fn pddl_ts<IPath: AsRef<std::path::Path>>(ts_path: IPath) {
     let mut v = vec![];
     // s.dump_all_sexpr(&mut v).unwrap();
     // s.dump_sexpr(expr!(s, "[3] U p-3-0 $"), expr!(s, "_1"), &mut v);
-    s.dump_sexpr(expr!(s, "[3] [2] C $ p-3-0 $"), expr!(s, "[2] _1 _2"), &mut v);
+    s.dump_sexpr(
+        expr!(s, "[3] [2] C $ p-3-0 $"),
+        expr!(s, "[2] _1 _2"),
+        &mut v,
+    );
     let res = String::from_utf8(v).unwrap();
 
     println!("result: {res}");
     /*
-       WIP
-     */
+      WIP
+    */
 }
 
 fn stv_roman() {
@@ -3253,7 +3832,12 @@ fn stv_roman() {
     // let mut math_expr_buf = vec![];
     // std::fs::File::open("/home/adam/Downloads/math_relations.metta").unwrap().read_to_end(&mut math_expr_buf).unwrap();
     // s.add_sexpr(&math_expr_buf[..], expr!(s, "$"), expr!(s, "_1")).unwrap();
-    s.add_sexpr("(fun (mul (0.5 0.5) 0.2))".as_bytes(), expr!(s, "$"), expr!(s, "_1")).unwrap();
+    s.add_sexpr(
+        "(fun (mul (0.5 0.5) 0.2))".as_bytes(),
+        expr!(s, "$"),
+        expr!(s, "_1"),
+    )
+    .unwrap();
 
     s.metta_calculus(1);
 
@@ -3337,7 +3921,12 @@ fn exponential(max_steps: usize) {
 
     let mut t0 = Instant::now();
     let steps = s.metta_calculus(max_steps);
-    println!("elapsed {} steps {} size {}", t0.elapsed().as_millis(), steps, s.btm.val_count());
+    println!(
+        "elapsed {} steps {} size {}",
+        t0.elapsed().as_millis(),
+        steps,
+        s.btm.val_count()
+    );
 }
 
 fn exponential_fringe(steps: usize) {
@@ -3363,14 +3952,21 @@ fn exponential_fringe(steps: usize) {
          (exec (metta $sk) $p1 $t1) ))
 "#;
 
-    let mut SUCCS: String = (0..steps).map(|x| format!("(succ {x} {})\n", x+1)).collect();
+    let mut SUCCS: String = (0..steps)
+        .map(|x| format!("(succ {x} {})\n", x + 1))
+        .collect();
 
     s.add_all_sexpr(SPACE_EXPRS.as_bytes()).unwrap();
     s.add_all_sexpr(SUCCS.as_bytes()).unwrap();
 
     let mut t0 = Instant::now();
     let steps = s.metta_calculus(1000000000000000);
-    println!("elapsed {} steps {} size {}", t0.elapsed().as_millis(), steps, s.btm.val_count());
+    println!(
+        "elapsed {} steps {} size {}",
+        t0.elapsed().as_millis(),
+        steps,
+        s.btm.val_count()
+    );
 
     // let mut v = vec![];
     // s.dump_all_sexpr(&mut v).unwrap();
@@ -3402,14 +3998,21 @@ fn linear_fringe_alternating(steps: usize) {
          (exec (metta $sk) $p1 $t1) ))
 "#;
 
-    let mut SUCCS: String = (0..steps).map(|x| format!("(succ {x} {})\n", x+1)).collect();
+    let mut SUCCS: String = (0..steps)
+        .map(|x| format!("(succ {x} {})\n", x + 1))
+        .collect();
 
     s.add_all_sexpr(SPACE_EXPRS.as_bytes()).unwrap();
     s.add_all_sexpr(SUCCS.as_bytes()).unwrap();
 
     let mut t0 = Instant::now();
     let steps = s.metta_calculus(1000000000000000);
-    println!("elapsed {} steps {} size {}", t0.elapsed().as_millis(), steps, s.btm.val_count());
+    println!(
+        "elapsed {} steps {} size {}",
+        t0.elapsed().as_millis(),
+        steps,
+        s.btm.val_count()
+    );
 
     // let mut v = vec![];
     // s.dump_all_sexpr(&mut v).unwrap();
@@ -3417,7 +4020,6 @@ fn linear_fringe_alternating(steps: usize) {
     //
     // println!("result: {res}");
 }
-
 
 fn linear_alternating(steps: usize) {
     let mut s = Space::new();
@@ -3442,14 +4044,21 @@ fn linear_alternating(steps: usize) {
          (exec (metta $sk) $p1 $t1) ))
 "#;
 
-    let mut SUCCS: String = (0..steps).map(|x| format!("(succ {x} {})\n", x+1)).collect();
+    let mut SUCCS: String = (0..steps)
+        .map(|x| format!("(succ {x} {})\n", x + 1))
+        .collect();
 
     s.add_all_sexpr(SPACE_EXPRS.as_bytes()).unwrap();
     s.add_all_sexpr(SUCCS.as_bytes()).unwrap();
 
     let mut t0 = Instant::now();
     let steps = s.metta_calculus(1000000000000000);
-    println!("elapsed {} steps {} size {}", t0.elapsed().as_millis(), steps, s.btm.val_count());
+    println!(
+        "elapsed {} steps {} size {}",
+        t0.elapsed().as_millis(),
+        steps,
+        s.btm.val_count()
+    );
 
     // let mut v = vec![];
     // s.dump_all_sexpr(&mut v).unwrap();
@@ -3461,7 +4070,7 @@ fn linear_alternating(steps: usize) {
 // Query-based approach using expr! macro with full terms displayed
 // fn add_mm2_demo0_query_diagnostics(s: &mut Space, ticks: usize) {
 //     println!("\n=== QUERY-BASED DIAGNOSTICS (tick {}) ===", ticks);
-    
+
 //     // Query for (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) proof
 //     let mut p_proof = Vec::new();
 //     s.dump_sexpr(
@@ -3469,7 +4078,7 @@ fn linear_alternating(steps: usize) {
 //         expr!(s, "[2] ev [3] : [3] ⟨=⟩ [3] ⟨+⟩ ⟨t⟩ ⟨0⟩ ⟨t⟩ ⟨|-⟩"),
 //         &mut p_proof
 //     );
-    
+
 //     // Query for (⟨=⟩ ⟨t⟩ ⟨t⟩) proof (final goal)
 //     let mut q_proof = Vec::new();
 //     s.dump_sexpr(
@@ -3477,7 +4086,7 @@ fn linear_alternating(steps: usize) {
 //         expr!(s, "[2] ev [3] : [3] ⟨=⟩ ⟨t⟩ ⟨t⟩ ⟨|-⟩"),
 //         &mut q_proof
 //     );
-    
+
 //     // Query for (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨=⟩ ⟨t⟩ ⟨t⟩)) proof
 //     let mut ptoq_proof = Vec::new();
 //     s.dump_sexpr(
@@ -3485,7 +4094,7 @@ fn linear_alternating(steps: usize) {
 //         expr!(s, "[2] ev [3] : [3] ⟨->⟩ [3] ⟨=⟩ [3] ⟨+⟩ ⟨t⟩ ⟨0⟩ ⟨t⟩ [3] ⟨=⟩ ⟨t⟩ ⟨t⟩ ⟨|-⟩"),
 //         &mut ptoq_proof
 //     );
-    
+
 //     // Query for (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨=⟩ ⟨t⟩ ⟨t⟩))) proof
 //     let mut ptoptoq_proof = Vec::new();
 //     s.dump_sexpr(
@@ -3493,7 +4102,7 @@ fn linear_alternating(steps: usize) {
 //         expr!(s, "[2] ev [3] : [3] ⟨->⟩ [3] ⟨=⟩ [3] ⟨+⟩ ⟨t⟩ ⟨0⟩ ⟨t⟩ [3] ⟨->⟩ [3] ⟨=⟩ [3] ⟨+⟩ ⟨t⟩ ⟨0⟩ ⟨t⟩ [3] ⟨=⟩ ⟨t⟩ ⟨t⟩ ⟨|-⟩"),
 //         &mut ptoptoq_proof
 //     );
-    
+
 //     // Query for wffs
 //     let mut p_wff = Vec::new();
 //     s.dump_sexpr(
@@ -3501,14 +4110,14 @@ fn linear_alternating(steps: usize) {
 //         expr!(s, "[2] ev [3] : [3] ⟨=⟩ [3] ⟨+⟩ ⟨t⟩ ⟨0⟩ ⟨t⟩ ⟨wff⟩"),
 //         &mut p_wff
 //     );
-    
+
 //     let mut q_wff = Vec::new();
 //     s.dump_sexpr(
 //         expr!(s, "[2] ev [3] : [3] ⟨=⟩ ⟨t⟩ ⟨t⟩ ⟨wff⟩"),
 //         expr!(s, "[2] ev [3] : [3] ⟨=⟩ ⟨t⟩ ⟨t⟩ ⟨wff⟩"),
 //         &mut q_wff
 //     );
-    
+
 //     println!("QUERY RESULTS:");
 //     println!("  (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) wff: {}", if !p_wff.is_empty() { "✓" } else { "❌" });
 //     println!("  (⟨=⟩ ⟨t⟩ ⟨t⟩) wff: {}", if !q_wff.is_empty() { "✓" } else { "❌" });
@@ -3516,7 +4125,7 @@ fn linear_alternating(steps: usize) {
 //     println!("  ⊢ (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨=⟩ ⟨t⟩ ⟨t⟩))): {}", if !ptoptoq_proof.is_empty() { "✓" } else { "❌" });
 //     println!("  ⊢ (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨=⟩ ⟨t⟩ ⟨t⟩)): {}", if !ptoq_proof.is_empty() { "✓" } else { "❌" });
 //     println!("  ⊢ (⟨=⟩ ⟨t⟩ ⟨t⟩) [FINAL]: {}", if !q_proof.is_empty() { "✅✅✅" } else { "❌" });
-    
+
 //     if !q_proof.is_empty() {
 //         println!("\n✅ PROOF COMPLETE: {}", String::from_utf8_lossy(&q_proof));
 //     }
@@ -3524,24 +4133,24 @@ fn linear_alternating(steps: usize) {
 
 // fn add_mm2_demo0_diagnostics(s: &mut Space, ticks: usize) {
 //     println!("\n=== PROOF CONSTRUCTION DIAGNOSTICS (tick {}) ===", ticks);
-    
+
 //     // Define what we're looking for (string matching approach)
 //     let want_ev_term_t = "(ev (: ⟨t⟩ ⟨term⟩))";
 //     let want_ev_term_0 = "(ev (: ⟨0⟩ ⟨term⟩))";
 //     let want_ev_term_tplus0 = "(ev (: (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨term⟩))";
-    
+
 //     // P := (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩)
 //     let want_ev_wff_p = "(ev (: (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) ⟨wff⟩))";
 //     let want_ev_proof_p = "(ev (: (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) ⟨|-⟩))";
-    
+
 //     // Q := (⟨=⟩ ⟨t⟩ ⟨t⟩)
 //     let want_ev_wff_q = "(ev (: (⟨=⟩ ⟨t⟩ ⟨t⟩) ⟨wff⟩))";
 //     let want_final_evidence = "(ev (: (⟨=⟩ ⟨t⟩ ⟨t⟩) ⟨|-⟩))";
-    
+
 //     // P -> Q
 //     let want_ev_wff_ptoq = "(ev (: (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨=⟩ ⟨t⟩ ⟨t⟩)) ⟨wff⟩))";
 //     let want_ev_proof_ptoq = "(ev (: (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨=⟩ ⟨t⟩ ⟨t⟩)) ⟨|-⟩))";
-    
+
 //     // P -> (P -> Q)
 //     let want_ev_wff_ptoptoq = "(ev (: (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨=⟩ ⟨t⟩ ⟨t⟩))) ⟨wff⟩))";
 //     let want_ev_proof_ptoptoq = "(ev (: (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨=⟩ ⟨t⟩ ⟨t⟩))) ⟨|-⟩))";
@@ -3550,31 +4159,31 @@ fn linear_alternating(steps: usize) {
 //     let mut buf = Vec::new();
 //     s.dump_all_sexpr(&mut buf).unwrap();
 //     let dump = String::from_utf8_lossy(&buf);
-    
+
 //     // Helper to check if a line exists
 //     let line_has = |needle: &str| dump.lines().any(|l| l.trim_start().starts_with(needle));
-    
+
 //     // Check what we have (string matching)
 //     println!("\n📊 ESSENTIAL INGREDIENTS STATUS:");
 //     println!("────────────────────────────────");
-    
+
 //     println!("TERMS:");
 //     println!("  ⟨t⟩ : ⟨term⟩ .................. {}", if line_has(want_ev_term_t) { "✓" } else { "❌" });
 //     println!("  ⟨0⟩ : ⟨term⟩ .................. {}", if line_has(want_ev_term_0) { "✓" } else { "❌" });
 //     println!("  (⟨+⟩ ⟨t⟩ ⟨0⟩) : ⟨term⟩ ......... {}", if line_has(want_ev_term_tplus0) { "✓" } else { "❌" });
-    
+
 //     println!("\nWFFs:");
 //     println!("  P: (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) : ⟨wff⟩ . {}", if line_has(want_ev_wff_p) { "✓" } else { "❌" });
 //     println!("  Q: (⟨=⟩ ⟨t⟩ ⟨t⟩) : ⟨wff⟩ .......... {}", if line_has(want_ev_wff_q) { "✓" } else { "❌" });
 //     println!("  P→Q : ⟨wff⟩ ..................... {}", if line_has(want_ev_wff_ptoq) { "✓" } else { "❌" });
 //     println!("  P→(P→Q) : ⟨wff⟩ ................ {}", if line_has(want_ev_wff_ptoptoq) { "✓" } else { "❌" });
-    
+
 //     println!("\nPROOFS (⟨|-⟩):");
 //     println!("  ⊢ P (from a2) .................. {}", if line_has(want_ev_proof_p) { "✓" } else { "❌" });
 //     println!("  ⊢ P→(P→Q) (from a1) ............ {}", if line_has(want_ev_proof_ptoptoq) { "✓" } else { "❌" });
 //     println!("  ⊢ P→Q (MP₁) .................... {}", if line_has(want_ev_proof_ptoq) { "✓" } else { "❌" });
 //     println!("  ⊢ Q [FINAL GOAL] ............... {}", if line_has(want_final_evidence) { "✅✅✅" } else { "❌" });
-    
+
 //     // Also check for goals that are pending
 //     println!("\n🎯 ACTIVE GOALS:");
 //     for line in dump.lines() {
@@ -3582,16 +4191,16 @@ fn linear_alternating(steps: usize) {
 //             println!("  {}", line.trim());
 //         }
 //     }
-    
+
 //     if line_has(want_final_evidence) {
 //         println!("\n🎊 SUCCESS! Proof of t=t completed!");
 //     }
 // }
 fn add_mm2_demo0_query_diagnostics(s: &mut Space, ticks: usize, with_proof: Option<bool>) -> bool {
     let with_proof = with_proof.unwrap_or(false);
-    
+
     println!("\n=== QUERY-BASED DIAGNOSTICS (tick {}) ===", ticks);
-    
+
     // Query for (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) proof
     let mut p_proof = Vec::new();
     s.dump_sexpr(
@@ -3601,9 +4210,9 @@ fn add_mm2_demo0_query_diagnostics(s: &mut Space, ticks: usize, with_proof: Opti
         } else {
             expr!(s, "[2] ev [3] : [3] ⟨=⟩ [3] ⟨+⟩ ⟨t⟩ ⟨0⟩ ⟨t⟩ ⟨|-⟩")
         },
-        &mut p_proof
+        &mut p_proof,
     );
-    
+
     // Query for (⟨=⟩ ⟨t⟩ ⟨t⟩) proof (final goal)
     let mut q_proof = Vec::new();
     s.dump_sexpr(
@@ -3613,21 +4222,30 @@ fn add_mm2_demo0_query_diagnostics(s: &mut Space, ticks: usize, with_proof: Opti
         } else {
             expr!(s, "[2] ev [3] : [3] ⟨=⟩ ⟨t⟩ ⟨t⟩ ⟨|-⟩")
         },
-        &mut q_proof
+        &mut q_proof,
     );
-    
+
     // Query for (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨=⟩ ⟨t⟩ ⟨t⟩)) proof
     let mut ptoq_proof = Vec::new();
     s.dump_sexpr(
-        expr!(s, "[3] ev [3] : [3] ⟨->⟩ [3] ⟨=⟩ [3] ⟨+⟩ ⟨t⟩ ⟨0⟩ ⟨t⟩ [3] ⟨=⟩ ⟨t⟩ ⟨t⟩ ⟨|-⟩ $"),
+        expr!(
+            s,
+            "[3] ev [3] : [3] ⟨->⟩ [3] ⟨=⟩ [3] ⟨+⟩ ⟨t⟩ ⟨0⟩ ⟨t⟩ [3] ⟨=⟩ ⟨t⟩ ⟨t⟩ ⟨|-⟩ $"
+        ),
         if with_proof {
-            expr!(s, "[3] ev [3] : [3] ⟨->⟩ [3] ⟨=⟩ [3] ⟨+⟩ ⟨t⟩ ⟨0⟩ ⟨t⟩ [3] ⟨=⟩ ⟨t⟩ ⟨t⟩ ⟨|-⟩ _1")
+            expr!(
+                s,
+                "[3] ev [3] : [3] ⟨->⟩ [3] ⟨=⟩ [3] ⟨+⟩ ⟨t⟩ ⟨0⟩ ⟨t⟩ [3] ⟨=⟩ ⟨t⟩ ⟨t⟩ ⟨|-⟩ _1"
+            )
         } else {
-            expr!(s, "[2] ev [3] : [3] ⟨->⟩ [3] ⟨=⟩ [3] ⟨+⟩ ⟨t⟩ ⟨0⟩ ⟨t⟩ [3] ⟨=⟩ ⟨t⟩ ⟨t⟩ ⟨|-⟩")
+            expr!(
+                s,
+                "[2] ev [3] : [3] ⟨->⟩ [3] ⟨=⟩ [3] ⟨+⟩ ⟨t⟩ ⟨0⟩ ⟨t⟩ [3] ⟨=⟩ ⟨t⟩ ⟨t⟩ ⟨|-⟩"
+            )
         },
-        &mut ptoq_proof
+        &mut ptoq_proof,
     );
-    
+
     // Query for (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨=⟩ ⟨t⟩ ⟨t⟩))) proof
     let mut ptoptoq_proof = Vec::new();
     s.dump_sexpr(
@@ -3639,7 +4257,7 @@ fn add_mm2_demo0_query_diagnostics(s: &mut Space, ticks: usize, with_proof: Opti
         },
         &mut ptoptoq_proof
     );
-    
+
     // Query for wffs
     let mut p_wff = Vec::new();
     s.dump_sexpr(
@@ -3649,9 +4267,9 @@ fn add_mm2_demo0_query_diagnostics(s: &mut Space, ticks: usize, with_proof: Opti
         } else {
             expr!(s, "[2] ev [3] : [3] ⟨=⟩ [3] ⟨+⟩ ⟨t⟩ ⟨0⟩ ⟨t⟩ ⟨wff⟩")
         },
-        &mut p_wff
+        &mut p_wff,
     );
-    
+
     let mut q_wff = Vec::new();
     s.dump_sexpr(
         expr!(s, "[3] ev [3] : [3] ⟨=⟩ ⟨t⟩ ⟨t⟩ ⟨wff⟩ $"),
@@ -3660,81 +4278,224 @@ fn add_mm2_demo0_query_diagnostics(s: &mut Space, ticks: usize, with_proof: Opti
         } else {
             expr!(s, "[2] ev [3] : [3] ⟨=⟩ ⟨t⟩ ⟨t⟩ ⟨wff⟩")
         },
-        &mut q_wff
+        &mut q_wff,
     );
 
     let proof_complete = !q_proof.is_empty();
-    
+
     println!("QUERY RESULTS:");
-    println!("  (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) wff: {}", if !p_wff.is_empty() { "✓" } else { "❌" });
-    println!("  (⟨=⟩ ⟨t⟩ ⟨t⟩) wff: {}", if !q_wff.is_empty() { "✓" } else { "❌" });
-    println!("  ⊢ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩): {}", if !p_proof.is_empty() { "✓" } else { "❌" });
-    println!("  ⊢ (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨=⟩ ⟨t⟩ ⟨t⟩))): {}", if !ptoptoq_proof.is_empty() { "✓" } else { "❌" });
-    println!("  ⊢ (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨=⟩ ⟨t⟩ ⟨t⟩)): {}", if !ptoq_proof.is_empty() { "✓" } else { "❌" });
-    println!("  ⊢ (⟨=⟩ ⟨t⟩ ⟨t⟩) [FINAL]: {}", if proof_complete { "✅✅✅" } else { "❌" });
-    
+    println!(
+        "  (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) wff: {}",
+        if !p_wff.is_empty() { "✓" } else { "❌" }
+    );
+    println!(
+        "  (⟨=⟩ ⟨t⟩ ⟨t⟩) wff: {}",
+        if !q_wff.is_empty() { "✓" } else { "❌" }
+    );
+    println!(
+        "  ⊢ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩): {}",
+        if !p_proof.is_empty() { "✓" } else { "❌" }
+    );
+    println!(
+        "  ⊢ (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨=⟩ ⟨t⟩ ⟨t⟩))): {}",
+        if !ptoptoq_proof.is_empty() {
+            "✓"
+        } else {
+            "❌"
+        }
+    );
+    println!(
+        "  ⊢ (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨=⟩ ⟨t⟩ ⟨t⟩)): {}",
+        if !ptoq_proof.is_empty() { "✓" } else { "❌" }
+    );
+    println!(
+        "  ⊢ (⟨=⟩ ⟨t⟩ ⟨t⟩) [FINAL]: {}",
+        if proof_complete { "✅✅✅" } else { "❌" }
+    );
+
     if proof_complete {
         println!("\n✅ PROOF COMPLETE: {}", String::from_utf8_lossy(&q_proof));
     }
-    
+
     proof_complete
 }
 
 fn add_mm2_demo0_diagnostics(s: &mut Space, ticks: usize, with_proof: Option<bool>) {
     let with_proof = with_proof.unwrap_or(false);
-    
+
     println!("\n=== PROOF CONSTRUCTION DIAGNOSTICS (tick {}) ===", ticks);
-    
+
     // Define what we're looking for with proofs
-    let want_ev_term_t = if with_proof { "(ev (: ⟨t⟩ ⟨term⟩) " } else { "(ev (: ⟨t⟩ ⟨term⟩))" };
-    let want_ev_term_0 = if with_proof { "(ev (: ⟨0⟩ ⟨term⟩) " } else { "(ev (: ⟨0⟩ ⟨term⟩))" };
-    let want_ev_term_tplus0 = if with_proof { "(ev (: (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨term⟩) " } else { "(ev (: (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨term⟩))" };
-    
-    let want_ev_wff_p = if with_proof { "(ev (: (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) ⟨wff⟩) " } else { "(ev (: (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) ⟨wff⟩))" };
-    let want_ev_proof_p = if with_proof { "(ev (: (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) ⟨|-⟩) " } else { "(ev (: (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) ⟨|-⟩))" };
-    
-    let want_ev_wff_q = if with_proof { "(ev (: (⟨=⟩ ⟨t⟩ ⟨t⟩) ⟨wff⟩) " } else { "(ev (: (⟨=⟩ ⟨t⟩ ⟨t⟩) ⟨wff⟩))" };
-    let want_final_evidence = if with_proof { "(ev (: (⟨=⟩ ⟨t⟩ ⟨t⟩) ⟨|-⟩) " } else { "(ev (: (⟨=⟩ ⟨t⟩ ⟨t⟩) ⟨|-⟩))" };
-    
-    let want_ev_wff_ptoq = if with_proof { "(ev (: (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨=⟩ ⟨t⟩ ⟨t⟩)) ⟨wff⟩) " } else { "(ev (: (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨=⟩ ⟨t⟩ ⟨t⟩)) ⟨wff⟩))" };
-    let want_ev_proof_ptoq = if with_proof { "(ev (: (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨=⟩ ⟨t⟩ ⟨t⟩)) ⟨|-⟩) " } else { "(ev (: (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨=⟩ ⟨t⟩ ⟨t⟩)) ⟨|-⟩))" };
-    
-    let want_ev_wff_ptoptoq = if with_proof { "(ev (: (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨=⟩ ⟨t⟩ ⟨t⟩))) ⟨wff⟩) " } else { "(ev (: (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨=⟩ ⟨t⟩ ⟨t⟩))) ⟨wff⟩))" };
-    let want_ev_proof_ptoptoq = if with_proof { "(ev (: (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨=⟩ ⟨t⟩ ⟨t⟩))) ⟨|-⟩) " } else { "(ev (: (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨=⟩ ⟨t⟩ ⟨t⟩))) ⟨|-⟩))" };
+    let want_ev_term_t = if with_proof {
+        "(ev (: ⟨t⟩ ⟨term⟩) "
+    } else {
+        "(ev (: ⟨t⟩ ⟨term⟩))"
+    };
+    let want_ev_term_0 = if with_proof {
+        "(ev (: ⟨0⟩ ⟨term⟩) "
+    } else {
+        "(ev (: ⟨0⟩ ⟨term⟩))"
+    };
+    let want_ev_term_tplus0 = if with_proof {
+        "(ev (: (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨term⟩) "
+    } else {
+        "(ev (: (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨term⟩))"
+    };
+
+    let want_ev_wff_p = if with_proof {
+        "(ev (: (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) ⟨wff⟩) "
+    } else {
+        "(ev (: (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) ⟨wff⟩))"
+    };
+    let want_ev_proof_p = if with_proof {
+        "(ev (: (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) ⟨|-⟩) "
+    } else {
+        "(ev (: (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) ⟨|-⟩))"
+    };
+
+    let want_ev_wff_q = if with_proof {
+        "(ev (: (⟨=⟩ ⟨t⟩ ⟨t⟩) ⟨wff⟩) "
+    } else {
+        "(ev (: (⟨=⟩ ⟨t⟩ ⟨t⟩) ⟨wff⟩))"
+    };
+    let want_final_evidence = if with_proof {
+        "(ev (: (⟨=⟩ ⟨t⟩ ⟨t⟩) ⟨|-⟩) "
+    } else {
+        "(ev (: (⟨=⟩ ⟨t⟩ ⟨t⟩) ⟨|-⟩))"
+    };
+
+    let want_ev_wff_ptoq = if with_proof {
+        "(ev (: (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨=⟩ ⟨t⟩ ⟨t⟩)) ⟨wff⟩) "
+    } else {
+        "(ev (: (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨=⟩ ⟨t⟩ ⟨t⟩)) ⟨wff⟩))"
+    };
+    let want_ev_proof_ptoq = if with_proof {
+        "(ev (: (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨=⟩ ⟨t⟩ ⟨t⟩)) ⟨|-⟩) "
+    } else {
+        "(ev (: (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨=⟩ ⟨t⟩ ⟨t⟩)) ⟨|-⟩))"
+    };
+
+    let want_ev_wff_ptoptoq = if with_proof {
+        "(ev (: (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨=⟩ ⟨t⟩ ⟨t⟩))) ⟨wff⟩) "
+    } else {
+        "(ev (: (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨=⟩ ⟨t⟩ ⟨t⟩))) ⟨wff⟩))"
+    };
+    let want_ev_proof_ptoptoq = if with_proof {
+        "(ev (: (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨=⟩ ⟨t⟩ ⟨t⟩))) ⟨|-⟩) "
+    } else {
+        "(ev (: (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨=⟩ ⟨t⟩ ⟨t⟩))) ⟨|-⟩))"
+    };
 
     let mut buf = Vec::new();
     s.dump_all_sexpr(&mut buf).unwrap();
     let dump = String::from_utf8_lossy(&buf);
-    
+
     let line_has = |needle: &str| dump.lines().any(|l| l.trim_start().starts_with(needle));
-    
+
     println!("\n📊 ESSENTIAL INGREDIENTS STATUS:");
     println!("────────────────────────────────");
-    
+
     println!("TERMS:");
-    println!("  ⟨t⟩ : ⟨term⟩ .................. {}", if line_has(want_ev_term_t) { "✓" } else { "❌" });
-    println!("  ⟨0⟩ : ⟨term⟩ .................. {}", if line_has(want_ev_term_0) { "✓" } else { "❌" });
-    println!("  (⟨+⟩ ⟨t⟩ ⟨0⟩) : ⟨term⟩ ......... {}", if line_has(want_ev_term_tplus0) { "✓" } else { "❌" });
-    
+    println!(
+        "  ⟨t⟩ : ⟨term⟩ .................. {}",
+        if line_has(want_ev_term_t) {
+            "✓"
+        } else {
+            "❌"
+        }
+    );
+    println!(
+        "  ⟨0⟩ : ⟨term⟩ .................. {}",
+        if line_has(want_ev_term_0) {
+            "✓"
+        } else {
+            "❌"
+        }
+    );
+    println!(
+        "  (⟨+⟩ ⟨t⟩ ⟨0⟩) : ⟨term⟩ ......... {}",
+        if line_has(want_ev_term_tplus0) {
+            "✓"
+        } else {
+            "❌"
+        }
+    );
+
     println!("\nWFFs:");
-    println!("  P: (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) : ⟨wff⟩ . {}", if line_has(want_ev_wff_p) { "✓" } else { "❌" });
-    println!("  Q: (⟨=⟩ ⟨t⟩ ⟨t⟩) : ⟨wff⟩ .......... {}", if line_has(want_ev_wff_q) { "✓" } else { "❌" });
-    println!("  P→Q : ⟨wff⟩ ..................... {}", if line_has(want_ev_wff_ptoq) { "✓" } else { "❌" });
-    println!("  P→(P→Q) : ⟨wff⟩ ................ {}", if line_has(want_ev_wff_ptoptoq) { "✓" } else { "❌" });
-    
+    println!(
+        "  P: (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) : ⟨wff⟩ . {}",
+        if line_has(want_ev_wff_p) {
+            "✓"
+        } else {
+            "❌"
+        }
+    );
+    println!(
+        "  Q: (⟨=⟩ ⟨t⟩ ⟨t⟩) : ⟨wff⟩ .......... {}",
+        if line_has(want_ev_wff_q) {
+            "✓"
+        } else {
+            "❌"
+        }
+    );
+    println!(
+        "  P→Q : ⟨wff⟩ ..................... {}",
+        if line_has(want_ev_wff_ptoq) {
+            "✓"
+        } else {
+            "❌"
+        }
+    );
+    println!(
+        "  P→(P→Q) : ⟨wff⟩ ................ {}",
+        if line_has(want_ev_wff_ptoptoq) {
+            "✓"
+        } else {
+            "❌"
+        }
+    );
+
     println!("\nPROOFS (⟨|-⟩):");
-    println!("  ⊢ P (from a2) .................. {}", if line_has(want_ev_proof_p) { "✓" } else { "❌" });
-    println!("  ⊢ P→(P→Q) (from a1) ............ {}", if line_has(want_ev_proof_ptoptoq) { "✓" } else { "❌" });
-    println!("  ⊢ P→Q (MP₁) .................... {}", if line_has(want_ev_proof_ptoq) { "✓" } else { "❌" });
-    println!("  ⊢ Q [FINAL GOAL] ............... {}", if line_has(want_final_evidence) { "✅✅✅" } else { "❌" });
-    
+    println!(
+        "  ⊢ P (from a2) .................. {}",
+        if line_has(want_ev_proof_p) {
+            "✓"
+        } else {
+            "❌"
+        }
+    );
+    println!(
+        "  ⊢ P→(P→Q) (from a1) ............ {}",
+        if line_has(want_ev_proof_ptoptoq) {
+            "✓"
+        } else {
+            "❌"
+        }
+    );
+    println!(
+        "  ⊢ P→Q (MP₁) .................... {}",
+        if line_has(want_ev_proof_ptoq) {
+            "✓"
+        } else {
+            "❌"
+        }
+    );
+    println!(
+        "  ⊢ Q [FINAL GOAL] ............... {}",
+        if line_has(want_final_evidence) {
+            "✅✅✅"
+        } else {
+            "❌"
+        }
+    );
+
     println!("\n🎯 ACTIVE GOALS:");
     for line in dump.lines() {
         if line.trim_start().starts_with("(goal ") {
             println!("  {}", line.trim());
         }
     }
-    
+
     if line_has(want_final_evidence) {
         println!("\n🎊 SUCCESS! Proof of t=t completed!");
     }
@@ -3799,28 +4560,35 @@ fn abstract_curry_explosion_demo() {
     println!("\n--- Watch how abstract goals multiply ---\n");
 
     let mut ticks = 0usize;
-    let multiplier = 1;  // Run one tick at a time to see the progression
-    
-    for _ in 0..10 {  // Run for 10 ticks
+    let multiplier = 1; // Run one tick at a time to see the progression
+
+    for _ in 0..10 {
+        // Run for 10 ticks
         ticks += multiplier;
         let n = s.metta_calculus(multiplier);
-        
+
         // Count and display goals
         let mut buf = Vec::new();
         s.dump_all_sexpr(&mut buf).unwrap();
         let dump = String::from_utf8_lossy(&buf);
-        
-        let concrete_goals: Vec<&str> = dump.lines()
+
+        let concrete_goals: Vec<&str> = dump
+            .lines()
             .filter(|l| l.starts_with("(goal ") && l.contains("⟨"))
             .collect();
-        
-        let abstract_goals: Vec<&str> = dump.lines()
+
+        let abstract_goals: Vec<&str> = dump
+            .lines()
             .filter(|l| l.starts_with("(goal ") && l.contains("$"))
             .collect();
-        
-        println!("Tick {}: {} concrete goals, {} abstract goals", 
-                 ticks, concrete_goals.len(), abstract_goals.len());
-        
+
+        println!(
+            "Tick {}: {} concrete goals, {} abstract goals",
+            ticks,
+            concrete_goals.len(),
+            abstract_goals.len()
+        );
+
         // Show first few abstract goals
         if !abstract_goals.is_empty() {
             println!("  Sample abstract goals:");
@@ -3831,18 +4599,18 @@ fn abstract_curry_explosion_demo() {
                 println!("    ... and {} more", abstract_goals.len() - 3);
             }
         }
-        
+
         if n == 0 || abstract_goals.len() > 50 {
             println!("\n--- Stopping: too many abstract goals or no more rules ---");
             break;
         }
     }
-    
+
     println!("\n=== Final Analysis ===");
     let mut buf = Vec::new();
     s.dump_all_sexpr(&mut buf).unwrap();
     let dump = String::from_utf8_lossy(&buf);
-    
+
     println!("\n--- Full Final State Dump ---");
     print!("{dump}");
 }
@@ -3903,29 +4671,30 @@ fn abstract_implication_goal_demo() {
     println!("\n--- Execution trace ---\n");
 
     let mut ticks = 0usize;
-    
+
     for _ in 0..5 {
         ticks += 1;
         let n = s.metta_calculus(1);
-        
+
         let mut buf = Vec::new();
         s.dump_all_sexpr(&mut buf).unwrap();
         let dump = String::from_utf8_lossy(&buf);
-        
+
         println!("After tick {}:", ticks);
-        
+
         // Show debug messages
         for line in dump.lines() {
             if line.starts_with("(debug ") {
                 println!("  {}", line);
             }
         }
-        
+
         // Show new goals with implications
-        let implication_goals: Vec<&str> = dump.lines()
+        let implication_goals: Vec<&str> = dump
+            .lines()
             .filter(|l| l.starts_with("(goal ") && l.contains("⟨->⟩"))
             .collect();
-        
+
         if !implication_goals.is_empty() {
             println!("  Implication goals:");
             for goal in &implication_goals {
@@ -3937,22 +4706,22 @@ fn abstract_implication_goal_demo() {
                 }
             }
         }
-        
+
         if n == 0 {
             break;
         }
     }
-    
+
     println!("\n=== Final State ===");
     let mut buf = Vec::new();
     s.dump_all_sexpr(&mut buf).unwrap();
     let dump = String::from_utf8_lossy(&buf);
-    
+
     // Count different types of goals
     let mut abstract_impl = 0;
     let mut concrete_impl = 0;
     let mut other_abstract = 0;
-    
+
     for line in dump.lines() {
         if line.starts_with("(goal ") {
             if line.contains("⟨->⟩") && line.contains("$") {
@@ -3967,12 +4736,12 @@ fn abstract_implication_goal_demo() {
             }
         }
     }
-    
+
     println!("\nSummary:");
     println!("  Abstract implication goals (with $): {}", abstract_impl);
     println!("  Concrete implication goals: {}", concrete_impl);
     println!("  Other abstract goals: {}", other_abstract);
-    
+
     println!("\nThe problem: When MP backward-chains to prove Q, it creates");
     println!("a goal (: (⟨->⟩ $P $Q) ⟨|-⟩) where $P and $Q are unbound.");
     println!("This matches ANYTHING of the form (⟨->⟩ X Y), creating an");
@@ -4116,28 +4885,38 @@ fn mm2_bc_v4_no_lifting() {
         ticks += multiplier;
         let t1 = Instant::now();
         let n = s.metta_calculus(multiplier);
-        println!("executing step {} ({}) took {} ms (unifications {}, writes {}, transitions {})", 
-                ticks, n, t1.elapsed().as_millis(), 
-                unsafe { unifications }, unsafe { writes }, unsafe { transitions });
+        println!(
+            "executing step {} ({}) took {} ms (unifications {}, writes {}, transitions {})",
+            ticks,
+            n,
+            t1.elapsed().as_millis(),
+            unsafe { unifications },
+            unsafe { writes },
+            unsafe { transitions }
+        );
 
         println!("space size {}", s.btm.val_count());
 
         // Add diagnostics at key points
-         if ticks < 50 {
-          add_mm2_demo0_query_diagnostics(&mut s, ticks, None);
+        if ticks < 50 {
+            add_mm2_demo0_query_diagnostics(&mut s, ticks, None);
         }
 
         if n == 0 || ticks >= 50 {
-            println!("\n== mm2 (bc v4): ran for {:?} and {} tick(s) ==", t0.elapsed(), ticks);
-            
+            println!(
+                "\n== mm2 (bc v4): ran for {:?} and {} tick(s) ==",
+                t0.elapsed(),
+                ticks
+            );
+
             // Final diagnostics
             add_mm2_demo0_query_diagnostics(&mut s, ticks, None);
-            add_mm2_demo0_diagnostics(&mut s, ticks, None); ;
-            
+            add_mm2_demo0_diagnostics(&mut s, ticks, None);
+
             let mut buf = Vec::new();
             s.dump_all_sexpr(&mut buf).unwrap();
             let dump = String::from_utf8_lossy(&buf);
-            
+
             // Check if proof is complete
             if dump.contains("(ev (: (⟨=⟩ ⟨t⟩ ⟨t⟩) ⟨|-⟩))") {
                 println!("\n✅ PROOF COMPLETE!");
@@ -4145,7 +4924,8 @@ fn mm2_bc_v4_no_lifting() {
                 println!("\n❌ Proof incomplete");
                 // Show what's missing
                 println!("\nWhat's still needed:");
-                if !dump.contains("(ev (: (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨=⟩ ⟨t⟩ ⟨t⟩)) ⟨|-⟩))") {
+                if !dump.contains("(ev (: (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨=⟩ ⟨t⟩ ⟨t⟩)) ⟨|-⟩))")
+                {
                     println!("  - P→Q proof (first MP)");
                 }
                 if !dump.contains("(ev (: (⟨=⟩ ⟨t⟩ ⟨t⟩) ⟨|-⟩))") {
@@ -4299,28 +5079,38 @@ fn mm2_bc_v4() {
         ticks += multiplier;
         let t1 = Instant::now();
         let n = s.metta_calculus(multiplier);
-        println!("executing step {} ({}) took {} ms (unifications {}, writes {}, transitions {})", 
-                ticks, n, t1.elapsed().as_millis(), 
-                unsafe { unifications }, unsafe { writes }, unsafe { transitions });
+        println!(
+            "executing step {} ({}) took {} ms (unifications {}, writes {}, transitions {})",
+            ticks,
+            n,
+            t1.elapsed().as_millis(),
+            unsafe { unifications },
+            unsafe { writes },
+            unsafe { transitions }
+        );
 
         println!("space size {}", s.btm.val_count());
 
         // Add diagnostics at key points
-         if ticks < 50 {
-          add_mm2_demo0_query_diagnostics(&mut s, ticks, None);
+        if ticks < 50 {
+            add_mm2_demo0_query_diagnostics(&mut s, ticks, None);
         }
 
         if n == 0 || ticks >= 50 {
-            println!("\n== mm2 (bc v4): ran for {:?} and {} tick(s) ==", t0.elapsed(), ticks);
-            
+            println!(
+                "\n== mm2 (bc v4): ran for {:?} and {} tick(s) ==",
+                t0.elapsed(),
+                ticks
+            );
+
             // Final diagnostics
             add_mm2_demo0_query_diagnostics(&mut s, ticks, None);
-            add_mm2_demo0_diagnostics(&mut s, ticks, None); ;
-            
+            add_mm2_demo0_diagnostics(&mut s, ticks, None);
+
             let mut buf = Vec::new();
             s.dump_all_sexpr(&mut buf).unwrap();
             let dump = String::from_utf8_lossy(&buf);
-            
+
             // Check if proof is complete
             if dump.contains("(ev (: (⟨=⟩ ⟨t⟩ ⟨t⟩) ⟨|-⟩))") {
                 println!("\n✅ PROOF COMPLETE!");
@@ -4328,7 +5118,8 @@ fn mm2_bc_v4() {
                 println!("\n❌ Proof incomplete");
                 // Show what's missing
                 println!("\nWhat's still needed:");
-                if !dump.contains("(ev (: (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨=⟩ ⟨t⟩ ⟨t⟩)) ⟨|-⟩))") {
+                if !dump.contains("(ev (: (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨=⟩ ⟨t⟩ ⟨t⟩)) ⟨|-⟩))")
+                {
                     println!("  - P→Q proof (first MP)");
                 }
                 if !dump.contains("(ev (: (⟨=⟩ ⟨t⟩ ⟨t⟩) ⟨|-⟩))") {
@@ -4643,9 +5434,15 @@ fn mm2_bc_v3() {
         ticks += multiplier;
         let t1 = Instant::now();
         let n = s.metta_calculus(multiplier);
-        println!("executing step {} ({}) took {} ms (unifications {}, writes {}, transitions {})", 
-                ticks, n, t1.elapsed().as_millis(), 
-                unsafe { unifications }, unsafe { writes }, unsafe { transitions });
+        println!(
+            "executing step {} ({}) took {} ms (unifications {}, writes {}, transitions {})",
+            ticks,
+            n,
+            t1.elapsed().as_millis(),
+            unsafe { unifications },
+            unsafe { writes },
+            unsafe { transitions }
+        );
 
         println!("space size {}", s.btm.val_count());
 
@@ -4654,9 +5451,13 @@ fn mm2_bc_v3() {
         let dump = String::from_utf8_lossy(&buf);
 
         if n == 0 || ticks >= 50 {
-            println!("\n== mm2 (bc v3): — ran for {:?} and {} tick(s) ==", t0.elapsed(), ticks);
+            println!(
+                "\n== mm2 (bc v3): — ran for {:?} and {} tick(s) ==",
+                t0.elapsed(),
+                ticks
+            );
             add_mm2_demo0_query_diagnostics(&mut s, ticks, None);
-            add_mm2_demo0_diagnostics(&mut s, ticks, None); ;
+            add_mm2_demo0_diagnostics(&mut s, ticks, None);
             println!("\n--- Full Final State Dump ---");
             print!("{dump}");
             break;
@@ -4799,7 +5600,6 @@ fn mm2_bc_v2() {
     let t0 = Instant::now();
     s.add_all_sexpr(P.as_bytes()).unwrap();
 
-
     println!("=== MM2 (bc): Proving ⊢ (t = t) ===");
 
     let mut ticks = 0usize;
@@ -4809,7 +5609,15 @@ fn mm2_bc_v2() {
         ticks += multiplier;
         let t1 = Instant::now();
         let n = s.metta_calculus(multiplier);
-        println!("executing step {} ({}) took {} ms (unifications {}, writes {}, transitions {})", ticks, n, t1.elapsed().as_millis(), unsafe { unifications }, unsafe { writes }, unsafe { transitions });
+        println!(
+            "executing step {} ({}) took {} ms (unifications {}, writes {}, transitions {})",
+            ticks,
+            n,
+            t1.elapsed().as_millis(),
+            unsafe { unifications },
+            unsafe { writes },
+            unsafe { transitions }
+        );
 
         println!("space size {}", s.btm.val_count());
         let total_t = t0.elapsed();
@@ -4818,9 +5626,12 @@ fn mm2_bc_v2() {
         s.dump_all_sexpr(&mut buf).unwrap();
         let dump = String::from_utf8_lossy(&buf);
 
-
         if n == 0 || ticks >= 25 {
-            println!("\n== mm2 (bc): — ran for {:?} and {} tick(s) ==", t0.elapsed(), ticks);
+            println!(
+                "\n== mm2 (bc): — ran for {:?} and {} tick(s) ==",
+                t0.elapsed(),
+                ticks
+            );
 
             println!("\n--- Full Final State Dump ---");
             print!("{dump}");
@@ -5244,11 +6055,9 @@ fn mm2_bc() {
   ; (ev (: (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨=⟩ ⟨t⟩ ⟨t⟩))) ⟨wff⟩))
     "#;
 
-
     let mut s = Space::new();
     let t0 = Instant::now();
     s.add_all_sexpr(P.as_bytes()).unwrap();
-
 
     println!("=== MM2 (bc): Proving ⊢ (t = t) ===");
 
@@ -5259,7 +6068,15 @@ fn mm2_bc() {
         ticks += multiplier;
         let t1 = Instant::now();
         let n = s.metta_calculus(multiplier);
-        println!("executing step {} ({}) took {} ms (unifications {}, writes {}, transitions {})", ticks, n, t1.elapsed().as_millis(), unsafe { unifications }, unsafe { writes }, unsafe { transitions });
+        println!(
+            "executing step {} ({}) took {} ms (unifications {}, writes {}, transitions {})",
+            ticks,
+            n,
+            t1.elapsed().as_millis(),
+            unsafe { unifications },
+            unsafe { writes },
+            unsafe { transitions }
+        );
 
         // if n == 1 { continue } // comment out if you want the analysis at every step
 
@@ -5270,9 +6087,12 @@ fn mm2_bc() {
         s.dump_all_sexpr(&mut buf).unwrap();
         let dump = String::from_utf8_lossy(&buf);
 
-
         if n == 0 || ticks >= 25 {
-            println!("\n== mm2 (bc): — ran for {:?} and {} tick(s) ==", t0.elapsed(), ticks);
+            println!(
+                "\n== mm2 (bc): — ran for {:?} and {} tick(s) ==",
+                t0.elapsed(),
+                ticks
+            );
 
             println!("\n--- Full Final State Dump ---");
             print!("{dump}");
@@ -5468,19 +6288,19 @@ fn mm1_forward() {
   ;    (, (ev (: $Q ⟨|-⟩))))
     "#;
 
-
     let mut s = Space::new();
     let t0 = Instant::now();
     s.add_all_sexpr(P.as_bytes()).unwrap();
 
     // Targets (kept identical to mm1())
-    let want_ev_term_tplus0    = "(ev (: (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨term⟩))";
-    let want_ev_wff_p          = "(ev (: (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) ⟨wff⟩))";
-    let want_ev_wff_q          = "(ev (: (⟨=⟩ ⟨t⟩ ⟨t⟩) ⟨wff⟩))";
-    let want_ev_proof_p        = "(ev (: (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) ⟨|-⟩))";
-    let want_ev_proof_ptoq     = "(ev (: (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨=⟩ ⟨t⟩ ⟨t⟩)) ⟨|-⟩))";
-    let want_ev_proof_ptoptoq  = "(ev (: (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨=⟩ ⟨t⟩ ⟨t⟩))) ⟨|-⟩))";
-    let want_final_evidence    = "(ev (: (⟨=⟩ ⟨t⟩ ⟨t⟩) ⟨|-⟩)";
+    let want_ev_term_tplus0 = "(ev (: (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨term⟩))";
+    let want_ev_wff_p = "(ev (: (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) ⟨wff⟩))";
+    let want_ev_wff_q = "(ev (: (⟨=⟩ ⟨t⟩ ⟨t⟩) ⟨wff⟩))";
+    let want_ev_proof_p = "(ev (: (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) ⟨|-⟩))";
+    let want_ev_proof_ptoq = "(ev (: (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨=⟩ ⟨t⟩ ⟨t⟩)) ⟨|-⟩))";
+    let want_ev_proof_ptoptoq =
+        "(ev (: (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨=⟩ ⟨t⟩ ⟨t⟩))) ⟨|-⟩))";
+    let want_final_evidence = "(ev (: (⟨=⟩ ⟨t⟩ ⟨t⟩) ⟨|-⟩)";
 
     println!("=== MM1 (forward): Proving ⊢ (t = t) ===");
 
@@ -5489,7 +6309,14 @@ fn mm1_forward() {
         ticks += 1;
         let t1 = Instant::now();
         let n = s.metta_calculus(1);
-        println!("executing step {} took {} ms (unifications {}, writes {}, transitions {})", ticks, t1.elapsed().as_millis(), unsafe { unifications }, unsafe { writes }, unsafe { transitions });
+        println!(
+            "executing step {} took {} ms (unifications {}, writes {}, transitions {})",
+            ticks,
+            t1.elapsed().as_millis(),
+            unsafe { unifications },
+            unsafe { writes },
+            unsafe { transitions }
+        );
 
         // if n == 1 { continue } // comment out if you want the analysis at every step
 
@@ -5499,9 +6326,9 @@ fn mm1_forward() {
         let mut tmut = Vec::new();
         // trying to get: (ev (: (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) ⟨|-⟩))
         s.dump_sexpr(
-            expr!(s, "[2] ev [3] : [3] ⟨=⟩ $ $ ⟨|-⟩"),  // Pattern
-            expr!(s, "[2] ev [3] : [3] ⟨=⟩ _1 _2 ⟨|-⟩"),  // Template: full reconstruction
-            &mut tmut
+            expr!(s, "[2] ev [3] : [3] ⟨=⟩ $ $ ⟨|-⟩"),   // Pattern
+            expr!(s, "[2] ev [3] : [3] ⟨=⟩ _1 _2 ⟨|-⟩"), // Template: full reconstruction
+            &mut tmut,
         );
 
         let result = String::from_utf8(tmut).unwrap();
@@ -5517,9 +6344,15 @@ fn mm1_forward() {
 
         let mut proof_ptoq_check = Vec::new();
         s.dump_sexpr(
-            expr!(s, "[2] ev [3] : [3] ⟨->⟩ [3] ⟨=⟩ [3] ⟨+⟩ ⟨t⟩ ⟨0⟩ ⟨t⟩ [3] ⟨=⟩ ⟨t⟩ ⟨t⟩ ⟨|-⟩"),  // Pattern
-            expr!(s, "[2] ev [3] : [3] ⟨->⟩ [3] ⟨=⟩ [3] ⟨+⟩ ⟨t⟩ ⟨0⟩ ⟨t⟩ [3] ⟨=⟩ ⟨t⟩ ⟨t⟩ ⟨|-⟩"),  // Template: return same expression
-            &mut proof_ptoq_check
+            expr!(
+                s,
+                "[2] ev [3] : [3] ⟨->⟩ [3] ⟨=⟩ [3] ⟨+⟩ ⟨t⟩ ⟨0⟩ ⟨t⟩ [3] ⟨=⟩ ⟨t⟩ ⟨t⟩ ⟨|-⟩"
+            ), // Pattern
+            expr!(
+                s,
+                "[2] ev [3] : [3] ⟨->⟩ [3] ⟨=⟩ [3] ⟨+⟩ ⟨t⟩ ⟨0⟩ ⟨t⟩ [3] ⟨=⟩ ⟨t⟩ ⟨t⟩ ⟨|-⟩"
+            ), // Template: return same expression
+            &mut proof_ptoq_check,
         );
 
         if !proof_ptoq_check.is_empty() {
@@ -5535,22 +6368,43 @@ fn mm1_forward() {
 
         let line_has = |needle: &str| dump.lines().any(|l| l.trim_start().starts_with(needle));
 
-        let have_tplus0_term  = line_has(want_ev_term_tplus0);
-        let have_wff_p_ev     = line_has(want_ev_wff_p);
-        let have_wff_q_ev     = line_has(want_ev_wff_q);
-        let have_proof_p_ev   = line_has(want_ev_proof_p);
-        let have_ptoq_ev      = line_has(want_ev_proof_ptoq);
-        let have_ptoptoq_ev   = line_has(want_ev_proof_ptoptoq);
-        let have_final        = line_has(want_final_evidence);
+        let have_tplus0_term = line_has(want_ev_term_tplus0);
+        let have_wff_p_ev = line_has(want_ev_wff_p);
+        let have_wff_q_ev = line_has(want_ev_wff_q);
+        let have_proof_p_ev = line_has(want_ev_proof_p);
+        let have_ptoq_ev = line_has(want_ev_proof_ptoq);
+        let have_ptoptoq_ev = line_has(want_ev_proof_ptoptoq);
+        let have_final = line_has(want_final_evidence);
 
         if have_final {
-            println!("\n== mm1 (forward): ✅ SUCCESS in {:?} after {} tick(s) ==", total_t, ticks);
-            println!("  (+ t 0) : term ............. {}", if have_tplus0_term { "✓" } else { "—" });
-            println!("  wff_P (ev) ................. {}", if have_wff_p_ev { "✓" } else { "—" });
-            println!("  wff_Q (ev) ................. {}", if have_wff_q_ev { "✓" } else { "—" });
-            println!("  proof_P (a2@t, ev) ......... {}", if have_proof_p_ev { "✓" } else { "—" });
-            println!("  proof_PtoQ (a1, ev) ........ {}", if have_ptoq_ev { "✓" } else { "—" });
-            println!("  proof_PtoPtoQ (a1, ev) ..... {}", if have_ptoptoq_ev { "✓" } else { "—" });
+            println!(
+                "\n== mm1 (forward): ✅ SUCCESS in {:?} after {} tick(s) ==",
+                total_t, ticks
+            );
+            println!(
+                "  (+ t 0) : term ............. {}",
+                if have_tplus0_term { "✓" } else { "—" }
+            );
+            println!(
+                "  wff_P (ev) ................. {}",
+                if have_wff_p_ev { "✓" } else { "—" }
+            );
+            println!(
+                "  wff_Q (ev) ................. {}",
+                if have_wff_q_ev { "✓" } else { "—" }
+            );
+            println!(
+                "  proof_P (a2@t, ev) ......... {}",
+                if have_proof_p_ev { "✓" } else { "—" }
+            );
+            println!(
+                "  proof_PtoQ (a1, ev) ........ {}",
+                if have_ptoq_ev { "✓" } else { "—" }
+            );
+            println!(
+                "  proof_PtoPtoQ (a1, ev) ..... {}",
+                if have_ptoptoq_ev { "✓" } else { "—" }
+            );
 
             println!("\n--- Final evidence confirmation ---");
             println!("✅ Successfully derived ⊢ (t = t)");
@@ -5561,13 +6415,35 @@ fn mm1_forward() {
         }
 
         if n == 0 || ticks >= 128 {
-            println!("\n== mm1 (forward): — FAILURE in {:?} after {} tick(s) ==", t0.elapsed(), ticks);
-            println!("  (+ t 0) : term ............. {}", if have_tplus0_term { "✓" } else { "—" });
-            println!("  wff_P (ev) ................. {}", if have_wff_p_ev { "✓" } else { "—" });
-            println!("  wff_Q (ev) ................. {}", if have_wff_q_ev { "✓" } else { "—" });
-            println!("  proof_P (a2@t, ev) ......... {}", if have_proof_p_ev { "✓" } else { "—" });
-            println!("  proof_PtoQ (a1, ev) ........ {}", if have_ptoq_ev { "✓" } else { "—" });
-            println!("  proof_PtoPtoQ (a1, ev) ..... {}", if have_ptoptoq_ev { "✓" } else { "—" });
+            println!(
+                "\n== mm1 (forward): — FAILURE in {:?} after {} tick(s) ==",
+                t0.elapsed(),
+                ticks
+            );
+            println!(
+                "  (+ t 0) : term ............. {}",
+                if have_tplus0_term { "✓" } else { "—" }
+            );
+            println!(
+                "  wff_P (ev) ................. {}",
+                if have_wff_p_ev { "✓" } else { "—" }
+            );
+            println!(
+                "  wff_Q (ev) ................. {}",
+                if have_wff_q_ev { "✓" } else { "—" }
+            );
+            println!(
+                "  proof_P (a2@t, ev) ......... {}",
+                if have_proof_p_ev { "✓" } else { "—" }
+            );
+            println!(
+                "  proof_PtoQ (a1, ev) ........ {}",
+                if have_ptoq_ev { "✓" } else { "—" }
+            );
+            println!(
+                "  proof_PtoPtoQ (a1, ev) ..... {}",
+                if have_ptoptoq_ev { "✓" } else { "—" }
+            );
 
             if !have_final {
                 println!("\n❌ Failed to derive ⊢ (t = t)");
@@ -5743,21 +6619,21 @@ fn mm1_forward_evidence() {
   ;    (, (ev (: $Q ⟨|-⟩))))
     "#;
 
-
     let mut s = Space::new();
     let t0 = Instant::now();
     s.add_all_sexpr(P.as_bytes()).unwrap();
 
     // Targets (kept identical to mm1())
-    let want_ev_term_tplus0_prefix    = "(ev (: (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨term⟩)";
-    let want_ev_wff_p_prefix          = "(ev (: (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) ⟨wff⟩)";
-    let want_ev_wff_q_prefix          = "(ev (: (⟨=⟩ ⟨t⟩ ⟨t⟩) ⟨wff⟩)";
-    let want_ev_proof_p_prefix        = "(ev (: (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) ⟨|-⟩)";
-    let want_ev_proof_ptoq_prefix     = "(ev (: (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨=⟩ ⟨t⟩ ⟨t⟩)) ⟨|-⟩)";
-    let want_ev_proof_ptoptoq_prefix  = "(ev (: (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨=⟩ ⟨t⟩ ⟨t⟩))) ⟨|-⟩)";
-    let want_final_evidence_prefix    = "(ev (: (⟨=⟩ ⟨t⟩ ⟨t⟩) ⟨|-⟩)";
+    let want_ev_term_tplus0_prefix = "(ev (: (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨term⟩)";
+    let want_ev_wff_p_prefix = "(ev (: (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) ⟨wff⟩)";
+    let want_ev_wff_q_prefix = "(ev (: (⟨=⟩ ⟨t⟩ ⟨t⟩) ⟨wff⟩)";
+    let want_ev_proof_p_prefix = "(ev (: (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) ⟨|-⟩)";
+    let want_ev_proof_ptoq_prefix = "(ev (: (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨=⟩ ⟨t⟩ ⟨t⟩)) ⟨|-⟩)";
+    let want_ev_proof_ptoptoq_prefix =
+        "(ev (: (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨=⟩ ⟨t⟩ ⟨t⟩))) ⟨|-⟩)";
+    let want_final_evidence_prefix = "(ev (: (⟨=⟩ ⟨t⟩ ⟨t⟩) ⟨|-⟩)";
 
-     // Helper function to extract evidence from a line
+    // Helper function to extract evidence from a line
     fn extract_evidence(line: &str, prefix: &str) -> Option<String> {
         let trimmed = line.trim();
         if trimmed.starts_with(prefix) {
@@ -5793,7 +6669,7 @@ fn mm1_forward_evidence() {
         let mut depth = 0;
         let mut i = 0;
         let chars: Vec<char> = evidence.chars().collect();
-        
+
         while i < chars.len() {
             match chars[i] {
                 '(' => {
@@ -5816,7 +6692,7 @@ fn mm1_forward_evidence() {
                 }
             }
             i += 1;
-        } 
+        }
         result
     }
 
@@ -5828,7 +6704,14 @@ fn mm1_forward_evidence() {
         ticks += 1;
         let t1 = Instant::now();
         let n = s.metta_calculus(1);
-        println!("executing step {} took {} ms (unifications {}, writes {}, transitions {})", ticks, t1.elapsed().as_millis(), unsafe { unifications }, unsafe { writes }, unsafe { transitions });
+        println!(
+            "executing step {} took {} ms (unifications {}, writes {}, transitions {})",
+            ticks,
+            t1.elapsed().as_millis(),
+            unsafe { unifications },
+            unsafe { writes },
+            unsafe { transitions }
+        );
 
         // if n == 1 { continue } // comment out if you want the analysis at every step
 
@@ -5841,12 +6724,12 @@ fn mm1_forward_evidence() {
 
         let line_has = |needle: &str| dump.lines().any(|l| l.trim_start().starts_with(needle));
 
-        let (have_tplus0_term, _)  = line_matches_prefix(&dump, want_ev_term_tplus0_prefix);
-        let (have_wff_p_ev, _)     = line_matches_prefix(&dump, want_ev_wff_p_prefix);
-        let (have_wff_q_ev, _)     = line_matches_prefix(&dump, want_ev_wff_q_prefix);
-        let (have_proof_p_ev, _)   = line_matches_prefix(&dump, want_ev_proof_p_prefix);
-        let (have_ptoq_ev, _)      = line_matches_prefix(&dump, want_ev_proof_ptoq_prefix);
-        let (have_ptoptoq_ev, _)   = line_matches_prefix(&dump, want_ev_proof_ptoptoq_prefix);
+        let (have_tplus0_term, _) = line_matches_prefix(&dump, want_ev_term_tplus0_prefix);
+        let (have_wff_p_ev, _) = line_matches_prefix(&dump, want_ev_wff_p_prefix);
+        let (have_wff_q_ev, _) = line_matches_prefix(&dump, want_ev_wff_q_prefix);
+        let (have_proof_p_ev, _) = line_matches_prefix(&dump, want_ev_proof_p_prefix);
+        let (have_ptoq_ev, _) = line_matches_prefix(&dump, want_ev_proof_ptoq_prefix);
+        let (have_ptoptoq_ev, _) = line_matches_prefix(&dump, want_ev_proof_ptoptoq_prefix);
         let (have_final, final_evidence) = line_matches_prefix(&dump, want_final_evidence_prefix);
 
         // Store the final proof evidence when we find it
@@ -5855,13 +6738,34 @@ fn mm1_forward_evidence() {
         }
 
         if have_final {
-            println!("\n== mm1 (forward): ✅ SUCCESS in {:?} after {} tick(s) ==", total_t, ticks);
-            println!("  (+ t 0) : term ............. {}", if have_tplus0_term { "✓" } else { "—" });
-            println!("  wff_P (ev) ................. {}", if have_wff_p_ev { "✓" } else { "—" });
-            println!("  wff_Q (ev) ................. {}", if have_wff_q_ev { "✓" } else { "—" });
-            println!("  proof_P (a2@t, ev) ......... {}", if have_proof_p_ev { "✓" } else { "—" });
-            println!("  proof_PtoQ (a1, ev) ........ {}", if have_ptoq_ev { "✓" } else { "—" });
-            println!("  proof_PtoPtoQ (a1, ev) ..... {}", if have_ptoptoq_ev { "✓" } else { "—" });
+            println!(
+                "\n== mm1 (forward): ✅ SUCCESS in {:?} after {} tick(s) ==",
+                total_t, ticks
+            );
+            println!(
+                "  (+ t 0) : term ............. {}",
+                if have_tplus0_term { "✓" } else { "—" }
+            );
+            println!(
+                "  wff_P (ev) ................. {}",
+                if have_wff_p_ev { "✓" } else { "—" }
+            );
+            println!(
+                "  wff_Q (ev) ................. {}",
+                if have_wff_q_ev { "✓" } else { "—" }
+            );
+            println!(
+                "  proof_P (a2@t, ev) ......... {}",
+                if have_proof_p_ev { "✓" } else { "—" }
+            );
+            println!(
+                "  proof_PtoQ (a1, ev) ........ {}",
+                if have_ptoq_ev { "✓" } else { "—" }
+            );
+            println!(
+                "  proof_PtoPtoQ (a1, ev) ..... {}",
+                if have_ptoptoq_ev { "✓" } else { "—" }
+            );
 
             println!("\n--- Final evidence confirmation ---");
             println!("✅ Successfully derived ⊢ (t = t)");
@@ -5872,7 +6776,7 @@ fn mm1_forward_evidence() {
                 println!("Final theorem: (⟨=⟩ ⟨t⟩ ⟨t⟩) ⟨|-⟩");
                 println!("Evidence trace:");
                 println!("{}", pretty_print_evidence(evidence, 1));
-                
+
                 println!("\n--- PROOF ANALYSIS ---");
                 // Count the proof steps
                 let mp_count = evidence.matches("⟨mp⟩").count();
@@ -5881,7 +6785,7 @@ fn mm1_forward_evidence() {
                 let tpl_count = evidence.matches("⟨tpl⟩").count();
                 let weq_count = evidence.matches("⟨weq⟩").count();
                 let kb_count = evidence.matches("kb").count();
-                
+
                 println!("Proof statistics:");
                 println!("  - Modus Ponens (mp): {}", mp_count);
                 println!("  - Transitivity (a1): {}", a1_count);
@@ -5897,13 +6801,35 @@ fn mm1_forward_evidence() {
         }
 
         if n == 0 || ticks >= 10 {
-            println!("\n== mm1 (forward): — FAILURE in {:?} after {} tick(s) ==", t0.elapsed(), ticks);
-            println!("  (+ t 0) : term ............. {}", if have_tplus0_term { "✓" } else { "—" });
-            println!("  wff_P (ev) ................. {}", if have_wff_p_ev { "✓" } else { "—" });
-            println!("  wff_Q (ev) ................. {}", if have_wff_q_ev { "✓" } else { "—" });
-            println!("  proof_P (a2@t, ev) ......... {}", if have_proof_p_ev { "✓" } else { "—" });
-            println!("  proof_PtoQ (a1, ev) ........ {}", if have_ptoq_ev { "✓" } else { "—" });
-            println!("  proof_PtoPtoQ (a1, ev) ..... {}", if have_ptoptoq_ev { "✓" } else { "—" });
+            println!(
+                "\n== mm1 (forward): — FAILURE in {:?} after {} tick(s) ==",
+                t0.elapsed(),
+                ticks
+            );
+            println!(
+                "  (+ t 0) : term ............. {}",
+                if have_tplus0_term { "✓" } else { "—" }
+            );
+            println!(
+                "  wff_P (ev) ................. {}",
+                if have_wff_p_ev { "✓" } else { "—" }
+            );
+            println!(
+                "  wff_Q (ev) ................. {}",
+                if have_wff_q_ev { "✓" } else { "—" }
+            );
+            println!(
+                "  proof_P (a2@t, ev) ......... {}",
+                if have_proof_p_ev { "✓" } else { "—" }
+            );
+            println!(
+                "  proof_PtoQ (a1, ev) ........ {}",
+                if have_ptoq_ev { "✓" } else { "—" }
+            );
+            println!(
+                "  proof_PtoPtoQ (a1, ev) ..... {}",
+                if have_ptoptoq_ev { "✓" } else { "—" }
+            );
 
             if !have_final {
                 println!("\n❌ Failed to derive ⊢ (t = t)");
@@ -5918,9 +6844,9 @@ fn mm1_forward_evidence() {
 
 // Vibe-coding demo0.mm
 fn mm0() {
-    use std::time::Instant;
-    use mork::space::Space;
     use mork::expr;
+    use mork::space::Space;
+    use std::time::Instant;
 
     const P: &str = r#"
     ; --- Data Pipeline Rules ---
@@ -5956,14 +6882,15 @@ fn mm0() {
     println!("\n== mm0 (Data Pipeline Version - Corrected) ==");
     let mut s = Space::new();
     let t0 = Instant::now();
-    s.add_sexpr(P.as_bytes(), expr!(s, "$"), expr!(s, "_1")).unwrap();
+    s.add_sexpr(P.as_bytes(), expr!(s, "$"), expr!(s, "_1"))
+        .unwrap();
 
     let mut success = false;
     let mut ticks = 0;
     for i in 0..100 {
         ticks = i + 1;
         let n = s.metta_calculus(1);
-        
+
         // Check for success inside the loop to stop as soon as the proof is found
         let pat = expr!(s, "(ev (: (@ (@ ⟨+⟩ ⟨t⟩) ⟨0⟩) term))");
         let mut buf = Vec::new();
@@ -5973,7 +6900,9 @@ fn mm0() {
             break;
         }
 
-        if n == 0 { break; } // Stop if the space has saturated
+        if n == 0 {
+            break;
+        } // Stop if the space has saturated
     }
     let elapsed = t0.elapsed();
 
@@ -5982,11 +6911,18 @@ fn mm0() {
     let mut full_dump_buffer = Vec::new();
     s.dump_all_sexpr(&mut full_dump_buffer).unwrap();
     let full_dump_string = String::from_utf8_lossy(&full_dump_buffer);
-    
+
     // We can re-verify with the string search, but the loop break is the real test
     let success_check = full_dump_string.contains("(ev (: (@ (@ ⟨+⟩ ⟨t⟩) ⟨0⟩) term))");
 
-    println!("Status: {}", if success_check { "✅ SUCCESS" } else { "❌ FAILURE" });
+    println!(
+        "Status: {}",
+        if success_check {
+            "✅ SUCCESS"
+        } else {
+            "❌ FAILURE"
+        }
+    );
     println!("Completed in {:?} after {} ticks.", elapsed, ticks);
     println!("\n--- Full Final State Dump ---");
     print!("{}", full_dump_string);
@@ -6030,7 +6966,8 @@ fn mm1_b_tpl() {
 
     let t0 = Instant::now();
     let mut s = Space::new();
-    s.add_sexpr(P.as_bytes(), expr!(s, "$"), expr!(s, "_1")).unwrap();
+    s.add_sexpr(P.as_bytes(), expr!(s, "$"), expr!(s, "_1"))
+        .unwrap();
 
     // Tick up to a small bound; break when saturated or when target appears.
     let mut ticks = 0usize;
@@ -6044,8 +6981,12 @@ fn mm1_b_tpl() {
         let out = String::from_utf8_lossy(&buf);
         let done = out.contains(target);
         if done || n == 0 || ticks >= 32 {
-            println!("\n== mm1_b_tpl: result = {} in {:?} after {} tick(s) ==",
-                     if done { "SUCCESS" } else { "INCOMPLETE" }, t0.elapsed(), ticks);
+            println!(
+                "\n== mm1_b_tpl: result = {} in {:?} after {} tick(s) ==",
+                if done { "SUCCESS" } else { "INCOMPLETE" },
+                t0.elapsed(),
+                ticks
+            );
             println!("\n--- Full Final State Dump ---");
             print!("{out}");
             break;
@@ -6094,7 +7035,8 @@ fn mm1_b2_tpl() {
 
     let t0 = Instant::now();
     let mut s = Space::new();
-    s.add_sexpr(P.as_bytes(), expr!(s, "$"), expr!(s, "_1")).unwrap();
+    s.add_sexpr(P.as_bytes(), expr!(s, "$"), expr!(s, "_1"))
+        .unwrap();
 
     let mut ticks = 0usize;
     let target = "(ev (: (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) ⟨wff⟩))";
@@ -6106,8 +7048,12 @@ fn mm1_b2_tpl() {
         let out = String::from_utf8_lossy(&buf);
         let done = out.contains(target);
         if done || n == 0 || ticks >= 32 {
-            println!("\n== mm1_b2_tpl: result = {} in {:?} after {} tick(s) ==",
-                     if done { "SUCCESS" } else { "INCOMPLETE" }, t0.elapsed(), ticks);
+            println!(
+                "\n== mm1_b2_tpl: result = {} in {:?} after {} tick(s) ==",
+                if done { "SUCCESS" } else { "INCOMPLETE" },
+                t0.elapsed(),
+                ticks
+            );
             println!("\n--- Full Final State Dump ---");
             print!("{out}");
             break;
@@ -6382,9 +7328,15 @@ fn mm2_bc_v5() {
         ticks += multiplier;
         let t1 = Instant::now();
         let n = s.metta_calculus(multiplier);
-        println!("executing step {} ({}) took {} ms (unifications {}, writes {}, transitions {})", 
-                ticks, n, t1.elapsed().as_millis(), 
-                unsafe { unifications }, unsafe { writes }, unsafe { transitions });
+        println!(
+            "executing step {} ({}) took {} ms (unifications {}, writes {}, transitions {})",
+            ticks,
+            n,
+            t1.elapsed().as_millis(),
+            unsafe { unifications },
+            unsafe { writes },
+            unsafe { transitions }
+        );
 
         println!("space size {}", s.btm.val_count());
 
@@ -6393,24 +7345,28 @@ fn mm2_bc_v5() {
         s.dump_sexpr(
             expr!(s, "[2] ev [3] : [3] ⟨=⟩ ⟨t⟩ ⟨t⟩ ⟨|-⟩"),
             expr!(s, "[2] ev [3] : [3] ⟨=⟩ ⟨t⟩ ⟨t⟩ ⟨|-⟩"),
-            &mut q_proof
+            &mut q_proof,
         );
 
         let proof_complete = add_mm2_demo0_query_diagnostics(&mut s, ticks, Some(true));
 
         if n == 0 || proof_complete || ticks >= 33 {
-            println!("\n== mm2 (bc v5): ran for {:?} and {} tick(s) ==", t0.elapsed(), ticks);
-            
+            println!(
+                "\n== mm2 (bc v5): ran for {:?} and {} tick(s) ==",
+                t0.elapsed(),
+                ticks
+            );
+
             // Final diagnostics
             // add_mm2_demo0_query_diagnostics(&mut s, ticks);
             // add_mm2_demo0_diagnostics(&mut s, ticks);
-            // add_mm2_demo0_query_diagnostics(&mut s, ticks, Some(true)); 
-            add_mm2_demo0_diagnostics(&mut s, ticks, Some(true));           
-            
+            // add_mm2_demo0_query_diagnostics(&mut s, ticks, Some(true));
+            add_mm2_demo0_diagnostics(&mut s, ticks, Some(true));
+
             let mut buf = Vec::new();
             s.dump_all_sexpr(&mut buf).unwrap();
             let dump = String::from_utf8_lossy(&buf);
-            
+
             // Check if proof is complete
             if dump.contains("(ev (: (⟨=⟩ ⟨t⟩ ⟨t⟩) ⟨|-⟩)") {
                 println!("\n✅ PROOF COMPLETE!");
@@ -6418,7 +7374,8 @@ fn mm2_bc_v5() {
                 println!("\n❌ Proof incomplete");
                 // Show what's missing
                 println!("\nWhat's still needed:");
-                if !dump.contains("(ev (: (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨=⟩ ⟨t⟩ ⟨t⟩)) ⟨|-⟩)") {
+                if !dump.contains("(ev (: (⟨->⟩ (⟨=⟩ (⟨+⟩ ⟨t⟩ ⟨0⟩) ⟨t⟩) (⟨=⟩ ⟨t⟩ ⟨t⟩)) ⟨|-⟩)")
+                {
                     println!("  - P→Q proof (first MP)");
                 }
                 if !dump.contains("(ev (: (⟨=⟩ ⟨t⟩ ⟨t⟩) ⟨|-⟩)") {
@@ -6431,7 +7388,6 @@ fn mm2_bc_v5() {
         }
     }
 }
-
 
 fn mm0_ver_v1() {
     // MM2 Backward Chainer v4: v4 but with exec factored out into the Rust.
@@ -6516,9 +7472,15 @@ fn mm0_ver_v1() {
         ticks += multiplier;
         let t1 = Instant::now();
         let n = s.metta_calculus(multiplier);
-        println!("executing step {} ({}) took {} ms (unifications {}, writes {}, transitions {})", 
-                ticks, n, t1.elapsed().as_millis(), 
-                unsafe { unifications }, unsafe { writes }, unsafe { transitions });
+        println!(
+            "executing step {} ({}) took {} ms (unifications {}, writes {}, transitions {})",
+            ticks,
+            n,
+            t1.elapsed().as_millis(),
+            unsafe { unifications },
+            unsafe { writes },
+            unsafe { transitions }
+        );
 
         println!("space size {}", s.btm.val_count());
 
@@ -6530,27 +7492,28 @@ fn mm0_ver_v1() {
         //     &mut q_proof
         // );
 
-        let proof_complete = false; 
+        let proof_complete = false;
 
-      
         // Add diagnostics at key points
         if ticks < 50 && !proof_complete {
-          // add_mm2_demo0_query_diagnostics(&mut s, ticks);
-      
+            // add_mm2_demo0_query_diagnostics(&mut s, ticks);
         }
 
-
         if n == 0 || proof_complete || ticks >= 50 {
-            println!("\n== mm0 (ver v1): ran for {:?} and {} tick(s) ==", t0.elapsed(), ticks);
-            
+            println!(
+                "\n== mm0 (ver v1): ran for {:?} and {} tick(s) ==",
+                t0.elapsed(),
+                ticks
+            );
+
             // Final diagnostics
             // add_mm2_demo0_query_diagnostics(&mut s, ticks);
             // add_mm2_demo0_diagnostics(&mut s, ticks);
-            
+
             let mut buf = Vec::new();
             s.dump_all_sexpr(&mut buf).unwrap();
             let dump = String::from_utf8_lossy(&buf);
-            
+
             println!("\n--- Full Final State Dump ---");
             print!("{dump}");
             break;
@@ -6566,8 +7529,8 @@ fn test_mm2_stack_simple() {
 
     // Load the final push test
     let test_path = "/home/zar/claude/hyperon/metamath/mmverify/mm2/test_push_final.mm2";
-    let test_code = std::fs::read_to_string(test_path)
-        .expect(&format!("Failed to read {}", test_path));
+    let test_code =
+        std::fs::read_to_string(test_path).expect(&format!("Failed to read {}", test_path));
 
     println!("Loading test code from {}...", test_path);
     s.add_all_sexpr(test_code.as_bytes()).unwrap();
@@ -6589,7 +7552,7 @@ fn test_mm2_stack_simple() {
     s.dump_sexpr(
         expr!(s, "[2] stack-state $"),
         expr!(s, "[2] stack-state _1"),
-        &mut results
+        &mut results,
     );
 
     if results.is_empty() {
@@ -6615,7 +7578,7 @@ fn test_mm2_stack_simple() {
     s.dump_sexpr(
         expr!(s, "[2] exec push-fhyp $"),
         expr!(s, "[2] exec push-fhyp _1"),
-        &mut exec_check
+        &mut exec_check,
     );
 
     if exec_check.is_empty() {
@@ -6635,16 +7598,16 @@ fn test_mm2_stack_comprehensive() {
 
     // Load stack operations library
     let stack_path = "/home/zar/claude/hyperon/metamath/mmverify/mm2/stack.mm2";
-    let stack_code = std::fs::read_to_string(stack_path)
-        .expect(&format!("Failed to read {}", stack_path));
+    let stack_code =
+        std::fs::read_to_string(stack_path).expect(&format!("Failed to read {}", stack_path));
 
     println!("Loading stack.mm2...");
     s.add_all_sexpr(stack_code.as_bytes()).unwrap();
 
     // Load comprehensive tests
     let test_path = "/home/zar/claude/hyperon/metamath/mmverify/mm2/test_stack.mm2";
-    let test_code = std::fs::read_to_string(test_path)
-        .expect(&format!("Failed to read {}", test_path));
+    let test_code =
+        std::fs::read_to_string(test_path).expect(&format!("Failed to read {}", test_path));
 
     println!("Loading test_stack.mm2...");
     s.add_all_sexpr(test_code.as_bytes()).unwrap();
@@ -6663,14 +7626,14 @@ fn test_mm2_stack_comprehensive() {
     s.dump_sexpr(
         expr!(s, "[2] stack-pushed $"),
         expr!(s, "[2] stack-pushed _1"),
-        &mut pushed
+        &mut pushed,
     );
     let pushed_str = String::from_utf8_lossy(&pushed);
     let pushed_count = pushed_str.lines().filter(|l| !l.trim().is_empty()).count();
     println!("stack-pushed facts: {}", pushed_count);
     for (i, line) in pushed_str.lines().take(5).enumerate() {
         if !line.trim().is_empty() {
-            println!("  {}: {}", i+1, line);
+            println!("  {}: {}", i + 1, line);
         }
     }
 
@@ -6679,14 +7642,14 @@ fn test_mm2_stack_comprehensive() {
     s.dump_sexpr(
         expr!(s, "[2] stack-popped $"),
         expr!(s, "[2] stack-popped _1"),
-        &mut popped
+        &mut popped,
     );
     let popped_str = String::from_utf8_lossy(&popped);
     let popped_count = popped_str.lines().filter(|l| !l.trim().is_empty()).count();
     println!("\nstack-popped facts: {}", popped_count);
     for (i, line) in popped_str.lines().take(5).enumerate() {
         if !line.trim().is_empty() {
-            println!("  {}: {}", i+1, line);
+            println!("  {}: {}", i + 1, line);
         }
     }
 
@@ -6695,14 +7658,14 @@ fn test_mm2_stack_comprehensive() {
     s.dump_sexpr(
         expr!(s, "[2] stack-error $"),
         expr!(s, "[2] stack-error _1"),
-        &mut errors
+        &mut errors,
     );
     let errors_str = String::from_utf8_lossy(&errors);
     let errors_count = errors_str.lines().filter(|l| !l.trim().is_empty()).count();
     println!("\nstack-error facts: {}", errors_count);
     for (i, line) in errors_str.lines().enumerate() {
         if !line.trim().is_empty() {
-            println!("  {}: {}", i+1, line);
+            println!("  {}: {}", i + 1, line);
         }
     }
 
@@ -6713,9 +7676,13 @@ fn parse_csv() {
     let csv_input = "10,123,foo\n11,321,bar\n";
     let reconstruction = "(0 10 123 foo)\n(1 11 321 bar)\n";
     let mut s = Space::new();
-    assert_eq!(s.load_csv(csv_input.as_bytes(), expr!(s, "$"), expr!(s, "_1"), b',').unwrap(), 2);
+    assert_eq!(
+        s.load_csv(csv_input.as_bytes(), expr!(s, "$"), expr!(s, "_1"), b',')
+            .unwrap(),
+        2
+    );
     let mut res = Vec::<u8>::new();
-    s.dump_sexpr(expr!(s, "$"), expr!(s, "_1"),&mut res);
+    s.dump_sexpr(expr!(s, "$"), expr!(s, "_1"), &mut res);
     assert_eq!(reconstruction, String::from_utf8(res).unwrap());
 }
 
@@ -6728,7 +7695,7 @@ fn parse_json() {
     let mut v = vec![];
     s.dump_all_sexpr(&mut v).unwrap();
     let res = String::from_utf8(v).unwrap();
-    
+
     println!("{}", res);
     assert_eq!(set_from_newlines(SEXPRS0), set_from_newlines(res.as_str()));
 }
@@ -6751,9 +7718,15 @@ const SEXPRS0: &str = r#"(first_name John)
 (spouse null)
 "#;
 
-
 #[derive(Debug, Serialize, Deserialize, Clone)]
-enum Format { MeTTa, JSON, CSV, UPaths, Paths, ACT }
+enum Format {
+    MeTTa,
+    JSON,
+    CSV,
+    UPaths,
+    Paths,
+    ACT,
+}
 
 #[derive(Debug, CLAParser)] // requires `derive` feature
 #[command(name = "mork")]
@@ -6770,8 +7743,7 @@ enum Commands {
         #[arg(default_value = "default")]
         only: String,
     },
-    Test {
-    },
+    Test {},
     #[command(arg_required_else_help = true)]
     Run {
         input_path: String,
@@ -6787,11 +7759,11 @@ enum Commands {
         input_format: String,
         #[arg(default_missing_value = "metta")]
         output_format: String,
-        #[arg(long, short='i', default_value_t = 1)]
+        #[arg(long, short = 'i', default_value_t = 1)]
         instrumentation: usize,
         input_path: String,
-        output_path: Option<String>
-    }
+        output_path: Option<String>,
+    },
 }
 
 fn main() {
@@ -6826,45 +7798,113 @@ fn main() {
             #[cfg(debug_assertions)]
             println!("WARNING running in debug, if unintentional, build with --release");
             let mut selected: BTreeSet<&str> = only.split(",").collect();
-            if selected.remove("default") { selected.extend(&["counter_machine", "transitive", "clique", "finite_domain", "process_calculus", "tile_puzzle_states"]) }
-            if selected.remove("all") { selected.extend(&["counter_machine", "transitive", "clique", "finite_domain", "process_calculus", "exponential", "exponential_fringe", "odd_even_sort", "logic_query", "tile_puzzle_states"]) }
-            if selected.remove("sinks") { selected.extend(&["odd_even_sort"]) }
+            if selected.remove("default") {
+                selected.extend(&[
+                    "counter_machine",
+                    "transitive",
+                    "clique",
+                    "finite_domain",
+                    "process_calculus",
+                    "tile_puzzle_states",
+                ])
+            }
+            if selected.remove("all") {
+                selected.extend(&[
+                    "counter_machine",
+                    "transitive",
+                    "clique",
+                    "finite_domain",
+                    "process_calculus",
+                    "exponential",
+                    "exponential_fringe",
+                    "odd_even_sort",
+                    "logic_query",
+                    "tile_puzzle_states",
+                ])
+            }
+            if selected.remove("sinks") {
+                selected.extend(&["odd_even_sort"])
+            }
 
             for b in selected {
                 println!("=== benchmarking {} ===", b);
                 match b {
-                    "counter_machine" => { bench_cm0(50); }
-                    "transitive" => { bench_transitive_no_unify(50000, 1000000); }
-                    "clique" => { bench_clique_no_unify(200, 3600, 5); }
-                    "finite_domain" => { bench_finite_domain(10_000); }
-                    "process_calculus" => { process_calculus_bench(1000, 200, 200); }
-                    "exponential" => { exponential(32); }
-                    "exponential_fringe" => { exponential_fringe(15); }
-                    "mm1_forward" => { mm1_forward(); }
-                    "mm1_forward_evidence" => { mm1_forward_evidence(); }
-                    "mm2_bc" => { mm2_bc(); }
-                    "mm2_bc_v2" => { mm2_bc_v2(); }
-                    "mm2_bc_v3" => { mm2_bc_v3(); }
-                    "mm2_bc_v4" => { mm2_bc_v4(); }
-                    "mm2_bc_v5" => { mm2_bc_v5(); }
-                    "mm0_ver_v1" => { mm0_ver_v1(); }
-                    "bc2" => { bc2(); }
+                    "counter_machine" => {
+                        bench_cm0(50);
+                    }
+                    "transitive" => {
+                        bench_transitive_no_unify(50000, 1000000);
+                    }
+                    "clique" => {
+                        bench_clique_no_unify(200, 3600, 5);
+                    }
+                    "finite_domain" => {
+                        bench_finite_domain(10_000);
+                    }
+                    "process_calculus" => {
+                        process_calculus_bench(1000, 200, 200);
+                    }
+                    "exponential" => {
+                        exponential(32);
+                    }
+                    "exponential_fringe" => {
+                        exponential_fringe(15);
+                    }
+                    "mm1_forward" => {
+                        mm1_forward();
+                    }
+                    "mm1_forward_evidence" => {
+                        mm1_forward_evidence();
+                    }
+                    "mm2_bc" => {
+                        mm2_bc();
+                    }
+                    "mm2_bc_v2" => {
+                        mm2_bc_v2();
+                    }
+                    "mm2_bc_v3" => {
+                        mm2_bc_v3();
+                    }
+                    "mm2_bc_v4" => {
+                        mm2_bc_v4();
+                    }
+                    "mm2_bc_v5" => {
+                        mm2_bc_v5();
+                    }
+                    "mm0_ver_v1" => {
+                        mm0_ver_v1();
+                    }
+                    "bc2" => {
+                        bc2();
+                    }
                     // "rust_bc1" => { run_bc_demo0(); }
-                    "odd_even_sort" => { bench_sink_odd_even_sort(2000); }
-                    "sink_wasm_add" => { sink_wasm_add(); }
-                    "test_stack" => { test_mm2_stack_simple(); }
-                    "test_stack_full" => { test_mm2_stack_comprehensive(); }
-                    "logic_query" => { bench_logic_query() }
-                    "logic_query_act" => { bench_logic_query_act() }
-                    "flybase" => { bench_flybase() }
-                    "tile_puzzle_states" => { bench_tile_puzzle_states() }
-                    s => { println!("bench not known: {s}") }
+                    "odd_even_sort" => {
+                        bench_sink_odd_even_sort(2000);
+                    }
+                    "sink_wasm_add" => {
+                        sink_wasm_add();
+                    }
+                    "test_stack" => {
+                        test_mm2_stack_simple();
+                    }
+                    "test_stack_full" => {
+                        test_mm2_stack_comprehensive();
+                    }
+                    "logic_query" => bench_logic_query(),
+                    "logic_query_act" => bench_logic_query_act(),
+                    "flybase" => bench_flybase(),
+                    "tile_puzzle_states" => bench_tile_puzzle_states(),
+                    s => {
+                        println!("bench not known: {s}")
+                    }
                 }
             }
         }
         Commands::Test { .. } => {
             #[cfg(not(debug_assertions))]
-            println!("WARNING running in release or -O3, if unintentional, build without --release and with the alternative .cargo rustflags");
+            println!(
+                "WARNING running in release or -O3, if unintentional, build without --release and with the alternative .cargo rustflags"
+            );
             lookup();
             positive();
             negative();
@@ -6915,19 +7955,38 @@ fn main() {
             parse_csv();
             parse_json();
         }
-        Commands::Run { input_path, steps, instrumentation, output_path } => {
+        Commands::Run {
+            input_path,
+            steps,
+            instrumentation,
+            output_path,
+        } => {
             #[cfg(debug_assertions)]
             println!("WARNING running in debug, if unintentional, build with --release");
             let mut s = Space::new();
             let f = std::fs::File::open(&input_path).unwrap();
             let mmapf = unsafe { memmap2::Mmap::map(&f).unwrap() };
             s.add_all_sexpr(&*mmapf);
-            if instrumentation > 0 { println!("loaded {} expressions", s.btm.val_count()) }
-            println!("loaded {:?} ; running and outputing to {:?}", &input_path, output_path.as_ref().or(Some(&"stdout".to_string())));
+            if instrumentation > 0 {
+                println!("loaded {} expressions", s.btm.val_count())
+            }
+            println!(
+                "loaded {:?} ; running and outputing to {:?}",
+                &input_path,
+                output_path.as_ref().or(Some(&"stdout".to_string()))
+            );
             let t0 = Instant::now();
             let mut performed = s.metta_calculus(steps);
-            println!("executing {performed} steps took {} ms (unifications {}, writes {}, transitions {})", t0.elapsed().as_millis(), unsafe { unifications }, unsafe { writes }, unsafe { transitions });
-            if instrumentation > 0 { println!("dumping {} expressions", s.btm.val_count()) }
+            println!(
+                "executing {performed} steps took {} ms (unifications {}, writes {}, transitions {})",
+                t0.elapsed().as_millis(),
+                unsafe { unifications },
+                unsafe { writes },
+                unsafe { transitions }
+            );
+            if instrumentation > 0 {
+                println!("dumping {} expressions", s.btm.val_count())
+            }
             if output_path.is_none() {
                 let mut v = vec![];
                 s.dump_all_sexpr(&mut v).unwrap();
@@ -6939,15 +7998,39 @@ fn main() {
                 s.dump_all_sexpr(&mut w).unwrap();
             }
         }
-        Commands::Convert { input_format, output_format, instrumentation, input_path, output_path } => {
+        Commands::Convert {
+            input_format,
+            output_format,
+            instrumentation,
+            input_path,
+            output_path,
+        } => {
             #[cfg(debug_assertions)]
             println!("WARNING running in debug, if unintentional, build with --release");
 
-            let input_path_extension = input_path.rfind(".").map(|i| &input_path[i+1..]);
-            if input_path_extension.unwrap_or("") != input_format.as_str() { println!("input format {} does not coincide with the extension {:?}", input_format, input_path_extension); }
-            let some_output_path = output_path.unwrap_or_else(|| format!("{}.{}", &input_path[..input_path.len()-input_path_extension.unwrap_or("").len()], output_format));
-            let output_path_extension = some_output_path.rfind(".").map(|i| &some_output_path[i+1..]);
-            if output_path_extension.unwrap_or("") != output_format.as_str() { println!("output format {} does not coincide with the extension {:?}", output_format, output_path_extension); }
+            let input_path_extension = input_path.rfind(".").map(|i| &input_path[i + 1..]);
+            if input_path_extension.unwrap_or("") != input_format.as_str() {
+                println!(
+                    "input format {} does not coincide with the extension {:?}",
+                    input_format, input_path_extension
+                );
+            }
+            let some_output_path = output_path.unwrap_or_else(|| {
+                format!(
+                    "{}.{}",
+                    &input_path[..input_path.len() - input_path_extension.unwrap_or("").len()],
+                    output_format
+                )
+            });
+            let output_path_extension = some_output_path
+                .rfind(".")
+                .map(|i| &some_output_path[i + 1..]);
+            if output_path_extension.unwrap_or("") != output_format.as_str() {
+                println!(
+                    "output format {} does not coincide with the extension {:?}",
+                    output_format, output_path_extension
+                );
+            }
 
             match (input_format.as_str(), output_format.as_str()) {
                 ("metta", "metta" | "act" | "paths") => {
@@ -6956,7 +8039,9 @@ fn main() {
                     let mmapf = unsafe { memmap2::Mmap::map(&f).unwrap() };
                     s.add_all_sexpr(&*mmapf);
                     println!("done loading in memory");
-                    if instrumentation > 0 { println!("dumping {} expressions", s.btm.val_count()) }
+                    if instrumentation > 0 {
+                        println!("dumping {} expressions", s.btm.val_count())
+                    }
 
                     match output_format.as_str() {
                         "metta" => {
@@ -6970,14 +8055,18 @@ fn main() {
                         "paths" => {
                             s.backup_paths(some_output_path);
                         }
-                        _ => { unreachable!() }
+                        _ => {
+                            unreachable!()
+                        }
                     }
                 }
                 ("paths", "metta" | "act" | "paths") => {
                     let mut s = Space::new();
                     s.restore_paths(&input_path);
                     println!("done loading in memory");
-                    if instrumentation > 0 { println!("dumping {} expressions", s.btm.val_count()) }
+                    if instrumentation > 0 {
+                        println!("dumping {} expressions", s.btm.val_count())
+                    }
 
                     match output_format.as_str() {
                         "metta" => {
@@ -6991,7 +8080,9 @@ fn main() {
                         "paths" => {
                             s.backup_paths(some_output_path);
                         }
-                        _ => { unreachable!() }
+                        _ => {
+                            unreachable!()
+                        }
                     }
                 }
                 ("json", "upaths") => {
@@ -7002,7 +8093,9 @@ fn main() {
                     #[cfg(all(feature = "nightly"))]
                     jsonl_upaths(input_path, some_output_path);
                 }
-                (_, _) => { panic!("unsupported conversion") }
+                (_, _) => {
+                    panic!("unsupported conversion")
+                }
             }
         }
     }

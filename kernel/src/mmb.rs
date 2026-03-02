@@ -1,5 +1,5 @@
 // mmb.rs - Complete MMB file reader, parser, and inspector
-// Use as: 
+// Use as:
 //   - Library: mod mmb; use mmb::MmbFile;
 //   - Binary: cargo run --bin mmb -- [--full] <file.mmb>
 
@@ -45,15 +45,17 @@ impl MmbHeader {
             p_proof: u32::from_le_bytes([buf[24], buf[25], buf[26], buf[27]]),
             reserved2: u32::from_le_bytes([buf[28], buf[29], buf[30], buf[31]]),
             p_index: u64::from_le_bytes([
-                buf[32], buf[33], buf[34], buf[35],
-                buf[36], buf[37], buf[38], buf[39],
+                buf[32], buf[33], buf[34], buf[35], buf[36], buf[37], buf[38], buf[39],
             ]),
         })
     }
 
     pub fn validate(&self) -> Result<(), String> {
         if &self.magic != b"MM0B" {
-            return Err(format!("Invalid magic: expected 'MM0B', got {:?}", self.magic));
+            return Err(format!(
+                "Invalid magic: expected 'MM0B', got {:?}",
+                self.magic
+            ));
         }
         if self.version != 1 {
             return Err(format!("Unsupported version: {}", self.version));
@@ -103,8 +105,9 @@ impl MmbFile {
     pub fn from_bytes(data: Vec<u8>) -> io::Result<Self> {
         let header = MmbHeader::from_bytes(&data)
             .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
-        
-        header.validate()
+
+        header
+            .validate()
             .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
 
         let mut sorts = Vec::new();
@@ -115,7 +118,11 @@ impl MmbFile {
             }
         }
 
-        Ok(MmbFile { header, data, sorts })
+        Ok(MmbFile {
+            header,
+            data,
+            sorts,
+        })
     }
 
     pub fn proof_stream(&self) -> &[u8] {
@@ -131,7 +138,10 @@ impl MmbFile {
     // Quick summary
     pub fn print_summary(&self) {
         println!("=== MMB File Summary ===");
-        println!("Magic:    {:?}", std::str::from_utf8(&self.header.magic).unwrap_or("?"));
+        println!(
+            "Magic:    {:?}",
+            std::str::from_utf8(&self.header.magic).unwrap_or("?")
+        );
         println!("Version:  {}", self.header.version);
         println!("Sorts:    {}", self.header.num_sorts);
         println!("Terms:    {}", self.header.num_terms);
@@ -147,18 +157,33 @@ impl MmbFile {
 
         // Header
         println!("=== HEADER (0x00-0x27) ===");
-        println!("0x00-03 Magic:     {:?} \"{}\"", self.header.magic, 
-            std::str::from_utf8(&self.header.magic).unwrap_or("?"));
+        println!(
+            "0x00-03 Magic:     {:?} \"{}\"",
+            self.header.magic,
+            std::str::from_utf8(&self.header.magic).unwrap_or("?")
+        );
         println!("0x04    Version:   {}", self.header.version);
         println!("0x05    Sorts:     {}", self.header.num_sorts);
         println!("0x06-07 Reserved:  {:#06x}", self.header.reserved);
         println!("0x08-0b #Terms:    {}", self.header.num_terms);
         println!("0x0c-0f #Thms:     {}", self.header.num_thms);
-        println!("0x10-13 p_terms:   {:#010x} (byte {})", self.header.p_terms, self.header.p_terms);
-        println!("0x14-17 p_thms:    {:#010x} (byte {})", self.header.p_thms, self.header.p_thms);
-        println!("0x18-1b p_proof:   {:#010x} (byte {})", self.header.p_proof, self.header.p_proof);
+        println!(
+            "0x10-13 p_terms:   {:#010x} (byte {})",
+            self.header.p_terms, self.header.p_terms
+        );
+        println!(
+            "0x14-17 p_thms:    {:#010x} (byte {})",
+            self.header.p_thms, self.header.p_thms
+        );
+        println!(
+            "0x18-1b p_proof:   {:#010x} (byte {})",
+            self.header.p_proof, self.header.p_proof
+        );
         println!("0x1c-1f Reserved2: {:#010x}", self.header.reserved2);
-        println!("0x20-27 p_index:   {:#018x} (byte {})", self.header.p_index, self.header.p_index);
+        println!(
+            "0x20-27 p_index:   {:#018x} (byte {})",
+            self.header.p_index, self.header.p_index
+        );
 
         // Validation
         println!("\n=== VALIDATION ===");
@@ -167,7 +192,7 @@ impl MmbFile {
         } else {
             println!("❌ Invalid magic");
         }
-        
+
         if self.header.version == 1 {
             println!("✓ Valid version");
         } else {
@@ -180,7 +205,10 @@ impl MmbFile {
         if self.header.p_terms as usize == expected_p_terms {
             println!("✓ p_terms correctly aligned to 8-byte boundary");
         } else {
-            println!("⚠ p_terms = {}, expected {} (alignment)", self.header.p_terms, expected_p_terms);
+            println!(
+                "⚠ p_terms = {}, expected {} (alignment)",
+                self.header.p_terms, expected_p_terms
+            );
         }
 
         if self.header.p_terms < self.header.p_thms && self.header.p_thms < self.header.p_proof {
@@ -188,29 +216,58 @@ impl MmbFile {
         }
 
         // Sorts
-        println!("\n=== SORTS ({} bytes at offset 40) ===", self.header.num_sorts);
+        println!(
+            "\n=== SORTS ({} bytes at offset 40) ===",
+            self.header.num_sorts
+        );
         for (i, sort) in self.sorts.iter().enumerate() {
             print!("  Sort {:2}: {:#04x} ", i, sort.raw);
             let mut flags = Vec::new();
-            if sort.pure { flags.push("pure"); }
-            if sort.strict { flags.push("strict"); }
-            if sort.provable { flags.push("provable"); }
-            if sort.free { flags.push("free"); }
-            println!("{}", if flags.is_empty() { "(none)".to_string() } else { flags.join(" ") });
+            if sort.pure {
+                flags.push("pure");
+            }
+            if sort.strict {
+                flags.push("strict");
+            }
+            if sort.provable {
+                flags.push("provable");
+            }
+            if sort.free {
+                flags.push("free");
+            }
+            println!(
+                "{}",
+                if flags.is_empty() {
+                    "(none)".to_string()
+                } else {
+                    flags.join(" ")
+                }
+            );
         }
 
         // Padding
         let sorts_end = 40 + self.header.num_sorts as usize;
         if sorts_end < self.header.p_terms as usize {
             let padding_size = self.header.p_terms as usize - sorts_end;
-            println!("\n=== PADDING (0x{:x}-0x{:x}) ===", sorts_end, self.header.p_terms - 1);
-            println!("Alignment padding: {} bytes (for 8-byte alignment)", padding_size);
+            println!(
+                "\n=== PADDING (0x{:x}-0x{:x}) ===",
+                sorts_end,
+                self.header.p_terms - 1
+            );
+            println!(
+                "Alignment padding: {} bytes (for 8-byte alignment)",
+                padding_size
+            );
         }
 
         // Terms
-        println!("\n=== TERMS TABLE (0x{:x}-0x{:x}) ===", self.header.p_terms, self.header.p_thms - 1);
+        println!(
+            "\n=== TERMS TABLE (0x{:x}-0x{:x}) ===",
+            self.header.p_terms,
+            self.header.p_thms - 1
+        );
         println!("Number of entries: {}", self.header.num_terms);
-        
+
         let max_show = self.header.num_terms.min(10);
         if max_show > 0 {
             println!("\nFirst {} term entries:", max_show);
@@ -218,12 +275,14 @@ impl MmbFile {
         for i in 0..max_show {
             let offset = self.header.p_terms as usize + (i as usize * 8);
             if offset + 8 <= self.data.len() {
-                let entry = &self.data[offset..offset+8];
+                let entry = &self.data[offset..offset + 8];
                 let num_args = entry[0];
                 let sort = entry[1];
                 let p_args = u32::from_le_bytes([entry[4], entry[5], entry[6], entry[7]]);
-                println!("  Term {}: {:02x?}  (sort={}, args={}, p_args=0x{:x})",
-                         i, entry, sort, num_args, p_args);
+                println!(
+                    "  Term {}: {:02x?}  (sort={}, args={}, p_args=0x{:x})",
+                    i, entry, sort, num_args, p_args
+                );
             }
         }
         if self.header.num_terms > max_show {
@@ -231,9 +290,13 @@ impl MmbFile {
         }
 
         // Theorems
-        println!("\n=== THEOREMS TABLE (0x{:x}-0x{:x}) ===", self.header.p_thms, self.header.p_proof - 1);
+        println!(
+            "\n=== THEOREMS TABLE (0x{:x}-0x{:x}) ===",
+            self.header.p_thms,
+            self.header.p_proof - 1
+        );
         println!("Number of entries: {}", self.header.num_thms);
-        
+
         let max_show = self.header.num_thms.min(10);
         if max_show > 0 {
             println!("\nFirst {} theorem entries:", max_show);
@@ -241,11 +304,13 @@ impl MmbFile {
         for i in 0..max_show {
             let offset = self.header.p_thms as usize + (i as usize * 8);
             if offset + 8 <= self.data.len() {
-                let entry = &self.data[offset..offset+8];
+                let entry = &self.data[offset..offset + 8];
                 let num_args = entry[0];
                 let p_args = u32::from_le_bytes([entry[4], entry[5], entry[6], entry[7]]);
-                println!("  Thm {}: {:02x?}  (args={}, p_args=0x{:x})",
-                         i, entry, num_args, p_args);
+                println!(
+                    "  Thm {}: {:02x?}  (args={}, p_args=0x{:x})",
+                    i, entry, num_args, p_args
+                );
             }
         }
         if self.header.num_thms > max_show {
@@ -258,38 +323,53 @@ impl MmbFile {
         } else {
             self.data.len()
         };
-        println!("\n=== PROOF STREAM (0x{:x}-0x{:x}) ===", self.header.p_proof, proof_end - 1);
+        println!(
+            "\n=== PROOF STREAM (0x{:x}-0x{:x}) ===",
+            self.header.p_proof,
+            proof_end - 1
+        );
         println!("Size: {} bytes", proof_end - self.header.p_proof as usize);
-        
+
         println!("\nFirst 64 bytes of proof stream:");
         self.hex_dump(self.header.p_proof as usize, 64);
 
         // Index
         if self.header.p_index > 0 {
-            println!("\n=== INDEX (0x{:x}-0x{:x}) ===", self.header.p_index, self.data.len() - 1);
-            println!("Size: {} bytes", self.data.len() - self.header.p_index as usize);
+            println!(
+                "\n=== INDEX (0x{:x}-0x{:x}) ===",
+                self.header.p_index,
+                self.data.len() - 1
+            );
+            println!(
+                "Size: {} bytes",
+                self.data.len() - self.header.p_index as usize
+            );
         }
     }
 
     pub fn hex_dump(&self, start: usize, len: usize) {
         let end = (start + len).min(self.data.len());
-        
+
         for offset in (start..end).step_by(16) {
             let chunk_end = (offset + 16).min(end);
             let chunk = &self.data[offset..chunk_end];
-            
+
             print!("{:08x}: ", offset);
-            
+
             for (i, byte) in chunk.iter().enumerate() {
                 print!("{:02x} ", byte);
-                if i == 7 { print!(" "); }
+                if i == 7 {
+                    print!(" ");
+                }
             }
-            
+
             for i in chunk.len()..16 {
                 print!("   ");
-                if i == 7 { print!(" "); }
+                if i == 7 {
+                    print!(" ");
+                }
             }
-            
+
             print!(" |");
             for byte in chunk {
                 let c = if *byte >= 0x20 && *byte <= 0x7e {
@@ -310,7 +390,7 @@ impl MmbFile {
 
 fn main() -> io::Result<()> {
     let args: Vec<String> = env::args().collect();
-    
+
     if args.len() < 2 {
         eprintln!("Usage: {} [--full] <file.mmb>", args[0]);
         eprintln!();

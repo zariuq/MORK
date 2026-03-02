@@ -1,9 +1,22 @@
-use std::io::{BufRead, Read, Write};
-use std::{mem, process, ptr};
+use crate::space::ACT_PATH;
+use futures::StreamExt;
+use log::*;
+use mork_expr::{
+    Expr, ExprEnv, ExprZipper, ExtractFailure, Tag, UnificationFailure, apply, byte_item, destruct,
+    item_byte, maybe_byte_item, parse, serialize, traverseh, unify,
+};
+use mork_frontend::bytestring_parser::{Context, Parser, ParserError};
+use mork_frontend::json_parser::Transcriber;
+use mork_interning::{SharedMapping, SharedMappingHandle, WritePermit};
+use pathmap::PathMap;
+use pathmap::ring::{AlgebraicStatus, Lattice};
+use pathmap::utils::{BitMask, ByteMask};
+use pathmap::zipper::*;
 use std::any::Any;
 use std::collections::{BTreeMap, HashSet};
 use std::fs::File;
 use std::hint::unreachable_unchecked;
+use std::io::{BufRead, Read, Write};
 use std::mem::MaybeUninit;
 use std::ops::{Coroutine, CoroutineState};
 use std::pin::Pin;
@@ -11,26 +24,16 @@ use std::ptr::{addr_of, null, null_mut, slice_from_raw_parts, slice_from_raw_par
 use std::sync::LazyLock;
 use std::task::Poll;
 use std::time::Instant;
-use futures::StreamExt;
-use pathmap::ring::{AlgebraicStatus, Lattice};
-use mork_expr::{byte_item, maybe_byte_item, Expr, ExprZipper, ExtractFailure, item_byte, parse, serialize, Tag, traverseh, ExprEnv, unify, UnificationFailure, apply, destruct};
-use mork_frontend::bytestring_parser::{Parser, ParserError, Context};
-use mork_interning::{WritePermit, SharedMapping, SharedMappingHandle};
-use pathmap::utils::{BitMask, ByteMask};
-use pathmap::zipper::*;
-use mork_frontend::json_parser::Transcriber;
-use log::*;
-use pathmap::PathMap;
-use crate::space::ACT_PATH;
+use std::{mem, process, ptr};
 
 pub(crate) enum WriteResourceRequest {
     BTM(&'static [u8]),
-    ACT(&'static str)
+    ACT(&'static str),
 }
 
 pub(crate) enum WriteResource<'w, 'a, 'k> {
     BTM(&'w mut WriteZipperTracked<'a, 'k, ()>),
-    ACT(())
+    ACT(()),
 }
 
 // trait JoinLattice  {
@@ -63,77 +66,175 @@ pub(crate) enum WriteResource<'w, 'a, 'k> {
 
 pub trait Sink {
     fn new(e: Expr) -> Self;
-    fn request(&self) ->  impl Iterator<Item=WriteResourceRequest>;
-    fn sink<'w, 'a, 'k, It : Iterator<Item=WriteResource<'w, 'a, 'k>>>(&mut self, it: It, path: &[u8]) where 'a : 'w, 'k : 'w;
-    fn finalize<'w, 'a, 'k, It : Iterator<Item=WriteResource<'w, 'a, 'k>>>(&mut self, it: It) -> bool where 'a : 'w, 'k : 'w;
+    fn request(&self) -> impl Iterator<Item = WriteResourceRequest>;
+    fn sink<'w, 'a, 'k, It: Iterator<Item = WriteResource<'w, 'a, 'k>>>(
+        &mut self,
+        it: It,
+        path: &[u8],
+    ) where
+        'a: 'w,
+        'k: 'w;
+    fn finalize<'w, 'a, 'k, It: Iterator<Item = WriteResource<'w, 'a, 'k>>>(
+        &mut self,
+        it: It,
+    ) -> bool
+    where
+        'a: 'w,
+        'k: 'w;
 }
 
-pub struct AddSink { e: Expr, changed: bool }
+pub struct AddSink {
+    e: Expr,
+    changed: bool,
+}
 
 impl Sink for AddSink {
-    fn new(e: Expr) -> Self { AddSink { e, changed: false } }
-    fn request(&self) -> impl Iterator<Item=WriteResourceRequest> {
-        let p = &unsafe { self.e.prefix().unwrap_or_else(|x| self.e.span()).as_ref().unwrap() }[3..];
+    fn new(e: Expr) -> Self {
+        AddSink { e, changed: false }
+    }
+    fn request(&self) -> impl Iterator<Item = WriteResourceRequest> {
+        let p = &unsafe {
+            self.e
+                .prefix()
+                .unwrap_or_else(|x| self.e.span())
+                .as_ref()
+                .unwrap()
+        }[3..];
         trace!(target: "sink", "+ requesting {}", serialize(p));
         std::iter::once(WriteResourceRequest::BTM(p))
     }
-    fn sink<'w, 'a, 'k, It : Iterator<Item=WriteResource<'w, 'a, 'k>>>(&mut self, mut it: It, path: &[u8]) where 'a : 'w, 'k : 'w {
-        let WriteResource::BTM(wz) = it.next().unwrap() else { unreachable!() };
-        let mpath = &path[3+wz.root_prefix_path().len()..];
+    fn sink<'w, 'a, 'k, It: Iterator<Item = WriteResource<'w, 'a, 'k>>>(
+        &mut self,
+        mut it: It,
+        path: &[u8],
+    ) where
+        'a: 'w,
+        'k: 'w,
+    {
+        let WriteResource::BTM(wz) = it.next().unwrap() else {
+            unreachable!()
+        };
+        let mpath = &path[3 + wz.root_prefix_path().len()..];
         trace!(target: "sink", "+ at '{}' sinking raw '{}'", serialize(wz.root_prefix_path()), serialize(path));
         trace!(target: "sink", "+ sinking '{}'", serialize(mpath));
         wz.move_to_path(mpath);
         self.changed |= wz.set_val(()).is_none();
     }
-    fn finalize<'w, 'a, 'k, It : Iterator<Item=WriteResource<'w, 'a, 'k>>>(&mut self, it: It) -> bool where 'a : 'w, 'k : 'w {
+    fn finalize<'w, 'a, 'k, It: Iterator<Item = WriteResource<'w, 'a, 'k>>>(
+        &mut self,
+        it: It,
+    ) -> bool
+    where
+        'a: 'w,
+        'k: 'w,
+    {
         trace!(target: "sink", "+ finalizing");
         self.changed
     }
 }
 
-pub struct ACTSink { e: Expr, file: &'static str, tmp: PathMap<()> }
+pub struct ACTSink {
+    e: Expr,
+    file: &'static str,
+    tmp: PathMap<()>,
+}
 impl Sink for ACTSink {
     fn new(e: Expr) -> Self {
         destruct!(e, ("ACT" {act: &str} se), {
             return ACTSink { e, file: act, tmp: PathMap::new() }
         }, _err => { panic!("act not the right shape") });
     }
-    fn request(&self) ->  impl Iterator<Item=WriteResourceRequest> {
+    fn request(&self) -> impl Iterator<Item = WriteResourceRequest> {
         trace!(target: "sink", "ACT requesting {}", self.file);
         std::iter::once(WriteResourceRequest::ACT(self.file))
     }
-    fn sink<'w, 'a, 'k, It : Iterator<Item=WriteResource<'w, 'a, 'k>>>(&mut self, mut it: It, path: &[u8]) where 'a : 'w, 'k : 'w {
+    fn sink<'w, 'a, 'k, It: Iterator<Item = WriteResource<'w, 'a, 'k>>>(
+        &mut self,
+        mut it: It,
+        path: &[u8],
+    ) where
+        'a: 'w,
+        'k: 'w,
+    {
         trace!(target: "sink", "ACT sinking '{}'", serialize(path));
         self.tmp.insert(path, ());
     }
-    fn finalize<'w, 'a, 'k, It : Iterator<Item=WriteResource<'w, 'a, 'k>>>(&mut self, mut it: It) -> bool where 'a : 'w, 'k : 'w {
+    fn finalize<'w, 'a, 'k, It: Iterator<Item = WriteResource<'w, 'a, 'k>>>(
+        &mut self,
+        mut it: It,
+    ) -> bool
+    where
+        'a: 'w,
+        'k: 'w,
+    {
         trace!(target: "sink", "ACT finalizing");
-        let _ = it.next().unwrap() else { unreachable!() };
+        let _ = it.next().unwrap() else {
+            unreachable!()
+        };
         pathmap::arena_compact::ArenaCompactTree::dump_from_zipper(
-            self.tmp.read_zipper(), |_v| 0, format!("{}{}.act", ACT_PATH, self.file)).map(|_tree| ());
+            self.tmp.read_zipper(),
+            |_v| 0,
+            format!("{}{}.act", ACT_PATH, self.file),
+        )
+        .map(|_tree| ());
         true
     }
 }
 
-pub struct RemoveSink { e: Expr, remove: PathMap<()> }
+pub struct RemoveSink {
+    e: Expr,
+    remove: PathMap<()>,
+}
 // perhaps more performant to graft, remove*, and graft back?
 impl Sink for RemoveSink {
-    fn new(e: Expr) -> Self { RemoveSink { e, remove: PathMap::new() } }
-    fn request(&self) ->  impl Iterator<Item=WriteResourceRequest> {
+    fn new(e: Expr) -> Self {
+        RemoveSink {
+            e,
+            remove: PathMap::new(),
+        }
+    }
+    fn request(&self) -> impl Iterator<Item = WriteResourceRequest> {
         // !! we're never grabbing the full expression path, because then we don't have the ability to remove the root value
-        let p = &unsafe { self.e.prefix().unwrap_or_else(|x| { let s = self.e.span(); slice_from_raw_parts(self.e.ptr, s.len() - 1) }).as_ref().unwrap() }[3..];
+        let p = &unsafe {
+            self.e
+                .prefix()
+                .unwrap_or_else(|x| {
+                    let s = self.e.span();
+                    slice_from_raw_parts(self.e.ptr, s.len() - 1)
+                })
+                .as_ref()
+                .unwrap()
+        }[3..];
         trace!(target: "sink", "- requesting {}", serialize(p));
         std::iter::once(WriteResourceRequest::BTM(p))
     }
-    fn sink<'w, 'a, 'k, It : Iterator<Item=WriteResource<'w, 'a, 'k>>>(&mut self, mut it: It, path: &[u8]) where 'a : 'w, 'k : 'w {
-        let WriteResource::BTM(wz) = it.next().unwrap() else { unreachable!() };
-        let mpath = &path[3+wz.root_prefix_path().len()..];
+    fn sink<'w, 'a, 'k, It: Iterator<Item = WriteResource<'w, 'a, 'k>>>(
+        &mut self,
+        mut it: It,
+        path: &[u8],
+    ) where
+        'a: 'w,
+        'k: 'w,
+    {
+        let WriteResource::BTM(wz) = it.next().unwrap() else {
+            unreachable!()
+        };
+        let mpath = &path[3 + wz.root_prefix_path().len()..];
         trace!(target: "sink", "- at '{}' sinking raw '{}'", serialize(wz.root_prefix_path()), serialize(path));
         trace!(target: "sink", "- sinking '{}'", serialize(mpath));
         self.remove.insert(mpath, ());
     }
-    fn finalize<'w, 'a, 'k, It : Iterator<Item=WriteResource<'w, 'a, 'k>>>(&mut self, mut it: It) -> bool where 'a : 'w, 'k : 'w {
-        let WriteResource::BTM(wz) = it.next().unwrap() else { unreachable!() };
+    fn finalize<'w, 'a, 'k, It: Iterator<Item = WriteResource<'w, 'a, 'k>>>(
+        &mut self,
+        mut it: It,
+    ) -> bool
+    where
+        'a: 'w,
+        'k: 'w,
+    {
+        let WriteResource::BTM(wz) = it.next().unwrap() else {
+            unreachable!()
+        };
         wz.reset();
         trace!(target: "sink", "- finalizing by subtracting {} at '{}'", self.remove.val_count(), serialize(wz.origin_path()));
         // match self.remove.remove(&[]) {
@@ -145,30 +246,70 @@ impl Sink for RemoveSink {
         //     }
         // }
         match wz.subtract_into(&self.remove.read_zipper(), true) {
-            AlgebraicStatus::Element => { true }
-            AlgebraicStatus::Identity => { false }
-            AlgebraicStatus::None => { true } // GOAT maybe not?
+            AlgebraicStatus::Element => true,
+            AlgebraicStatus::Identity => false,
+            AlgebraicStatus::None => true, // GOAT maybe not?
         }
     }
 }
 
-pub struct HeadSink { e: Expr, head: PathMap<()>, skip: usize, count: usize, max: usize, top: Vec<u8> }
+pub struct HeadSink {
+    e: Expr,
+    head: PathMap<()>,
+    skip: usize,
+    count: usize,
+    max: usize,
+    top: Vec<u8>,
+}
 impl Sink for HeadSink {
     fn new(e: Expr) -> Self {
-        let mut ez = ExprZipper::new(e); ez.next(); ez.next();
-        let max_s = ez.item().err().expect("cnt can not be an expression or variable");
-        let max: usize = str::from_utf8(max_s).expect("string encoded numbers for now").parse().expect("a number");
+        let mut ez = ExprZipper::new(e);
+        ez.next();
+        ez.next();
+        let max_s = ez
+            .item()
+            .err()
+            .expect("cnt can not be an expression or variable");
+        let max: usize = str::from_utf8(max_s)
+            .expect("string encoded numbers for now")
+            .parse()
+            .expect("a number");
         assert_ne!(max, 0);
-        HeadSink { e, head: PathMap::new(), skip: 1 + 1+4 + 1+max_s.len(), count: 0, max, top: vec![] }
+        HeadSink {
+            e,
+            head: PathMap::new(),
+            skip: 1 + 1 + 4 + 1 + max_s.len(),
+            count: 0,
+            max,
+            top: vec![],
+        }
     }
-    fn request(&self) ->  impl Iterator<Item=WriteResourceRequest> {
-        let p = &unsafe { self.e.prefix().unwrap_or_else(|x| { let s = self.e.span(); slice_from_raw_parts(self.e.ptr, s.len() - 1) }).as_ref().unwrap() }[self.skip..];
+    fn request(&self) -> impl Iterator<Item = WriteResourceRequest> {
+        let p = &unsafe {
+            self.e
+                .prefix()
+                .unwrap_or_else(|x| {
+                    let s = self.e.span();
+                    slice_from_raw_parts(self.e.ptr, s.len() - 1)
+                })
+                .as_ref()
+                .unwrap()
+        }[self.skip..];
         trace!(target: "sink", "head requesting {}", serialize(p));
         std::iter::once(WriteResourceRequest::BTM(p))
     }
-    fn sink<'w, 'a, 'k, It : Iterator<Item=WriteResource<'w, 'a, 'k>>>(&mut self, mut it: It, path: &[u8]) where 'a : 'w, 'k : 'w {
-        let WriteResource::BTM(wz) = it.next().unwrap() else { unreachable!() };
-        let mpath = &path[self.skip+wz.root_prefix_path().len()..];
+    fn sink<'w, 'a, 'k, It: Iterator<Item = WriteResource<'w, 'a, 'k>>>(
+        &mut self,
+        mut it: It,
+        path: &[u8],
+    ) where
+        'a: 'w,
+        'k: 'w,
+    {
+        let WriteResource::BTM(wz) = it.next().unwrap() else {
+            unreachable!()
+        };
+        let mpath = &path[self.skip + wz.root_prefix_path().len()..];
         trace!(target: "sink", "head at '{}' sinking raw '{}'", serialize(wz.root_prefix_path()), serialize(path));
         if self.count == self.max {
             if &self.top[..] <= mpath {
@@ -199,21 +340,37 @@ impl Sink for HeadSink {
             }
         }
     }
-    fn finalize<'w, 'a, 'k, It : Iterator<Item=WriteResource<'w, 'a, 'k>>>(&mut self, mut it: It) -> bool where 'a : 'w, 'k : 'w {
-        let WriteResource::BTM(wz) = it.next().unwrap() else { unreachable!() };
+    fn finalize<'w, 'a, 'k, It: Iterator<Item = WriteResource<'w, 'a, 'k>>>(
+        &mut self,
+        mut it: It,
+    ) -> bool
+    where
+        'a: 'w,
+        'k: 'w,
+    {
+        let WriteResource::BTM(wz) = it.next().unwrap() else {
+            unreachable!()
+        };
         wz.reset();
         trace!(target: "sink", "head finalizing by joining {} at '{}'", self.count, serialize(wz.origin_path()));
 
         match wz.join_into(&self.head.read_zipper()) {
-            AlgebraicStatus::Element => { true }
-            AlgebraicStatus::Identity => { false }
-            AlgebraicStatus::None => { true } // GOAT maybe not?
+            AlgebraicStatus::Element => true,
+            AlgebraicStatus::Identity => false,
+            AlgebraicStatus::None => true, // GOAT maybe not?
         }
     }
 }
 
 #[cfg(feature = "wasm")]
-pub struct WASMSink { e: Expr, skip: usize, changed: bool, module: wasmtime::Module, store: wasmtime::Store<()>, instance: wasmtime::Instance }
+pub struct WASMSink {
+    e: Expr,
+    skip: usize,
+    changed: bool,
+    module: wasmtime::Module,
+    store: wasmtime::Store<()>,
+    instance: wasmtime::Instance,
+}
 
 #[cfg(feature = "wasm")]
 static ENGINE_LINKER: LazyLock<(wasmtime::Engine, wasmtime::Linker<()>)> = LazyLock::new(|| {
@@ -250,15 +407,21 @@ static ENGINE_LINKER: LazyLock<(wasmtime::Engine, wasmtime::Linker<()>)> = LazyL
 
     let mut linker = wasmtime::Linker::new(&engine);
 
-    linker.func_wrap("", "i32.bswap", |param: i32| param.to_be()).unwrap();
-    linker.func_wrap("", "i64.bswap", |param: i64| param.to_be()).unwrap();
+    linker
+        .func_wrap("", "i32.bswap", |param: i32| param.to_be())
+        .unwrap();
+    linker
+        .func_wrap("", "i64.bswap", |param: i64| param.to_be())
+        .unwrap();
 
     (engine, linker)
 });
 
 #[cfg(feature = "wasm")]
 static mut LINKER: Option<wasmtime::Linker<()>> = None;
-macro_rules! wasm_ctx { () => { r#"
+macro_rules! wasm_ctx {
+    () => {
+        r#"
 (module
   (import "" "i32.bswap" (func $i32.bswap (param i32) (result i32)))
   (import "" "i64.bswap" (func $i64.bswap (param i64) (result i64)))
@@ -273,40 +436,71 @@ macro_rules! wasm_ctx { () => { r#"
     {:?}
   )
 )
-"# } }
-
+"#
+    };
+}
 
 #[cfg(feature = "wasm")]
 impl Sink for WASMSink {
     fn new(e: Expr) -> Self {
-        let mut ez = ExprZipper::new(e); ez.next(); ez.next();
+        let mut ez = ExprZipper::new(e);
+        ez.next();
+        ez.next();
         let program_e = ez.subexpr();
         let wat = format!(wasm_ctx!(), program_e);
         let module = wasmtime::Module::new(&ENGINE_LINKER.0, wat).unwrap();
         let mut store = wasmtime::Store::new(&ENGINE_LINKER.0, ());
         let instance = (&ENGINE_LINKER.1).instantiate(&mut store, &module).unwrap();
 
-        WASMSink { e, skip: 1 + 1+4 + program_e.span().len(), changed: false, module, store, instance }
+        WASMSink {
+            e,
+            skip: 1 + 1 + 4 + program_e.span().len(),
+            changed: false,
+            module,
+            store,
+            instance,
+        }
     }
-    fn request(&self) -> impl Iterator<Item=WriteResourceRequest> {
+    fn request(&self) -> impl Iterator<Item = WriteResourceRequest> {
         // let p = &unsafe { self.e.prefix().unwrap_or_else(|x| { let s = self.e.span(); slice_from_raw_parts(self.e.ptr, s.len() - 1) }).as_ref().unwrap() }[self.skip..];
         // trace!(target: "sink", "wasm requesting {}", serialize(p));
         // std::iter::once(p)
         static empty: [u8; 0] = [];
         std::iter::once(WriteResourceRequest::BTM(&empty[..]))
     }
-    fn sink<'w, 'a, 'k, It: Iterator<Item=&'w mut WriteZipperUntracked<'a, 'k, ()>>>(&mut self, mut it: It, path: &[u8]) where 'a : 'w, 'k : 'w {
+    fn sink<'w, 'a, 'k, It: Iterator<Item = &'w mut WriteZipperUntracked<'a, 'k, ()>>>(
+        &mut self,
+        mut it: It,
+        path: &[u8],
+    ) where
+        'a: 'w,
+        'k: 'w,
+    {
         let mut wz = it.next().unwrap();
-        let mpath = &path[self.skip+wz.root_prefix_path().len()..];
+        let mpath = &path[self.skip + wz.root_prefix_path().len()..];
         trace!(target: "sink", "wasm at '{}' sinking raw '{}'", serialize(wz.root_prefix_path()), serialize(path));
         trace!(target: "sink", "wasm input '{}'", serialize(mpath));
         let imem = self.instance.get_memory(&mut self.store, "in").unwrap();
         imem.write(&mut self.store, 0, mpath).unwrap();
-        let run = self.instance.get_typed_func::<(), ()>(&mut self.store, "_otf_grounding").unwrap();
+        let run = self
+            .instance
+            .get_typed_func::<(), ()>(&mut self.store, "_otf_grounding")
+            .unwrap();
         match run.call(&mut self.store, ()) {
             Ok(()) => {
-                let omem = self.instance.get_memory(&mut self.store, "out").unwrap().data(&mut self.store);
-                let ospan = unsafe { Expr{ ptr: omem.as_ptr().cast_mut() }.span().as_ref().unwrap() };
+                let omem = self
+                    .instance
+                    .get_memory(&mut self.store, "out")
+                    .unwrap()
+                    .data(&mut self.store);
+                let ospan = unsafe {
+                    Expr {
+                        ptr: omem.as_ptr().cast_mut(),
+                    }
+                    .span()
+                    .as_ref()
+                    .unwrap()
+                };
                 trace!(target: "sink", "wasm output '{}'", serialize(ospan));
                 wz.move_to_path(ospan);
                 self.changed |= wz.set_val(()).is_none();
@@ -315,9 +509,15 @@ impl Sink for WASMSink {
                 trace!(target: "sink", "wasm error {:?}", e);
             }
         }
-
     }
-    fn finalize<'w, 'a, 'k, It: Iterator<Item=&'w mut WriteZipperUntracked<'a, 'k, ()>>>(&mut self, mut it: It) -> bool where 'a : 'w, 'k : 'w  {
+    fn finalize<'w, 'a, 'k, It: Iterator<Item = &'w mut WriteZipperUntracked<'a, 'k, ()>>>(
+        &mut self,
+        mut it: It,
+    ) -> bool
+    where
+        'a: 'w,
+        'k: 'w,
+    {
         trace!(target: "sink", "wasm finalizing");
         self.changed
     }
@@ -327,190 +527,321 @@ impl Sink for WASMSink {
 // (count (count of $k is $i) $i ($x $y))   unify
 // (count (count of r2 is $i) $i (P Q))
 // (count (count of r2 is 3) 3 ($x $y))
-pub struct CountSink { e: Expr, unique: PathMap<()> }
+pub struct CountSink {
+    e: Expr,
+    unique: PathMap<()>,
+}
 impl Sink for CountSink {
     fn new(e: Expr) -> Self {
-        CountSink { e, unique: PathMap::new() }
+        CountSink {
+            e,
+            unique: PathMap::new(),
+        }
     }
-    fn request(&self) ->  impl Iterator<Item=WriteResourceRequest> {
-        let p = &unsafe { self.e.prefix().unwrap_or_else(|x| { let s = self.e.span(); slice_from_raw_parts(self.e.ptr, s.len() - 1) }).as_ref().unwrap() }[7..];
+    fn request(&self) -> impl Iterator<Item = WriteResourceRequest> {
+        let p = &unsafe {
+            self.e
+                .prefix()
+                .unwrap_or_else(|x| {
+                    let s = self.e.span();
+                    slice_from_raw_parts(self.e.ptr, s.len() - 1)
+                })
+                .as_ref()
+                .unwrap()
+        }[7..];
         trace!(target: "sink", "count requesting {}", serialize(p));
         std::iter::once(WriteResourceRequest::BTM(p))
     }
-    fn sink<'w, 'a, 'k, It : Iterator<Item=WriteResource<'w, 'a, 'k>>>(&mut self, mut it: It, path: &[u8]) where 'a : 'w, 'k : 'w {
-        let WriteResource::BTM(wz) = it.next().unwrap() else { unreachable!() };
-        let mpath = &path[7+wz.root_prefix_path().len()..];
-        let ctx = unsafe { Expr { ptr: mpath.as_ptr().cast_mut() } };
+    fn sink<'w, 'a, 'k, It: Iterator<Item = WriteResource<'w, 'a, 'k>>>(
+        &mut self,
+        mut it: It,
+        path: &[u8],
+    ) where
+        'a: 'w,
+        'k: 'w,
+    {
+        let WriteResource::BTM(wz) = it.next().unwrap() else {
+            unreachable!()
+        };
+        let mpath = &path[7 + wz.root_prefix_path().len()..];
+        let ctx = unsafe {
+            Expr {
+                ptr: mpath.as_ptr().cast_mut(),
+            }
+        };
         trace!(target: "sink", "count at '{}' sinking raw '{}'", serialize(wz.root_prefix_path()), serialize(path));
         trace!(target: "sink", "count registering in ctx {:?}", serialize(mpath));
         self.unique.insert(mpath, ());
     }
-    fn finalize<'w, 'a, 'k, It : Iterator<Item=WriteResource<'w, 'a, 'k>>>(&mut self, mut it: It) -> bool where 'a : 'w, 'k : 'w {
-        let WriteResource::BTM(wz) = it.next().unwrap() else { unreachable!() };
+    fn finalize<'w, 'a, 'k, It: Iterator<Item = WriteResource<'w, 'a, 'k>>>(
+        &mut self,
+        mut it: It,
+    ) -> bool
+    where
+        'a: 'w,
+        'k: 'w,
+    {
+        let WriteResource::BTM(wz) = it.next().unwrap() else {
+            unreachable!()
+        };
         wz.reset();
         trace!(target: "sink", "count finalizing by reducing {} at '{}'", self.unique.val_count(), serialize(wz.origin_path()));
 
-        let mut _to_swap = PathMap::new(); std::mem::swap(&mut self.unique, &mut _to_swap);
+        let mut _to_swap = PathMap::new();
+        std::mem::swap(&mut self.unique, &mut _to_swap);
         let mut rooted_input = PathMap::new();
-        rooted_input.write_zipper_at_path(wz.root_prefix_path()).graft_map(_to_swap);
+        rooted_input
+            .write_zipper_at_path(wz.root_prefix_path())
+            .graft_map(_to_swap);
 
         static v: &'static [u8] = &[item_byte(Tag::NewVar)];
         let mut prz = OneFactor::new(rooted_input.into_read_zipper(&[]));
         let prz_ptr = (&prz) as *const OneFactor<_>;
         let mut changed = false;
         let mut buffer: Vec<u8> = Vec::with_capacity(1 << 32);
-        crate::space::Space::query_multi_raw(unsafe { prz_ptr.cast_mut().as_mut().unwrap() }, &[ExprEnv::new(0, Expr{ ptr: v.as_ptr().cast_mut() })], |refs_bindings, loc| {
-            let cnt = prz.val_count();
-            trace!(target: "sink", "'{}' and under {}", serialize(prz.path()), cnt);
-            let clen = prz.path().len();
-            let cnt_str = cnt.to_string();
-            if prz.descend_to_existing_byte(item_byte(Tag::SymbolSize(cnt_str.len() as _))) {
-                let descended = prz.descend_to_existing(cnt_str.as_bytes());
-                if descended == cnt_str.len() {
-                    let fixed = &prz.path()[..prz.path().len()-(1+cnt_str.len())];
-                    trace!(target: "sink", "fixed guard {}", serialize(fixed));
-                    wz.move_to_path(fixed);
-                    wz.set_val(());
-                    changed |= true;
-                }
-                prz.ascend(descended + 1);
-            }
-            if prz.descend_to_existing_byte(item_byte(Tag::NewVar)) {
-                let ignored = &prz.path()[..prz.path().len()-1];
-                trace!(target: "sink", "ignored guard {}", serialize(ignored));
-                wz.move_to_path(ignored);
-                wz.set_val(());
-                changed |= true;
-                prz.ascend_byte();
-            } 
-            if prz.descend_first_byte() {
-                if let Tag::VarRef(k) = byte_item(prz.path()[prz.path().len()-1]) {
-                    let mut cntv = vec![item_byte(Tag::SymbolSize(cnt_str.len() as _))];
-                    cntv.extend_from_slice(cnt_str.as_bytes());
-                    let varref = &prz.path()[..prz.path().len()-1];
-                    let ie = Expr { ptr: (&varref[0] as *const u8).cast_mut() };
-                    let mut oz = ExprZipper::new(Expr{ ptr: buffer.as_mut_ptr() });
-                    trace!(target: "sink", "ref guard '{}' var {:?} with '{}'", serialize(varref), k, serialize(&cntv[..]));
-                    let os = ie.substitute_one_de_bruijn(k, Expr{ ptr: cntv.as_mut_ptr() }, &mut oz);
-                    unsafe { buffer.set_len(oz.loc) }
-                    trace!(target: "sink", "ref guard subs '{:?}'", serialize(&buffer[..oz.loc]));
-                    wz.move_to_path(&buffer[wz.root_prefix_path().len()..oz.loc]);
-                    wz.set_val(());
-                    changed |= true
-                }
-                prz.ascend_byte();
-            }
-            true
-        });
-        changed
-    }
-}
-
-pub struct SumSink { e: Expr, unique: PathMap<()> }
-impl Sink for SumSink {
-    fn new(e: Expr) -> Self {
-        SumSink { e, unique: PathMap::new() }
-    }
-    fn request(&self) ->  impl Iterator<Item=WriteResourceRequest> {
-        let p = &unsafe { self.e.prefix().unwrap_or_else(|x| { let s = self.e.span(); slice_from_raw_parts(self.e.ptr, s.len() - 1) }).as_ref().unwrap() }[5..];
-        trace!(target: "sink", "sum requesting {}", serialize(p));
-        std::iter::once(WriteResourceRequest::BTM(p))
-    }
-    fn sink<'w, 'a, 'k, It : Iterator<Item=WriteResource<'w, 'a, 'k>>>(&mut self, mut it: It, path: &[u8]) where 'a : 'w, 'k : 'w {
-        let WriteResource::BTM(wz) = it.next().unwrap() else { unreachable!() };
-        let mpath = &path[5+wz.root_prefix_path().len()..];
-        let ctx = unsafe { Expr { ptr: mpath.as_ptr().cast_mut() } };
-        trace!(target: "sink", "sum at '{}' sinking raw '{}'", serialize(wz.root_prefix_path()), serialize(path));
-        trace!(target: "sink", "sum registering in ctx {:?}", serialize(mpath));
-        self.unique.insert(mpath, ());
-    }
-    fn finalize<'w, 'a, 'k, It : Iterator<Item=WriteResource<'w, 'a, 'k>>>(&mut self, mut it: It) -> bool where 'a : 'w, 'k : 'w {
-        let WriteResource::BTM(wz) = it.next().unwrap() else { unreachable!() };
-        wz.reset();
-        trace!(target: "sink", "sum finalizing by reducing {} at '{}'", self.unique.val_count(), serialize(wz.origin_path()));
-
-        let mut _to_swap = PathMap::new(); std::mem::swap(&mut self.unique, &mut _to_swap);
-        let mut rooted_input = PathMap::new();
-        rooted_input.write_zipper_at_path(wz.root_prefix_path()).graft_map(_to_swap);
-
-        static v: &'static [u8] = &[item_byte(Tag::NewVar)];
-        let mut prz = OneFactor::new(rooted_input.into_read_zipper(&[]));
-        let prz_ptr = (&prz) as *const OneFactor<_>;
-        let mut changed = false;
-        let mut buffer: Vec<u8> = Vec::with_capacity(1 << 32);
-        crate::space::Space::query_multi_raw(unsafe { prz_ptr.cast_mut().as_mut().unwrap() }, &[ExprEnv::new(0, Expr{ ptr: v.as_ptr().cast_mut() })], |refs_bindings, loc| {
-
-            for b in prz.child_mask().and(&ByteMask(crate::space::SIZES)).iter() {
-                let Tag::SymbolSize(size) = byte_item(b) else { unreachable!() };
-                prz.descend_to_byte(b);
-                debug_assert!(prz.path_exists());
-                if !prz.descend_first_k_path(size as _) { unreachable!() }
-                loop {
-                    let mut total = 0u32;
-                    let clen = prz.origin_path().len();
-
-                    let mut rz = prz.fork_read_zipper();
-                    while rz.to_next_val() {
-                        let p = rz.origin_path();
-                        trace!(target: "sink", "path number {:?}", serialize(&p[clen..]));
-                        total += u32::from_str_radix(str::from_utf8(&p[clen+1..]).unwrap(), 10).unwrap();
-                    }
-                    let cnt_str = total.to_string();
-                    trace!(target: "sink", "'{}' and under {}", serialize(prz.origin_path()), total);
-                    assert_eq!(prz.origin_path().len(), clen);
-
-                    let fixed_number = &prz.origin_path()[prz.origin_path().len()-(size as usize)..];
-                    if fixed_number == cnt_str.as_bytes() {
-                        let fixed = &prz.origin_path()[..prz.origin_path().len()-(1+size as usize)];
-                        trace!(target: "sink", "fixed payload {}", serialize(fixed));
+        crate::space::Space::query_multi_raw(
+            unsafe { prz_ptr.cast_mut().as_mut().unwrap() },
+            &[ExprEnv::new(
+                0,
+                Expr {
+                    ptr: v.as_ptr().cast_mut(),
+                },
+            )],
+            |refs_bindings, loc| {
+                let cnt = prz.val_count();
+                trace!(target: "sink", "'{}' and under {}", serialize(prz.path()), cnt);
+                let clen = prz.path().len();
+                let cnt_str = cnt.to_string();
+                if prz.descend_to_existing_byte(item_byte(Tag::SymbolSize(cnt_str.len() as _))) {
+                    let descended = prz.descend_to_existing(cnt_str.as_bytes());
+                    if descended == cnt_str.len() {
+                        let fixed = &prz.path()[..prz.path().len() - (1 + cnt_str.len())];
+                        trace!(target: "sink", "fixed guard {}", serialize(fixed));
                         wz.move_to_path(fixed);
                         wz.set_val(());
                         changed |= true;
                     }
-
-                    if !prz.to_next_k_path(size as _) { break }
+                    prz.ascend(descended + 1);
                 }
-                if !prz.ascend_byte() { unreachable!() }
-            }
-
-            if prz.descend_to_existing_byte(item_byte(Tag::NewVar)) {
-                let ignored = &prz.path()[..prz.path().len()-1];
-                trace!(target: "sink", "ignored guard {}", serialize(ignored));
-                wz.move_to_path(ignored);
-                wz.set_val(());
-                changed |= true;
-                prz.ascend_byte();
-            }
-            if prz.descend_first_byte() {
-                if let Tag::VarRef(k) = byte_item(prz.path()[prz.path().len()-1]) {
-                    let mut total = 0u32;
-                    let clen = prz.path().len();
-                    let mut rz = prz.fork_read_zipper();
-                    while rz.to_next_val() {
-                        let p = rz.origin_path();
-                        trace!(target: "sink", "path {:?}", serialize(p));
-                        trace!(target: "sink", "path {:?}", serialize(&p[clen+1..]));
-                        total += u32::from_str_radix(str::from_utf8(&p[clen+1..]).unwrap(), 10).unwrap();
-                    }
-                    let cnt_str = total.to_string();
-
-                    let mut cntv = vec![item_byte(Tag::SymbolSize(cnt_str.len() as _))];
-                    cntv.extend_from_slice(cnt_str.as_bytes());
-                    let varref = &prz.path()[..prz.path().len()-1];
-                    let ie = Expr { ptr: (&varref[0] as *const u8).cast_mut() };
-                    let mut oz = ExprZipper::new(Expr{ ptr: buffer.as_mut_ptr() });
-                    trace!(target: "sink", "ref guard '{}' var {:?} with '{}'", serialize(varref), k, serialize(&cntv[..]));
-                    let os = ie.substitute_one_de_bruijn(k, Expr{ ptr: cntv.as_mut_ptr() }, &mut oz);
-                    unsafe { buffer.set_len(oz.loc) }
-                    trace!(target: "sink", "ref guard subs '{:?}'", serialize(&buffer[..oz.loc]));
-                    wz.move_to_path(&buffer[wz.root_prefix_path().len()..oz.loc]);
+                if prz.descend_to_existing_byte(item_byte(Tag::NewVar)) {
+                    let ignored = &prz.path()[..prz.path().len() - 1];
+                    trace!(target: "sink", "ignored guard {}", serialize(ignored));
+                    wz.move_to_path(ignored);
                     wz.set_val(());
-                    changed |= true
+                    changed |= true;
+                    prz.ascend_byte();
                 }
-                prz.ascend_byte();
+                if prz.descend_first_byte() {
+                    if let Tag::VarRef(k) = byte_item(prz.path()[prz.path().len() - 1]) {
+                        let mut cntv = vec![item_byte(Tag::SymbolSize(cnt_str.len() as _))];
+                        cntv.extend_from_slice(cnt_str.as_bytes());
+                        let varref = &prz.path()[..prz.path().len() - 1];
+                        let ie = Expr {
+                            ptr: (&varref[0] as *const u8).cast_mut(),
+                        };
+                        let mut oz = ExprZipper::new(Expr {
+                            ptr: buffer.as_mut_ptr(),
+                        });
+                        trace!(target: "sink", "ref guard '{}' var {:?} with '{}'", serialize(varref), k, serialize(&cntv[..]));
+                        let os = ie.substitute_one_de_bruijn(
+                            k,
+                            Expr {
+                                ptr: cntv.as_mut_ptr(),
+                            },
+                            &mut oz,
+                        );
+                        unsafe { buffer.set_len(oz.loc) }
+                        trace!(target: "sink", "ref guard subs '{:?}'", serialize(&buffer[..oz.loc]));
+                        wz.move_to_path(&buffer[wz.root_prefix_path().len()..oz.loc]);
+                        wz.set_val(());
+                        changed |= true
+                    }
+                    prz.ascend_byte();
+                }
+                true
+            },
+        );
+        changed
+    }
+}
+
+pub struct SumSink {
+    e: Expr,
+    unique: PathMap<()>,
+}
+impl Sink for SumSink {
+    fn new(e: Expr) -> Self {
+        SumSink {
+            e,
+            unique: PathMap::new(),
+        }
+    }
+    fn request(&self) -> impl Iterator<Item = WriteResourceRequest> {
+        let p = &unsafe {
+            self.e
+                .prefix()
+                .unwrap_or_else(|x| {
+                    let s = self.e.span();
+                    slice_from_raw_parts(self.e.ptr, s.len() - 1)
+                })
+                .as_ref()
+                .unwrap()
+        }[5..];
+        trace!(target: "sink", "sum requesting {}", serialize(p));
+        std::iter::once(WriteResourceRequest::BTM(p))
+    }
+    fn sink<'w, 'a, 'k, It: Iterator<Item = WriteResource<'w, 'a, 'k>>>(
+        &mut self,
+        mut it: It,
+        path: &[u8],
+    ) where
+        'a: 'w,
+        'k: 'w,
+    {
+        let WriteResource::BTM(wz) = it.next().unwrap() else {
+            unreachable!()
+        };
+        let mpath = &path[5 + wz.root_prefix_path().len()..];
+        let ctx = unsafe {
+            Expr {
+                ptr: mpath.as_ptr().cast_mut(),
             }
-            true
-        });
+        };
+        trace!(target: "sink", "sum at '{}' sinking raw '{}'", serialize(wz.root_prefix_path()), serialize(path));
+        trace!(target: "sink", "sum registering in ctx {:?}", serialize(mpath));
+        self.unique.insert(mpath, ());
+    }
+    fn finalize<'w, 'a, 'k, It: Iterator<Item = WriteResource<'w, 'a, 'k>>>(
+        &mut self,
+        mut it: It,
+    ) -> bool
+    where
+        'a: 'w,
+        'k: 'w,
+    {
+        let WriteResource::BTM(wz) = it.next().unwrap() else {
+            unreachable!()
+        };
+        wz.reset();
+        trace!(target: "sink", "sum finalizing by reducing {} at '{}'", self.unique.val_count(), serialize(wz.origin_path()));
+
+        let mut _to_swap = PathMap::new();
+        std::mem::swap(&mut self.unique, &mut _to_swap);
+        let mut rooted_input = PathMap::new();
+        rooted_input
+            .write_zipper_at_path(wz.root_prefix_path())
+            .graft_map(_to_swap);
+
+        static v: &'static [u8] = &[item_byte(Tag::NewVar)];
+        let mut prz = OneFactor::new(rooted_input.into_read_zipper(&[]));
+        let prz_ptr = (&prz) as *const OneFactor<_>;
+        let mut changed = false;
+        let mut buffer: Vec<u8> = Vec::with_capacity(1 << 32);
+        crate::space::Space::query_multi_raw(
+            unsafe { prz_ptr.cast_mut().as_mut().unwrap() },
+            &[ExprEnv::new(
+                0,
+                Expr {
+                    ptr: v.as_ptr().cast_mut(),
+                },
+            )],
+            |refs_bindings, loc| {
+                for b in prz.child_mask().and(&ByteMask(crate::space::SIZES)).iter() {
+                    let Tag::SymbolSize(size) = byte_item(b) else {
+                        unreachable!()
+                    };
+                    prz.descend_to_byte(b);
+                    debug_assert!(prz.path_exists());
+                    if !prz.descend_first_k_path(size as _) {
+                        unreachable!()
+                    }
+                    loop {
+                        let mut total = 0u32;
+                        let clen = prz.origin_path().len();
+
+                        let mut rz = prz.fork_read_zipper();
+                        while rz.to_next_val() {
+                            let p = rz.origin_path();
+                            trace!(target: "sink", "path number {:?}", serialize(&p[clen..]));
+                            total +=
+                                u32::from_str_radix(str::from_utf8(&p[clen + 1..]).unwrap(), 10)
+                                    .unwrap();
+                        }
+                        let cnt_str = total.to_string();
+                        trace!(target: "sink", "'{}' and under {}", serialize(prz.origin_path()), total);
+                        assert_eq!(prz.origin_path().len(), clen);
+
+                        let fixed_number =
+                            &prz.origin_path()[prz.origin_path().len() - (size as usize)..];
+                        if fixed_number == cnt_str.as_bytes() {
+                            let fixed =
+                                &prz.origin_path()[..prz.origin_path().len() - (1 + size as usize)];
+                            trace!(target: "sink", "fixed payload {}", serialize(fixed));
+                            wz.move_to_path(fixed);
+                            wz.set_val(());
+                            changed |= true;
+                        }
+
+                        if !prz.to_next_k_path(size as _) {
+                            break;
+                        }
+                    }
+                    if !prz.ascend_byte() {
+                        unreachable!()
+                    }
+                }
+
+                if prz.descend_to_existing_byte(item_byte(Tag::NewVar)) {
+                    let ignored = &prz.path()[..prz.path().len() - 1];
+                    trace!(target: "sink", "ignored guard {}", serialize(ignored));
+                    wz.move_to_path(ignored);
+                    wz.set_val(());
+                    changed |= true;
+                    prz.ascend_byte();
+                }
+                if prz.descend_first_byte() {
+                    if let Tag::VarRef(k) = byte_item(prz.path()[prz.path().len() - 1]) {
+                        let mut total = 0u32;
+                        let clen = prz.path().len();
+                        let mut rz = prz.fork_read_zipper();
+                        while rz.to_next_val() {
+                            let p = rz.origin_path();
+                            trace!(target: "sink", "path {:?}", serialize(p));
+                            trace!(target: "sink", "path {:?}", serialize(&p[clen+1..]));
+                            total +=
+                                u32::from_str_radix(str::from_utf8(&p[clen + 1..]).unwrap(), 10)
+                                    .unwrap();
+                        }
+                        let cnt_str = total.to_string();
+
+                        let mut cntv = vec![item_byte(Tag::SymbolSize(cnt_str.len() as _))];
+                        cntv.extend_from_slice(cnt_str.as_bytes());
+                        let varref = &prz.path()[..prz.path().len() - 1];
+                        let ie = Expr {
+                            ptr: (&varref[0] as *const u8).cast_mut(),
+                        };
+                        let mut oz = ExprZipper::new(Expr {
+                            ptr: buffer.as_mut_ptr(),
+                        });
+                        trace!(target: "sink", "ref guard '{}' var {:?} with '{}'", serialize(varref), k, serialize(&cntv[..]));
+                        let os = ie.substitute_one_de_bruijn(
+                            k,
+                            Expr {
+                                ptr: cntv.as_mut_ptr(),
+                            },
+                            &mut oz,
+                        );
+                        unsafe { buffer.set_len(oz.loc) }
+                        trace!(target: "sink", "ref guard subs '{:?}'", serialize(&buffer[..oz.loc]));
+                        wz.move_to_path(&buffer[wz.root_prefix_path().len()..oz.loc]);
+                        wz.set_val(());
+                        changed |= true
+                    }
+                    prz.ascend_byte();
+                }
+                true
+            },
+        );
         changed
     }
 }
@@ -521,16 +852,20 @@ impl Sink for SumSink {
 // Uses ProductZipper pattern for correct duplicate variable handling
 pub struct MaxSink {
     e: Expr,
-    head: PathMap<()>,  // Like HeadSink!
+    head: PathMap<()>, // Like HeadSink!
     skip: usize,
-    has_non_numeric: bool,  // Flag for partial eval - no need for Vec
+    has_non_numeric: bool, // Flag for partial eval - no need for Vec
 }
 
 impl MaxSink {
     fn parse_i64_symbol_strict(sym: &[u8]) -> Option<i64> {
-        if sym.is_empty() { return None; }
+        if sym.is_empty() {
+            return None;
+        }
         if sym[0] == b'-' {
-            if sym.len() <= 1 || !sym[1..].iter().all(|b| b.is_ascii_digit()) { return None; }
+            if sym.len() <= 1 || !sym[1..].iter().all(|b| b.is_ascii_digit()) {
+                return None;
+            }
         } else if !sym.iter().all(|b| b.is_ascii_digit()) {
             return None;
         }
@@ -547,7 +882,7 @@ impl MaxSink {
             if let Tag::SymbolSize(n) = byte_item(p[i]) {
                 let n = n as usize;
                 if i + 1 + n <= p.len() {
-                    return Self::parse_i64_symbol_strict(&p[i+1..i+1+n]);
+                    return Self::parse_i64_symbol_strict(&p[i + 1..i + 1 + n]);
                 }
             }
         }
@@ -565,7 +900,7 @@ impl MaxSink {
             if let Ok(Tag::SymbolSize(n)) = maybe_byte_item(p[i]) {
                 let n = n as usize;
                 if i + 1 + n <= p.len() {
-                    return Self::parse_i64_symbol_strict(&p[i+1..i+1+n]);
+                    return Self::parse_i64_symbol_strict(&p[i + 1..i + 1 + n]);
                 }
             }
             // Skip invalid bytes silently - they're payload from non-numeric symbols
@@ -585,22 +920,41 @@ impl MaxSink {
 
 impl Sink for MaxSink {
     fn new(e: Expr) -> Self {
-        let skip = 1 + 1 + 3;  // Skip outer compound, 'O', and 'max'
-        MaxSink { e, head: PathMap::new(), skip, has_non_numeric: false }
+        let skip = 1 + 1 + 3; // Skip outer compound, 'O', and 'max'
+        MaxSink {
+            e,
+            head: PathMap::new(),
+            skip,
+            has_non_numeric: false,
+        }
     }
 
-    fn request(&self) ->  impl Iterator<Item=WriteResourceRequest> {
+    fn request(&self) -> impl Iterator<Item = WriteResourceRequest> {
         let p = &unsafe {
-            self.e.prefix()
-                .unwrap_or_else(|_| { let s = self.e.span(); slice_from_raw_parts(self.e.ptr, s.len() - 1) })
-                .as_ref().unwrap()
+            self.e
+                .prefix()
+                .unwrap_or_else(|_| {
+                    let s = self.e.span();
+                    slice_from_raw_parts(self.e.ptr, s.len() - 1)
+                })
+                .as_ref()
+                .unwrap()
         }[self.skip..];
         trace!(target: "sink", "max requesting {}", serialize(p));
         std::iter::once(WriteResourceRequest::BTM(p))
     }
 
-    fn sink<'w, 'a, 'k, It : Iterator<Item=WriteResource<'w, 'a, 'k>>>(&mut self, mut it: It, path: &[u8]) where 'a : 'w, 'k : 'w {
-        let WriteResource::BTM(wz) = it.next().unwrap() else { unreachable!() };
+    fn sink<'w, 'a, 'k, It: Iterator<Item = WriteResource<'w, 'a, 'k>>>(
+        &mut self,
+        mut it: It,
+        path: &[u8],
+    ) where
+        'a: 'w,
+        'k: 'w,
+    {
+        let WriteResource::BTM(wz) = it.next().unwrap() else {
+            unreachable!()
+        };
 
         // COLLECTION PHASE LOGGING - comprehensive validation
         let root_prefix = wz.root_prefix_path();
@@ -626,13 +980,22 @@ impl Sink for MaxSink {
             // Track that we hit a non-numeric value for partial evaluation
             if !self.has_non_numeric {
                 trace!(target: "sink", "  found first non-numeric path: '{}'", serialize(mpath));
-                self.has_non_numeric = true;  // Just set the flag
+                self.has_non_numeric = true; // Just set the flag
             }
         }
     }
 
-    fn finalize<'w, 'a, 'k, It : Iterator<Item=WriteResource<'w, 'a, 'k>>>(&mut self, mut it: It) -> bool where 'a : 'w, 'k : 'w {
-        let WriteResource::BTM(wz) = it.next().unwrap() else { unreachable!() };
+    fn finalize<'w, 'a, 'k, It: Iterator<Item = WriteResource<'w, 'a, 'k>>>(
+        &mut self,
+        mut it: It,
+    ) -> bool
+    where
+        'a: 'w,
+        'k: 'w,
+    {
+        let WriteResource::BTM(wz) = it.next().unwrap() else {
+            unreachable!()
+        };
         wz.reset();
 
         trace!(target: "sink", "=== MAX FINALIZE ===");
@@ -647,14 +1010,23 @@ impl Sink for MaxSink {
             // We want just <report>
 
             let prefix = unsafe {
-                self.e.prefix()
-                    .unwrap_or_else(|_| { let s = self.e.span(); slice_from_raw_parts(self.e.ptr, s.len() - 1) })
-                    .as_ref().unwrap()
+                self.e
+                    .prefix()
+                    .unwrap_or_else(|_| {
+                        let s = self.e.span();
+                        slice_from_raw_parts(self.e.ptr, s.len() - 1)
+                    })
+                    .as_ref()
+                    .unwrap()
             };
 
             // Skip to the report part
             let report_start = &prefix[self.skip..];
-            let report_expr = unsafe { Expr { ptr: report_start.as_ptr().cast_mut() } };
+            let report_expr = unsafe {
+                Expr {
+                    ptr: report_start.as_ptr().cast_mut(),
+                }
+            };
             let report_len = report_expr.span().len();
 
             // The simple solution: emit an empty result to show no max was found
@@ -668,7 +1040,9 @@ impl Sink for MaxSink {
         let collected = std::mem::take(&mut self.head);
 
         let mut rooted_input = PathMap::new();
-        rooted_input.write_zipper_at_path(wz.root_prefix_path()).graft_map(collected);
+        rooted_input
+            .write_zipper_at_path(wz.root_prefix_path())
+            .graft_map(collected);
 
         trace!(target: "sink", "  re-rooted under: '{}'", serialize(wz.root_prefix_path()));
 
@@ -701,7 +1075,11 @@ impl Sink for MaxSink {
 
         // STEP 3: Parse the winning path and emit
         // The best_path is now ABSOLUTE, so we can correctly parse the report
-        let best_expr = unsafe { Expr { ptr: best_path.as_ptr().cast_mut() } };
+        let best_expr = unsafe {
+            Expr {
+                ptr: best_path.as_ptr().cast_mut(),
+            }
+        };
         let report_span = best_expr.span();
         let report_len = report_span.len();
 
@@ -718,17 +1096,29 @@ impl Sink for MaxSink {
         {
             // Ensure report_len is valid
             debug_assert!(report_len > 0, "report should have non-zero length");
-            debug_assert!(report_len <= best_path.len(), "report_len {} exceeds path len {}",
-                         report_len, best_path.len());
+            debug_assert!(
+                report_len <= best_path.len(),
+                "report_len {} exceeds path len {}",
+                report_len,
+                best_path.len()
+            );
 
             // If there's a guard, validate it too
             if report_len < best_path.len() {
-                let guard_expr = unsafe { Expr { ptr: best_path[report_len..].as_ptr().cast_mut() } };
+                let guard_expr = unsafe {
+                    Expr {
+                        ptr: best_path[report_len..].as_ptr().cast_mut(),
+                    }
+                };
                 let guard_span = guard_expr.span();
                 let guard_len = guard_span.len();
-                debug_assert!(report_len + guard_len <= best_path.len(),
-                             "report_len {} + guard_len {} exceeds path len {}",
-                             report_len, guard_len, best_path.len());
+                debug_assert!(
+                    report_len + guard_len <= best_path.len(),
+                    "report_len {} + guard_len {} exceeds path len {}",
+                    report_len,
+                    guard_len,
+                    best_path.len()
+                );
             }
         }
 
@@ -754,11 +1144,23 @@ impl Sink for MaxSink {
 
                 // CRITICAL: Substitute on the report PREFIX only (not including guard)
                 let report_prefix = &best_path[..report_len];
-                let ie = unsafe { Expr { ptr: report_prefix.as_ptr().cast_mut() } };
+                let ie = unsafe {
+                    Expr {
+                        ptr: report_prefix.as_ptr().cast_mut(),
+                    }
+                };
 
                 let mut out = vec![0u8; report_prefix.len() + 32];
-                let mut oz = ExprZipper::new(Expr { ptr: out.as_mut_ptr() });
-                ie.substitute_one_de_bruijn(k, Expr { ptr: val_bytes.as_ptr().cast_mut() }, &mut oz);
+                let mut oz = ExprZipper::new(Expr {
+                    ptr: out.as_mut_ptr(),
+                });
+                ie.substitute_one_de_bruijn(
+                    k,
+                    Expr {
+                        ptr: val_bytes.as_ptr().cast_mut(),
+                    },
+                    &mut oz,
+                );
                 unsafe { out.set_len(oz.loc) };
 
                 trace!(target: "sink", "  substitution result: {} bytes: '{}'", oz.loc, serialize(&out[..oz.loc]));
@@ -775,7 +1177,8 @@ impl Sink for MaxSink {
                         debug_assert!(
                             matches!(top2, 0b0000_0000 | 0b1000_0000 | 0b1100_0000),
                             "Invalid tag byte: {:#04x} (top bits: {:#04x})",
-                            first_byte, top2
+                            first_byte,
+                            top2
                         );
                     }
                 }
@@ -785,7 +1188,10 @@ impl Sink for MaxSink {
                 // but wz expects a path relative to root_prefix after reset.
                 let root = wz.root_prefix_path();
                 debug_assert!(out.len() >= root.len(), "substituted path too short");
-                debug_assert!(out[..root.len()] == root[..], "substituted path must start with root_prefix");
+                debug_assert!(
+                    out[..root.len()] == root[..],
+                    "substituted path must start with root_prefix"
+                );
 
                 let relative = &out[root.len()..oz.loc];
                 trace!(target: "sink", "  emitting relative (sliced {} root bytes): '{}'", root.len(), serialize(relative));
@@ -799,7 +1205,11 @@ impl Sink for MaxSink {
                 trace!(target: "sink", "  literal guard");
 
                 // Safe guard extraction using the proper API
-                let guard_expr = unsafe { Expr { ptr: best_path[report_len..].as_ptr().cast_mut() } };
+                let guard_expr = unsafe {
+                    Expr {
+                        ptr: best_path[report_len..].as_ptr().cast_mut(),
+                    }
+                };
 
                 // Use symbol() to get the payload without the header byte
                 let guard_bytes = unsafe { guard_expr.symbol() };
@@ -859,16 +1269,20 @@ impl Sink for MaxSink {
 // Uses ProductZipper pattern for correct duplicate variable handling
 pub struct MinSink {
     e: Expr,
-    head: PathMap<()>,  // Like HeadSink/MaxSink!
+    head: PathMap<()>, // Like HeadSink/MaxSink!
     skip: usize,
-    has_non_numeric: bool,  // Flag for partial eval - no need for Vec
+    has_non_numeric: bool, // Flag for partial eval - no need for Vec
 }
 
 impl MinSink {
     fn parse_i64_symbol_strict(sym: &[u8]) -> Option<i64> {
-        if sym.is_empty() { return None; }
+        if sym.is_empty() {
+            return None;
+        }
         if sym[0] == b'-' {
-            if sym.len() <= 1 || !sym[1..].iter().all(|b| b.is_ascii_digit()) { return None; }
+            if sym.len() <= 1 || !sym[1..].iter().all(|b| b.is_ascii_digit()) {
+                return None;
+            }
         } else if !sym.iter().all(|b| b.is_ascii_digit()) {
             return None;
         }
@@ -885,7 +1299,7 @@ impl MinSink {
             if let Tag::SymbolSize(n) = byte_item(p[i]) {
                 let n = n as usize;
                 if i + 1 + n <= p.len() {
-                    return Self::parse_i64_symbol_strict(&p[i+1..i+1+n]);
+                    return Self::parse_i64_symbol_strict(&p[i + 1..i + 1 + n]);
                 }
             }
         }
@@ -903,7 +1317,7 @@ impl MinSink {
             if let Ok(Tag::SymbolSize(n)) = maybe_byte_item(p[i]) {
                 let n = n as usize;
                 if i + 1 + n <= p.len() {
-                    return Self::parse_i64_symbol_strict(&p[i+1..i+1+n]);
+                    return Self::parse_i64_symbol_strict(&p[i + 1..i + 1 + n]);
                 }
             }
             // Skip invalid bytes silently - they're payload from non-numeric symbols
@@ -922,22 +1336,41 @@ impl MinSink {
 
 impl Sink for MinSink {
     fn new(e: Expr) -> Self {
-        let skip = 1 + 1 + 3;  // Skip outer compound, 'O', and 'min'
-        MinSink { e, head: PathMap::new(), skip, has_non_numeric: false }
+        let skip = 1 + 1 + 3; // Skip outer compound, 'O', and 'min'
+        MinSink {
+            e,
+            head: PathMap::new(),
+            skip,
+            has_non_numeric: false,
+        }
     }
 
-    fn request(&self) ->  impl Iterator<Item=WriteResourceRequest> {
+    fn request(&self) -> impl Iterator<Item = WriteResourceRequest> {
         let p = &unsafe {
-            self.e.prefix()
-                .unwrap_or_else(|_| { let s = self.e.span(); slice_from_raw_parts(self.e.ptr, s.len() - 1) })
-                .as_ref().unwrap()
+            self.e
+                .prefix()
+                .unwrap_or_else(|_| {
+                    let s = self.e.span();
+                    slice_from_raw_parts(self.e.ptr, s.len() - 1)
+                })
+                .as_ref()
+                .unwrap()
         }[self.skip..];
         trace!(target: "sink", "min requesting {}", serialize(p));
         std::iter::once(WriteResourceRequest::BTM(p))
     }
 
-    fn sink<'w, 'a, 'k, It : Iterator<Item=WriteResource<'w, 'a, 'k>>>(&mut self, mut it: It, path: &[u8]) where 'a : 'w, 'k : 'w {
-        let WriteResource::BTM(wz) = it.next().unwrap() else { unreachable!() };
+    fn sink<'w, 'a, 'k, It: Iterator<Item = WriteResource<'w, 'a, 'k>>>(
+        &mut self,
+        mut it: It,
+        path: &[u8],
+    ) where
+        'a: 'w,
+        'k: 'w,
+    {
+        let WriteResource::BTM(wz) = it.next().unwrap() else {
+            unreachable!()
+        };
 
         // COLLECTION PHASE - same as MaxSink
         let root_prefix = wz.root_prefix_path();
@@ -963,13 +1396,22 @@ impl Sink for MinSink {
             // Track that we hit a non-numeric value for partial evaluation
             if !self.has_non_numeric {
                 trace!(target: "sink", "  found first non-numeric path: '{}'", serialize(mpath));
-                self.has_non_numeric = true;  // Just set the flag
+                self.has_non_numeric = true; // Just set the flag
             }
         }
     }
 
-    fn finalize<'w, 'a, 'k, It : Iterator<Item=WriteResource<'w, 'a, 'k>>>(&mut self, mut it: It) -> bool where 'a : 'w, 'k : 'w {
-        let WriteResource::BTM(wz) = it.next().unwrap() else { unreachable!() };
+    fn finalize<'w, 'a, 'k, It: Iterator<Item = WriteResource<'w, 'a, 'k>>>(
+        &mut self,
+        mut it: It,
+    ) -> bool
+    where
+        'a: 'w,
+        'k: 'w,
+    {
+        let WriteResource::BTM(wz) = it.next().unwrap() else {
+            unreachable!()
+        };
         wz.reset();
 
         trace!(target: "sink", "=== MIN FINALIZE ===");
@@ -984,14 +1426,23 @@ impl Sink for MinSink {
             // We want just <report>
 
             let prefix = unsafe {
-                self.e.prefix()
-                    .unwrap_or_else(|_| { let s = self.e.span(); slice_from_raw_parts(self.e.ptr, s.len() - 1) })
-                    .as_ref().unwrap()
+                self.e
+                    .prefix()
+                    .unwrap_or_else(|_| {
+                        let s = self.e.span();
+                        slice_from_raw_parts(self.e.ptr, s.len() - 1)
+                    })
+                    .as_ref()
+                    .unwrap()
             };
 
             // Skip to the report part
             let report_start = &prefix[self.skip..];
-            let report_expr = unsafe { Expr { ptr: report_start.as_ptr().cast_mut() } };
+            let report_expr = unsafe {
+                Expr {
+                    ptr: report_start.as_ptr().cast_mut(),
+                }
+            };
             let report_len = report_expr.span().len();
 
             // The simple solution: emit an empty result to show no max was found
@@ -1005,7 +1456,9 @@ impl Sink for MinSink {
         let collected = std::mem::take(&mut self.head);
 
         let mut rooted_input = PathMap::new();
-        rooted_input.write_zipper_at_path(wz.root_prefix_path()).graft_map(collected);
+        rooted_input
+            .write_zipper_at_path(wz.root_prefix_path())
+            .graft_map(collected);
 
         trace!(target: "sink", "  re-rooted under: '{}'", serialize(wz.root_prefix_path()));
 
@@ -1020,7 +1473,8 @@ impl Sink for MinSink {
 
             if let Some(v) = Self::parse_i64_from_tail(abs_path) {
                 trace!(target: "sink", "    found value: {}", v);
-                if best_val.map_or(true, |cur| v < cur) {  // ← THE KEY CHANGE: < instead of >
+                if best_val.map_or(true, |cur| v < cur) {
+                    // ← THE KEY CHANGE: < instead of >
                     best_val = Some(v);
                     best_path = abs_path.to_vec();
                     trace!(target: "sink", "    new min!");
@@ -1038,7 +1492,11 @@ impl Sink for MinSink {
 
         // STEP 3: Parse the winning path and emit
         // The best_path is now ABSOLUTE, so we can correctly parse the report
-        let best_expr = unsafe { Expr { ptr: best_path.as_ptr().cast_mut() } };
+        let best_expr = unsafe {
+            Expr {
+                ptr: best_path.as_ptr().cast_mut(),
+            }
+        };
         let report_span = best_expr.span();
         let report_len = report_span.len();
 
@@ -1055,17 +1513,29 @@ impl Sink for MinSink {
         {
             // Ensure report_len is valid
             debug_assert!(report_len > 0, "report should have non-zero length");
-            debug_assert!(report_len <= best_path.len(), "report_len {} exceeds path len {}",
-                         report_len, best_path.len());
+            debug_assert!(
+                report_len <= best_path.len(),
+                "report_len {} exceeds path len {}",
+                report_len,
+                best_path.len()
+            );
 
             // If there's a guard, validate it too
             if report_len < best_path.len() {
-                let guard_expr = unsafe { Expr { ptr: best_path[report_len..].as_ptr().cast_mut() } };
+                let guard_expr = unsafe {
+                    Expr {
+                        ptr: best_path[report_len..].as_ptr().cast_mut(),
+                    }
+                };
                 let guard_span = guard_expr.span();
                 let guard_len = guard_span.len();
-                debug_assert!(report_len + guard_len <= best_path.len(),
-                             "report_len {} + guard_len {} exceeds path len {}",
-                             report_len, guard_len, best_path.len());
+                debug_assert!(
+                    report_len + guard_len <= best_path.len(),
+                    "report_len {} + guard_len {} exceeds path len {}",
+                    report_len,
+                    guard_len,
+                    best_path.len()
+                );
             }
         }
 
@@ -1091,11 +1561,23 @@ impl Sink for MinSink {
 
                 // CRITICAL: Substitute on the report PREFIX only (not including guard)
                 let report_prefix = &best_path[..report_len];
-                let ie = unsafe { Expr { ptr: report_prefix.as_ptr().cast_mut() } };
+                let ie = unsafe {
+                    Expr {
+                        ptr: report_prefix.as_ptr().cast_mut(),
+                    }
+                };
 
                 let mut out = vec![0u8; report_prefix.len() + 32];
-                let mut oz = ExprZipper::new(Expr { ptr: out.as_mut_ptr() });
-                ie.substitute_one_de_bruijn(k, Expr { ptr: val_bytes.as_ptr().cast_mut() }, &mut oz);
+                let mut oz = ExprZipper::new(Expr {
+                    ptr: out.as_mut_ptr(),
+                });
+                ie.substitute_one_de_bruijn(
+                    k,
+                    Expr {
+                        ptr: val_bytes.as_ptr().cast_mut(),
+                    },
+                    &mut oz,
+                );
                 unsafe { out.set_len(oz.loc) };
 
                 trace!(target: "sink", "  substitution result: {} bytes: '{}'", oz.loc, serialize(&out[..oz.loc]));
@@ -1112,7 +1594,8 @@ impl Sink for MinSink {
                         debug_assert!(
                             matches!(top2, 0b0000_0000 | 0b1000_0000 | 0b1100_0000),
                             "Invalid tag byte: {:#04x} (top bits: {:#04x})",
-                            first_byte, top2
+                            first_byte,
+                            top2
                         );
                     }
                 }
@@ -1122,7 +1605,10 @@ impl Sink for MinSink {
                 // but wz expects a path relative to root_prefix after reset.
                 let root = wz.root_prefix_path();
                 debug_assert!(out.len() >= root.len(), "substituted path too short");
-                debug_assert!(out[..root.len()] == root[..], "substituted path must start with root_prefix");
+                debug_assert!(
+                    out[..root.len()] == root[..],
+                    "substituted path must start with root_prefix"
+                );
 
                 let relative = &out[root.len()..oz.loc];
                 trace!(target: "sink", "  emitting relative (sliced {} root bytes): '{}'", root.len(), serialize(relative));
@@ -1136,7 +1622,11 @@ impl Sink for MinSink {
                 trace!(target: "sink", "  literal guard");
 
                 // Safe guard extraction using the proper API
-                let guard_expr = unsafe { Expr { ptr: best_path[report_len..].as_ptr().cast_mut() } };
+                let guard_expr = unsafe {
+                    Expr {
+                        ptr: best_path[report_len..].as_ptr().cast_mut(),
+                    }
+                };
 
                 // Use symbol() to get the payload without the header byte
                 let guard_bytes = unsafe { guard_expr.symbol() };
@@ -1206,16 +1696,22 @@ impl SATSink {
     // Helper to convert an Expr to DIMACS literal
     // For now, this is a very simplified placeholder.
     // Real implementation needs to handle propositional variables mapping and negation.
-    fn expr_to_dimacs_literal(expr: Expr, var_map: &mut BTreeMap<Vec<u8>, i32>, next_var_id: &mut i32) -> Option<i32> {
+    fn expr_to_dimacs_literal(
+        expr: Expr,
+        var_map: &mut BTreeMap<Vec<u8>, i32>,
+        next_var_id: &mut i32,
+    ) -> Option<i32> {
         let span = unsafe { expr.span().as_ref().unwrap() };
-        
+
         // Handle negation first
         if let Ok(negated_expr) = destruct!(expr, ("not" inner), { Ok(inner) }, _err => Err(())) {
-             if let Some(mut literal) = SATSink::expr_to_dimacs_literal(negated_expr, var_map, next_var_id) {
-                 return Some(-literal);
-             } else {
-                 return None;
-             }
+            if let Some(mut literal) =
+                SATSink::expr_to_dimacs_literal(negated_expr, var_map, next_var_id)
+            {
+                return Some(-literal);
+            } else {
+                return None;
+            }
         }
 
         // Assume simple symbol for propositional variable
@@ -1232,7 +1728,11 @@ impl SATSink {
         }
     }
 
-    fn expr_to_dimacs_clause(expr: Expr, var_map: &mut BTreeMap<Vec<u8>, i32>, next_var_id: &mut i32) -> Option<String> {
+    fn expr_to_dimacs_clause(
+        expr: Expr,
+        var_map: &mut BTreeMap<Vec<u8>, i32>,
+        next_var_id: &mut i32,
+    ) -> Option<String> {
         // Manual parsing to handle n-ary "or"
         unsafe {
             let ptr = expr.ptr;
@@ -1246,17 +1746,21 @@ impl SATSink {
                             // Found (or ...), iterate remaining children
                             let mut literals = Vec::new();
                             cursor = cursor.add(1 + 2); // Skip symbol header and "or" bytes
-                            
+
                             for _ in 0..(arity - 1) {
                                 let child_expr = Expr { ptr: cursor };
-                                if let Some(literal) = SATSink::expr_to_dimacs_literal(child_expr, var_map, next_var_id) {
+                                if let Some(literal) = SATSink::expr_to_dimacs_literal(
+                                    child_expr,
+                                    var_map,
+                                    next_var_id,
+                                ) {
                                     literals.push(literal.to_string());
                                 } else {
                                     return None;
                                 }
                                 cursor = cursor.add(child_expr.span().len());
                             }
-                            
+
                             return if literals.is_empty() {
                                 Some("0".to_string())
                             } else {
@@ -1286,24 +1790,35 @@ impl Sink for SATSink {
         }
     }
 
-    fn request(&self) -> impl Iterator<Item=WriteResourceRequest> {
+    fn request(&self) -> impl Iterator<Item = WriteResourceRequest> {
         // Request permission to write to the root, as we are adding new top-level expressions
         static EMPTY: [u8; 0] = [];
         std::iter::once(WriteResourceRequest::BTM(&EMPTY[..]))
     }
 
-    fn sink<'w, 'a, 'k, It : Iterator<Item=WriteResource<'w, 'a, 'k>>>(&mut self, mut it: It, path: &[u8]) where 'a : 'w, 'k : 'w {
+    fn sink<'w, 'a, 'k, It: Iterator<Item = WriteResource<'w, 'a, 'k>>>(
+        &mut self,
+        mut it: It,
+        path: &[u8],
+    ) where
+        'a: 'w,
+        'k: 'w,
+    {
         let _ = it.next().unwrap();
 
         // Robustly find the start of the expression by looking for the "sat" symbol
         let pattern = b"sat";
         let start_offset = path.windows(pattern.len()).position(|w| w == pattern);
-        
+
         if let Some(offset) = start_offset {
             if offset >= 2 {
                 let expr_start = offset - 2;
-                let ctx = unsafe { Expr { ptr: path[expr_start..].as_ptr().cast_mut() } };
-                
+                let ctx = unsafe {
+                    Expr {
+                        ptr: path[expr_start..].as_ptr().cast_mut(),
+                    }
+                };
+
                 // Manual parsing of (sat report status clause)
                 let parse_result = unsafe {
                     let ptr = ctx.ptr;
@@ -1315,21 +1830,27 @@ impl Sink for SATSink {
                             let head_bytes = std::slice::from_raw_parts(cursor.add(1), 3);
                             if head_bytes == b"sat" {
                                 cursor = cursor.add(1 + 3);
-                                
+
                                 let report_expr = Expr { ptr: cursor };
                                 let report_len = report_expr.span().len();
                                 cursor = cursor.add(report_len);
-                                
+
                                 let status_expr = Expr { ptr: cursor };
                                 let status_len = status_expr.span().len();
                                 cursor = cursor.add(status_len);
-                                
+
                                 let clause_expr = Expr { ptr: cursor };
-                                
+
                                 Some((report_expr, status_expr, clause_expr))
-                            } else { None }
-                        } else { None }
-                    } else { None }
+                            } else {
+                                None
+                            }
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    }
                 };
 
                 if let Some((report, status, clause)) = parse_result {
@@ -1337,16 +1858,16 @@ impl Sink for SATSink {
                     let report_bytes = unsafe { report.span().as_ref().unwrap().to_vec() };
                     let clause_bytes = unsafe { clause.span().as_ref().unwrap().to_vec() };
                     let status_bytes = unsafe { status.span().as_ref().unwrap().to_vec() };
-                    
+
                     let mut key = Vec::new();
                     let r_len = report_bytes.len() as u32;
                     key.extend_from_slice(&r_len.to_le_bytes());
                     key.extend_from_slice(&report_bytes);
                     key.extend_from_slice(&status_bytes);
-                    
+
                     self.clauses.entry(key).or_default().push(clause_bytes);
                 } else {
-                     trace!(target: "sink", "SATSink manual parse failed for ctx span: {:?}", unsafe { ctx.span().as_ref() });
+                    trace!(target: "sink", "SATSink manual parse failed for ctx span: {:?}", unsafe { ctx.span().as_ref() });
                 }
             }
         } else {
@@ -1354,22 +1875,35 @@ impl Sink for SATSink {
         }
     }
 
-    fn finalize<'w, 'a, 'k, It : Iterator<Item=WriteResource<'w, 'a, 'k>>>(&mut self, mut it: It) -> bool where 'a : 'w, 'k : 'w {
-        let WriteResource::BTM(wz) = it.next().unwrap() else { unreachable!() };
+    fn finalize<'w, 'a, 'k, It: Iterator<Item = WriteResource<'w, 'a, 'k>>>(
+        &mut self,
+        mut it: It,
+    ) -> bool
+    where
+        'a: 'w,
+        'k: 'w,
+    {
+        let WriteResource::BTM(wz) = it.next().unwrap() else {
+            unreachable!()
+        };
         wz.reset();
-        for _ in it {} 
-        
+        for _ in it {}
+
         trace!(target: "sink", "SATSink finalize. Clauses keys: {}", self.clauses.len());
 
         let mut overall_changed = false;
 
         for (key, clause_bytes_list) in std::mem::take(&mut self.clauses) {
             // Unpack key: [len: u32][report][status]
-            if key.len() < 4 { continue; }
+            if key.len() < 4 {
+                continue;
+            }
             let r_len = u32::from_le_bytes(key[0..4].try_into().unwrap()) as usize;
-            if 4 + r_len > key.len() { continue; }
-            let report_bytes = &key[4..4+r_len];
-            let status_bytes = &key[4+r_len..];
+            if 4 + r_len > key.len() {
+                continue;
+            }
+            let report_bytes = &key[4..4 + r_len];
+            let status_bytes = &key[4 + r_len..];
 
             trace!(target: "sink", "SATSink: processing report '{}' with {} clauses", serialize(report_bytes), clause_bytes_list.len());
 
@@ -1378,8 +1912,14 @@ impl Sink for SATSink {
             let mut next_var_id = 0;
 
             for clause_bytes in clause_bytes_list {
-                let clause_expr = unsafe { Expr { ptr: clause_bytes.as_ptr() as *mut u8 } };
-                if let Some(dimacs_clause) = SATSink::expr_to_dimacs_clause(clause_expr, &mut var_map, &mut next_var_id) {
+                let clause_expr = unsafe {
+                    Expr {
+                        ptr: clause_bytes.as_ptr() as *mut u8,
+                    }
+                };
+                if let Some(dimacs_clause) =
+                    SATSink::expr_to_dimacs_clause(clause_expr, &mut var_map, &mut next_var_id)
+                {
                     dimacs_clauses.push(dimacs_clause);
                 } else {
                     trace!(target: "sink", "Failed to convert clause to DIMACS");
@@ -1401,23 +1941,25 @@ impl Sink for SATSink {
                 dimacs_content.extend(dimacs_clauses.into_iter().map(|s| format!("{}\n", s)));
 
                 // Use hash of content for temp filename to avoid collision/length issues
-                use std::hash::{Hash, Hasher};
                 use std::collections::hash_map::DefaultHasher;
+                use std::hash::{Hash, Hasher};
                 let mut hasher = DefaultHasher::new();
                 dimacs_content.hash(&mut hasher);
                 let hash = hasher.finish();
                 let temp_file_path = format!("{}/sat_{:x}.cnf", crate::space::ACT_PATH, hash);
-                
+
                 debug!(target: "sink", "Writing DIMACS to {}", temp_file_path);
 
                 let mut file = match File::create(&temp_file_path) {
                     Ok(f) => f,
                     Err(e) => {
                         error!(target: "sink", "File create failed: {}", e);
-                        continue
-                    },
+                        continue;
+                    }
                 };
-                if file.write_all(dimacs_content.as_bytes()).is_err() { continue; }
+                if file.write_all(dimacs_content.as_bytes()).is_err() {
+                    continue;
+                }
 
                 // Run minisat with a 30s timeout
                 // Using `timeout` command on Linux
@@ -1425,21 +1967,21 @@ impl Sink for SATSink {
                     .arg("30s")
                     .arg("minisat")
                     .arg(&temp_file_path)
-                    .output() 
+                    .output()
                 {
                     Ok(o) => o,
                     Err(e) => {
-                         error!(target: "sink", "minisat execution failed: {}", e);
-                         continue
-                    },
+                        error!(target: "sink", "minisat execution failed: {}", e);
+                        continue;
+                    }
                 };
-                
+
                 // Cleanup temp file
                 let _ = std::fs::remove_file(temp_file_path);
 
                 let stdout_str = String::from_utf8_lossy(&output.stdout);
                 let stderr_str = String::from_utf8_lossy(&output.stderr);
-                
+
                 if stdout_str.contains("UNSATISFIABLE") {
                     result_tag_bytes = b"UNSAT";
                 } else if stdout_str.contains("SATISFIABLE") {
@@ -1447,12 +1989,12 @@ impl Sink for SATSink {
                 } else {
                     // Check for timeout or other errors
                     if stderr_str.contains("term") || output.status.code() == Some(124) {
-                         warn!(target: "sink", "minisat timed out");
-                         result_tag_bytes = b"TIMEOUT";
+                        warn!(target: "sink", "minisat timed out");
+                        result_tag_bytes = b"TIMEOUT";
                     } else {
-                         warn!(target: "sink", "minisat output not recognized or failed");
-                         trace!(target: "sink", "stdout: {}", stdout_str);
-                         continue;
+                        warn!(target: "sink", "minisat output not recognized or failed");
+                        trace!(target: "sink", "stdout: {}", stdout_str);
+                        continue;
                     }
                 }
             }
@@ -1467,10 +2009,10 @@ impl Sink for SATSink {
             // but inside the `report` template `(result $s)`, that same `$s` might be encoded as `VarRef(0)`.
             // We handle this by checking for both the exact `status_bytes` sequence and, if `status_bytes` looks like a `NewVar`,
             // checking for a `VarRef(0)` byte (192). This heuristic enables the user to use `$s` naturally in both places.
-            
+
             let mut result_expr = Vec::new();
             let mut i = 0;
-            
+
             let alt_target = if status_bytes.len() == 1 && status_bytes[0] == 128 {
                 Some(vec![192u8]) // 192 is VarRef(0)
             } else {
@@ -1483,7 +2025,7 @@ impl Sink for SATSink {
                 if report_bytes[i..].starts_with(status_bytes) {
                     matched = true;
                     i += status_bytes.len();
-                } 
+                }
                 // Fallback to heuristic match
                 else if let Some(ref alt) = alt_target {
                     if report_bytes[i..].starts_with(alt) {
@@ -1530,13 +2072,18 @@ impl Sink for MaxSink_dep {
     fn new(e: Expr) -> Self {
         // Fixed skip: 1 (arity) + 1 (symbol size) + 3 ("max") = 5
         // This skips past the operator, leaving <report> <guard> <value>
-        MaxSink_dep { e, skip: 5, max: None }
+        MaxSink_dep {
+            e,
+            skip: 5,
+            max: None,
+        }
     }
 
-    fn request(&self) -> impl Iterator<Item=WriteResourceRequest> {
+    fn request(&self) -> impl Iterator<Item = WriteResourceRequest> {
         // Return pattern after "max": <report> <guard> <value>
         let p = &unsafe {
-            self.e.prefix()
+            self.e
+                .prefix()
                 .unwrap_or_else(|_| {
                     let s = self.e.span();
                     slice_from_raw_parts(self.e.ptr, s.len() - 1)
@@ -1548,8 +2095,17 @@ impl Sink for MaxSink_dep {
         std::iter::once(WriteResourceRequest::BTM(p))
     }
 
-    fn sink<'w, 'a, 'k, It: Iterator<Item=WriteResource<'w, 'a, 'k>>>(&mut self, mut it: It, path: &[u8]) where 'a : 'w, 'k : 'w {
-        let WriteResource::BTM(wz) = it.next().unwrap() else { unreachable!() };
+    fn sink<'w, 'a, 'k, It: Iterator<Item = WriteResource<'w, 'a, 'k>>>(
+        &mut self,
+        mut it: It,
+        path: &[u8],
+    ) where
+        'a: 'w,
+        'k: 'w,
+    {
+        let WriteResource::BTM(wz) = it.next().unwrap() else {
+            unreachable!()
+        };
         // mpath should contain <report> <guard> <value>
         // We skip the operator ("max"), but NOT the root_prefix (which is part of the pattern)
         let mpath = &path[self.skip..];
@@ -1559,7 +2115,11 @@ impl Sink for MaxSink_dep {
         // mpath is a sequence of bytes representing: <report> <guard> <value>
         // These are stored sequentially, not as a tuple, so we navigate by reading spans
         let mut offset = 0;
-        let mut ctx = unsafe { Expr { ptr: mpath.as_ptr().cast_mut() } };
+        let mut ctx = unsafe {
+            Expr {
+                ptr: mpath.as_ptr().cast_mut(),
+            }
+        };
 
         // Skip report (first subexpression)
         let report_len = ctx.span().len();
@@ -1572,7 +2132,11 @@ impl Sink for MaxSink_dep {
         }
 
         // Skip guard (second subexpression)
-        ctx = unsafe { Expr { ptr: mpath.as_ptr().add(offset).cast_mut() } };
+        ctx = unsafe {
+            Expr {
+                ptr: mpath.as_ptr().add(offset).cast_mut(),
+            }
+        };
         let guard_len = ctx.span().len();
         trace!(target: "sink", "max: guard at offset {}, len {}", offset, guard_len);
         offset += guard_len;
@@ -1583,7 +2147,11 @@ impl Sink for MaxSink_dep {
         }
 
         // Now at value (third subexpression)
-        let val_expr = unsafe { Expr { ptr: mpath.as_ptr().add(offset).cast_mut() } };
+        let val_expr = unsafe {
+            Expr {
+                ptr: mpath.as_ptr().add(offset).cast_mut(),
+            }
+        };
         trace!(target: "sink", "max value expr at offset {}: '{}'", offset, serialize(unsafe { val_expr.span().as_ref().unwrap() }));
 
         if let Some(bytes) = unsafe { val_expr.span().as_ref() } {
@@ -1592,8 +2160,8 @@ impl Sink for MaxSink_dep {
                 if let Tag::SymbolSize(_) = byte_item(bytes[0]) {
                     if let Ok(s) = std::str::from_utf8(&bytes[1..]) {
                         // STRICT PARSING: Validate that the entire string is a valid integer
-                        let is_valid = !s.is_empty() &&
-                            if s.as_bytes()[0] == b'-' {
+                        let is_valid = !s.is_empty()
+                            && if s.as_bytes()[0] == b'-' {
                                 s.len() > 1 && s[1..].bytes().all(|b| b.is_ascii_digit())
                             } else {
                                 s.bytes().all(|b| b.is_ascii_digit())
@@ -1615,8 +2183,17 @@ impl Sink for MaxSink_dep {
         }
     }
 
-    fn finalize<'w, 'a, 'k, It: Iterator<Item=WriteResource<'w, 'a, 'k>>>(&mut self, mut it: It) -> bool where 'a : 'w, 'k : 'w {
-        let WriteResource::BTM(wz) = it.next().unwrap() else { unreachable!() };
+    fn finalize<'w, 'a, 'k, It: Iterator<Item = WriteResource<'w, 'a, 'k>>>(
+        &mut self,
+        mut it: It,
+    ) -> bool
+    where
+        'a: 'w,
+        'k: 'w,
+    {
+        let WriteResource::BTM(wz) = it.next().unwrap() else {
+            unreachable!()
+        };
         trace!(target: "sink", "max finalize: before reset, origin='{}', root_prefix='{}'", serialize(wz.origin_path()), serialize(wz.root_prefix_path()));
         wz.reset();
         trace!(target: "sink", "max finalize: after reset, path='{}', root_prefix='{}'", serialize(wz.path()), serialize(wz.root_prefix_path()));
@@ -1633,11 +2210,19 @@ impl Sink for MaxSink_dep {
         let e_bytes = unsafe { self.e.span().as_ref().unwrap() };
 
         // Get report
-        let report = unsafe { Expr { ptr: e_bytes.as_ptr().add(offset).cast_mut() } };
+        let report = unsafe {
+            Expr {
+                ptr: e_bytes.as_ptr().add(offset).cast_mut(),
+            }
+        };
         offset += report.span().len();
 
         // Get guard
-        let guard = unsafe { Expr { ptr: e_bytes.as_ptr().add(offset).cast_mut() } };
+        let guard = unsafe {
+            Expr {
+                ptr: e_bytes.as_ptr().add(offset).cast_mut(),
+            }
+        };
 
         trace!(target: "sink", "max finalize: report='{}'", serialize(unsafe { report.span().as_ref().unwrap() }));
         trace!(target: "sink", "max finalize: guard='{}'", serialize(unsafe { guard.span().as_ref().unwrap() }));
@@ -1686,8 +2271,8 @@ impl Sink for MaxSink_dep {
                     if let Some(gbytes) = guard.span().as_ref() {
                         if let Ok(gs) = std::str::from_utf8(&gbytes[1..]) {
                             // STRICT PARSING for literal guard
-                            let is_valid = !gs.is_empty() &&
-                                if gs.as_bytes()[0] == b'-' {
+                            let is_valid = !gs.is_empty()
+                                && if gs.as_bytes()[0] == b'-' {
                                     gs.len() > 1 && gs[1..].bytes().all(|b| b.is_ascii_digit())
                                 } else {
                                     gs.bytes().all(|b| b.is_ascii_digit())
@@ -1739,13 +2324,18 @@ impl Sink for MinSink_dep {
     fn new(e: Expr) -> Self {
         // Fixed skip: 1 (arity) + 1 (symbol size) + 3 ("min") = 5
         // This skips past the operator, leaving <report> <guard> <value>
-        MinSink_dep { e, skip: 5, min: None }
+        MinSink_dep {
+            e,
+            skip: 5,
+            min: None,
+        }
     }
 
-    fn request(&self) -> impl Iterator<Item=WriteResourceRequest> {
+    fn request(&self) -> impl Iterator<Item = WriteResourceRequest> {
         // Return pattern after "min": <report> <guard> <value>
         let p = &unsafe {
-            self.e.prefix()
+            self.e
+                .prefix()
                 .unwrap_or_else(|_| {
                     let s = self.e.span();
                     slice_from_raw_parts(self.e.ptr, s.len() - 1)
@@ -1757,8 +2347,17 @@ impl Sink for MinSink_dep {
         std::iter::once(WriteResourceRequest::BTM(p))
     }
 
-    fn sink<'w, 'a, 'k, It: Iterator<Item=WriteResource<'w, 'a, 'k>>>(&mut self, mut it: It, path: &[u8]) where 'a : 'w, 'k : 'w {
-        let WriteResource::BTM(wz) = it.next().unwrap() else { unreachable!() };
+    fn sink<'w, 'a, 'k, It: Iterator<Item = WriteResource<'w, 'a, 'k>>>(
+        &mut self,
+        mut it: It,
+        path: &[u8],
+    ) where
+        'a: 'w,
+        'k: 'w,
+    {
+        let WriteResource::BTM(wz) = it.next().unwrap() else {
+            unreachable!()
+        };
         // mpath should contain <report> <guard> <value>
         // We skip the operator ("min"), but NOT the root_prefix (which is part of the pattern)
         let mpath = &path[self.skip..];
@@ -1768,7 +2367,11 @@ impl Sink for MinSink_dep {
         // mpath is a sequence of bytes representing: <report> <guard> <value>
         // These are stored sequentially, not as a tuple, so we navigate by reading spans
         let mut offset = 0;
-        let mut ctx = unsafe { Expr { ptr: mpath.as_ptr().cast_mut() } };
+        let mut ctx = unsafe {
+            Expr {
+                ptr: mpath.as_ptr().cast_mut(),
+            }
+        };
 
         // Skip report (first subexpression)
         let report_len = ctx.span().len();
@@ -1781,7 +2384,11 @@ impl Sink for MinSink_dep {
         }
 
         // Skip guard (second subexpression)
-        ctx = unsafe { Expr { ptr: mpath.as_ptr().add(offset).cast_mut() } };
+        ctx = unsafe {
+            Expr {
+                ptr: mpath.as_ptr().add(offset).cast_mut(),
+            }
+        };
         let guard_len = ctx.span().len();
         trace!(target: "sink", "min: guard at offset {}, len {}", offset, guard_len);
         offset += guard_len;
@@ -1792,7 +2399,11 @@ impl Sink for MinSink_dep {
         }
 
         // Now at value (third subexpression)
-        let val_expr = unsafe { Expr { ptr: mpath.as_ptr().add(offset).cast_mut() } };
+        let val_expr = unsafe {
+            Expr {
+                ptr: mpath.as_ptr().add(offset).cast_mut(),
+            }
+        };
         trace!(target: "sink", "min value expr at offset {}: '{}'", offset, serialize(unsafe { val_expr.span().as_ref().unwrap() }));
 
         if let Some(bytes) = unsafe { val_expr.span().as_ref() } {
@@ -1801,8 +2412,8 @@ impl Sink for MinSink_dep {
                 if let Tag::SymbolSize(_) = byte_item(bytes[0]) {
                     if let Ok(s) = std::str::from_utf8(&bytes[1..]) {
                         // STRICT PARSING: Validate that the entire string is a valid integer
-                        let is_valid = !s.is_empty() &&
-                            if s.as_bytes()[0] == b'-' {
+                        let is_valid = !s.is_empty()
+                            && if s.as_bytes()[0] == b'-' {
                                 s.len() > 1 && s[1..].bytes().all(|b| b.is_ascii_digit())
                             } else {
                                 s.bytes().all(|b| b.is_ascii_digit())
@@ -1824,8 +2435,17 @@ impl Sink for MinSink_dep {
         }
     }
 
-    fn finalize<'w, 'a, 'k, It: Iterator<Item=WriteResource<'w, 'a, 'k>>>(&mut self, mut it: It) -> bool where 'a : 'w, 'k : 'w {
-        let WriteResource::BTM(wz) = it.next().unwrap() else { unreachable!() };
+    fn finalize<'w, 'a, 'k, It: Iterator<Item = WriteResource<'w, 'a, 'k>>>(
+        &mut self,
+        mut it: It,
+    ) -> bool
+    where
+        'a: 'w,
+        'k: 'w,
+    {
+        let WriteResource::BTM(wz) = it.next().unwrap() else {
+            unreachable!()
+        };
         wz.reset();
 
         let Some(min_val) = self.min else {
@@ -1839,11 +2459,19 @@ impl Sink for MinSink_dep {
         let e_bytes = unsafe { self.e.span().as_ref().unwrap() };
 
         // Get report
-        let report = unsafe { Expr { ptr: e_bytes.as_ptr().add(offset).cast_mut() } };
+        let report = unsafe {
+            Expr {
+                ptr: e_bytes.as_ptr().add(offset).cast_mut(),
+            }
+        };
         offset += report.span().len();
 
         // Get guard
-        let guard = unsafe { Expr { ptr: e_bytes.as_ptr().add(offset).cast_mut() } };
+        let guard = unsafe {
+            Expr {
+                ptr: e_bytes.as_ptr().add(offset).cast_mut(),
+            }
+        };
 
         // Guard cases:
         unsafe {
@@ -1884,8 +2512,8 @@ impl Sink for MinSink_dep {
                     if let Some(gbytes) = guard.span().as_ref() {
                         if let Ok(gs) = std::str::from_utf8(&gbytes[1..]) {
                             // STRICT PARSING for literal guard
-                            let is_valid = !gs.is_empty() &&
-                                if gs.as_bytes()[0] == b'-' {
+                            let is_valid = !gs.is_empty()
+                                && if gs.as_bytes()[0] == b'-' {
                                     gs.len() > 1 && gs[1..].bytes().all(|b| b.is_ascii_digit())
                                 } else {
                                     gs.bytes().all(|b| b.is_ascii_digit())
@@ -1928,17 +2556,35 @@ mod pure {
 }
 
 // (pure (result $x) $x (ascii_to_i32 2))
-pub struct PureSink { e: Expr }
+pub struct PureSink {
+    e: Expr,
+}
 impl Sink for PureSink {
     fn new(e: Expr) -> Self {
         PureSink { e }
     }
-    fn request(&self) ->  impl Iterator<Item=WriteResourceRequest> {
-        let p = &unsafe { self.e.prefix().unwrap_or_else(|x| { let s = self.e.span(); slice_from_raw_parts(self.e.ptr, s.len() - 1) }).as_ref().unwrap() }[6..];
+    fn request(&self) -> impl Iterator<Item = WriteResourceRequest> {
+        let p = &unsafe {
+            self.e
+                .prefix()
+                .unwrap_or_else(|x| {
+                    let s = self.e.span();
+                    slice_from_raw_parts(self.e.ptr, s.len() - 1)
+                })
+                .as_ref()
+                .unwrap()
+        }[6..];
         trace!(target: "sink", "count requesting {}", serialize(p));
         std::iter::once(WriteResourceRequest::BTM(p))
     }
-    fn sink<'w, 'a, 'k, It : Iterator<Item=WriteResource<'w, 'a, 'k>>>(&mut self, it: It, path: &[u8]) where 'a : 'w, 'k : 'w {
+    fn sink<'w, 'a, 'k, It: Iterator<Item = WriteResource<'w, 'a, 'k>>>(
+        &mut self,
+        it: It,
+        path: &[u8],
+    ) where
+        'a: 'w,
+        'k: 'w,
+    {
         // let mut wz = it.next().unwrap();
         // let mpath = &path[7+wz.root_prefix_path().len()..];
         // let ctx = unsafe { Expr { ptr: mpath.as_ptr().cast_mut() } };
@@ -1947,115 +2593,252 @@ impl Sink for PureSink {
         // self.unique.insert(mpath, ());
         // wz.move_to_path(opath)
     }
-    fn finalize<'w, 'a, 'k, It : Iterator<Item=WriteResource<'w, 'a, 'k>>>(&mut self, it: It) -> bool where 'a : 'w, 'k : 'w {
+    fn finalize<'w, 'a, 'k, It: Iterator<Item = WriteResource<'w, 'a, 'k>>>(
+        &mut self,
+        it: It,
+    ) -> bool
+    where
+        'a: 'w,
+        'k: 'w,
+    {
         true
     }
 }
 
-
-pub enum ASink { AddSink(AddSink), RemoveSink(RemoveSink), HeadSink(HeadSink), CountSink(CountSink), SumSink(SumSink), MaxSink(MaxSink), MinSink(MinSink), ACTSink(ACTSink), SATSink(SATSink),
+pub enum ASink {
+    AddSink(AddSink),
+    RemoveSink(RemoveSink),
+    HeadSink(HeadSink),
+    CountSink(CountSink),
+    SumSink(SumSink),
+    MaxSink(MaxSink),
+    MinSink(MinSink),
+    ACTSink(ACTSink),
+    SATSink(SATSink),
     #[cfg(feature = "wasm")]
     WASMSink(WASMSink),
     #[cfg(feature = "grounding")]
-    PureSink(PureSink)
+    PureSink(PureSink),
 }
 
 impl Sink for ASink {
     fn new(e: Expr) -> Self {
-        if unsafe { *e.ptr == item_byte(Tag::Arity(2)) && *e.ptr.offset(1) == item_byte(Tag::SymbolSize(1)) && *e.ptr.offset(2) == b'-' } {
+        if unsafe {
+            *e.ptr == item_byte(Tag::Arity(2))
+                && *e.ptr.offset(1) == item_byte(Tag::SymbolSize(1))
+                && *e.ptr.offset(2) == b'-'
+        } {
             ASink::RemoveSink(RemoveSink::new(e))
-        } else if unsafe { *e.ptr == item_byte(Tag::Arity(2)) && *e.ptr.offset(1) == item_byte(Tag::SymbolSize(1)) && *e.ptr.offset(2) == b'+' } {
+        } else if unsafe {
+            *e.ptr == item_byte(Tag::Arity(2))
+                && *e.ptr.offset(1) == item_byte(Tag::SymbolSize(1))
+                && *e.ptr.offset(2) == b'+'
+        } {
             ASink::AddSink(AddSink::new(e))
-        } else if unsafe { *e.ptr == item_byte(Tag::Arity(3)) && *e.ptr.offset(1) == item_byte(Tag::SymbolSize(4)) &&
-            *e.ptr.offset(2) == b'h' && *e.ptr.offset(3) == b'e' && *e.ptr.offset(4) == b'a' && *e.ptr.offset(5) == b'd' } {
+        } else if unsafe {
+            *e.ptr == item_byte(Tag::Arity(3))
+                && *e.ptr.offset(1) == item_byte(Tag::SymbolSize(4))
+                && *e.ptr.offset(2) == b'h'
+                && *e.ptr.offset(3) == b'e'
+                && *e.ptr.offset(4) == b'a'
+                && *e.ptr.offset(5) == b'd'
+        } {
             ASink::HeadSink(HeadSink::new(e))
-        } else if unsafe { *e.ptr == item_byte(Tag::Arity(4)) && *e.ptr.offset(1) == item_byte(Tag::SymbolSize(5)) &&
-            *e.ptr.offset(2) == b'c' && *e.ptr.offset(3) == b'o' && *e.ptr.offset(4) == b'u' && *e.ptr.offset(5) == b'n' && *e.ptr.offset(6) == b't' } {
+        } else if unsafe {
+            *e.ptr == item_byte(Tag::Arity(4))
+                && *e.ptr.offset(1) == item_byte(Tag::SymbolSize(5))
+                && *e.ptr.offset(2) == b'c'
+                && *e.ptr.offset(3) == b'o'
+                && *e.ptr.offset(4) == b'u'
+                && *e.ptr.offset(5) == b'n'
+                && *e.ptr.offset(6) == b't'
+        } {
             ASink::CountSink(CountSink::new(e))
-        } else if unsafe { *e.ptr == item_byte(Tag::Arity(4)) && *e.ptr.offset(1) == item_byte(Tag::SymbolSize(3)) &&
-            *e.ptr.offset(2) == b's' && *e.ptr.offset(3) == b'u' && *e.ptr.offset(4) == b'm' } {
+        } else if unsafe {
+            *e.ptr == item_byte(Tag::Arity(4))
+                && *e.ptr.offset(1) == item_byte(Tag::SymbolSize(3))
+                && *e.ptr.offset(2) == b's'
+                && *e.ptr.offset(3) == b'u'
+                && *e.ptr.offset(4) == b'm'
+        } {
             return ASink::SumSink(SumSink::new(e));
-        } else if unsafe { *e.ptr == item_byte(Tag::Arity(4)) && *e.ptr.offset(1) == item_byte(Tag::SymbolSize(3)) &&
-            *e.ptr.offset(2) == b'm' && *e.ptr.offset(3) == b'a' && *e.ptr.offset(4) == b'x' } {
+        } else if unsafe {
+            *e.ptr == item_byte(Tag::Arity(4))
+                && *e.ptr.offset(1) == item_byte(Tag::SymbolSize(3))
+                && *e.ptr.offset(2) == b'm'
+                && *e.ptr.offset(3) == b'a'
+                && *e.ptr.offset(4) == b'x'
+        } {
             ASink::MaxSink(MaxSink::new(e))
-        } else if unsafe { *e.ptr == item_byte(Tag::Arity(4)) && *e.ptr.offset(1) == item_byte(Tag::SymbolSize(3)) &&
-            *e.ptr.offset(2) == b'm' && *e.ptr.offset(3) == b'i' && *e.ptr.offset(4) == b'n' } {
+        } else if unsafe {
+            *e.ptr == item_byte(Tag::Arity(4))
+                && *e.ptr.offset(1) == item_byte(Tag::SymbolSize(3))
+                && *e.ptr.offset(2) == b'm'
+                && *e.ptr.offset(3) == b'i'
+                && *e.ptr.offset(4) == b'n'
+        } {
             ASink::MinSink(MinSink::new(e))
-        } else if unsafe { *e.ptr == item_byte(Tag::Arity(3)) && *e.ptr.offset(1) == item_byte(Tag::SymbolSize(3)) &&
-            *e.ptr.offset(2) == b'A' && *e.ptr.offset(3) == b'C' && *e.ptr.offset(4) == b'T' } {
+        } else if unsafe {
+            *e.ptr == item_byte(Tag::Arity(3))
+                && *e.ptr.offset(1) == item_byte(Tag::SymbolSize(3))
+                && *e.ptr.offset(2) == b'A'
+                && *e.ptr.offset(3) == b'C'
+                && *e.ptr.offset(4) == b'T'
+        } {
             return ASink::ACTSink(ACTSink::new(e));
-        } else if unsafe { *e.ptr == item_byte(Tag::Arity(3)) && *e.ptr.offset(1) == item_byte(Tag::SymbolSize(4)) &&
-            *e.ptr.offset(2) == b'w' && *e.ptr.offset(3) == b'a' && *e.ptr.offset(4) == b's' && *e.ptr.offset(5) == b'm' } {
+        } else if unsafe {
+            *e.ptr == item_byte(Tag::Arity(3))
+                && *e.ptr.offset(1) == item_byte(Tag::SymbolSize(4))
+                && *e.ptr.offset(2) == b'w'
+                && *e.ptr.offset(3) == b'a'
+                && *e.ptr.offset(4) == b's'
+                && *e.ptr.offset(5) == b'm'
+        } {
             #[cfg(feature = "wasm")]
             return ASink::WASMSink(WASMSink::new(e));
             #[cfg(not(feature = "wasm"))]
-            panic!("MORK was not built with the wasm feature, yet trying to call {:?}", e);
-        } else if unsafe { *e.ptr == item_byte(Tag::Arity(4)) && *e.ptr.offset(1) == item_byte(Tag::SymbolSize(4)) &&
-            *e.ptr.offset(2) == b'p' && *e.ptr.offset(3) == b'u' && *e.ptr.offset(4) == b'r' && *e.ptr.offset(5) == b'e' } {
+            panic!(
+                "MORK was not built with the wasm feature, yet trying to call {:?}",
+                e
+            );
+        } else if unsafe {
+            *e.ptr == item_byte(Tag::Arity(4))
+                && *e.ptr.offset(1) == item_byte(Tag::SymbolSize(4))
+                && *e.ptr.offset(2) == b'p'
+                && *e.ptr.offset(3) == b'u'
+                && *e.ptr.offset(4) == b'r'
+                && *e.ptr.offset(5) == b'e'
+        } {
             #[cfg(feature = "grounding")]
             return ASink::PureSink(PureSink::new(e));
             #[cfg(not(feature = "grounding"))]
-            panic!("MORK was not built with the grounding feature, yet trying to call {:?}", e);
-        } else if unsafe { *e.ptr == item_byte(Tag::Arity(4)) && *e.ptr.offset(1) == item_byte(Tag::SymbolSize(3)) &&
-            *e.ptr.offset(2) == b's' && *e.ptr.offset(3) == b'a' && *e.ptr.offset(4) == b't' } {
+            panic!(
+                "MORK was not built with the grounding feature, yet trying to call {:?}",
+                e
+            );
+        } else if unsafe {
+            *e.ptr == item_byte(Tag::Arity(4))
+                && *e.ptr.offset(1) == item_byte(Tag::SymbolSize(3))
+                && *e.ptr.offset(2) == b's'
+                && *e.ptr.offset(3) == b'a'
+                && *e.ptr.offset(4) == b't'
+        } {
             ASink::SATSink(SATSink::new(e))
         } else {
             unreachable!()
         }
     }
 
-    fn request(&self) ->  impl Iterator<Item=WriteResourceRequest> {
+    fn request(&self) -> impl Iterator<Item = WriteResourceRequest> {
         gen move {
             match self {
-                ASink::AddSink(s) => { for i in s.request().into_iter() { yield i } }
-                ASink::RemoveSink(s) => { for i in s.request().into_iter() { yield i } }
-                ASink::HeadSink(s) => { for i in s.request().into_iter() { yield i } }
-                ASink::CountSink(s) => { for i in s.request().into_iter() { yield i } }
-                ASink::SumSink(s) => { for i in s.request().into_iter() { yield i } }
-                ASink::MaxSink(s) => { for i in s.request().into_iter() { yield i } }
-                ASink::MinSink(s) => { for i in s.request().into_iter() { yield i } }
-                ASink::ACTSink(s) => { for i in s.request().into_iter() { yield i } }
-                ASink::SATSink(s) => { for i in s.request().into_iter() { yield i } }
+                ASink::AddSink(s) => {
+                    for i in s.request().into_iter() {
+                        yield i
+                    }
+                }
+                ASink::RemoveSink(s) => {
+                    for i in s.request().into_iter() {
+                        yield i
+                    }
+                }
+                ASink::HeadSink(s) => {
+                    for i in s.request().into_iter() {
+                        yield i
+                    }
+                }
+                ASink::CountSink(s) => {
+                    for i in s.request().into_iter() {
+                        yield i
+                    }
+                }
+                ASink::SumSink(s) => {
+                    for i in s.request().into_iter() {
+                        yield i
+                    }
+                }
+                ASink::MaxSink(s) => {
+                    for i in s.request().into_iter() {
+                        yield i
+                    }
+                }
+                ASink::MinSink(s) => {
+                    for i in s.request().into_iter() {
+                        yield i
+                    }
+                }
+                ASink::ACTSink(s) => {
+                    for i in s.request().into_iter() {
+                        yield i
+                    }
+                }
+                ASink::SATSink(s) => {
+                    for i in s.request().into_iter() {
+                        yield i
+                    }
+                }
                 #[cfg(feature = "wasm")]
-                ASink::WASMSink(s) => { for i in s.request().into_iter() { yield i } }
+                ASink::WASMSink(s) => {
+                    for i in s.request().into_iter() {
+                        yield i
+                    }
+                }
                 #[cfg(feature = "grounding")]
-                ASink::PureSink(s) => { for i in s.request().into_iter() { yield i } }
+                ASink::PureSink(s) => {
+                    for i in s.request().into_iter() {
+                        yield i
+                    }
+                }
             }
         }
     }
-    fn sink<'w, 'a, 'k, It : Iterator<Item=WriteResource<'w, 'a, 'k>>>(&mut self, it: It, path: &[u8]) where 'a : 'w, 'k : 'w {
+    fn sink<'w, 'a, 'k, It: Iterator<Item = WriteResource<'w, 'a, 'k>>>(
+        &mut self,
+        it: It,
+        path: &[u8],
+    ) where
+        'a: 'w,
+        'k: 'w,
+    {
         match self {
-            ASink::AddSink(s) => { s.sink(it, path) }
-            ASink::RemoveSink(s) => { s.sink(it, path) }
-            ASink::HeadSink(s) => { s.sink(it, path) }
-            ASink::CountSink(s) => { s.sink(it, path) }
-            ASink::SumSink(s) => { s.sink(it, path) }
-            ASink::MaxSink(s) => { s.sink(it, path) }
-            ASink::MinSink(s) => { s.sink(it, path) }
-            ASink::ACTSink(s) => { s.sink(it, path) }
-            ASink::SATSink(s) => { s.sink(it, path) }
+            ASink::AddSink(s) => s.sink(it, path),
+            ASink::RemoveSink(s) => s.sink(it, path),
+            ASink::HeadSink(s) => s.sink(it, path),
+            ASink::CountSink(s) => s.sink(it, path),
+            ASink::SumSink(s) => s.sink(it, path),
+            ASink::MaxSink(s) => s.sink(it, path),
+            ASink::MinSink(s) => s.sink(it, path),
+            ASink::ACTSink(s) => s.sink(it, path),
+            ASink::SATSink(s) => s.sink(it, path),
             #[cfg(feature = "wasm")]
-            ASink::WASMSink(s) => { s.sink(it, path) }
+            ASink::WASMSink(s) => s.sink(it, path),
             #[cfg(feature = "grounding")]
-            ASink::PureSink(s) => { s.sink(it, path) }
+            ASink::PureSink(s) => s.sink(it, path),
         }
     }
 
-    fn finalize<'w, 'a, 'k, It : Iterator<Item=WriteResource<'w, 'a, 'k>>>(&mut self, it: It) -> bool where 'a : 'w, 'k : 'w {
+    fn finalize<'w, 'a, 'k, It: Iterator<Item = WriteResource<'w, 'a, 'k>>>(
+        &mut self,
+        it: It,
+    ) -> bool
+    where
+        'a: 'w,
+        'k: 'w,
+    {
         match self {
-            ASink::AddSink(s) => { s.finalize(it) }
-            ASink::RemoveSink(s) => { s.finalize(it) }
-            ASink::HeadSink(s) => { s.finalize(it) }
-            ASink::CountSink(s) => { s.finalize(it) }
-            ASink::SumSink(s) => { s.finalize(it) }
-            ASink::MaxSink(s) => { s.finalize(it) }
-            ASink::MinSink(s) => { s.finalize(it) }
-            ASink::ACTSink(s) => { s.finalize(it) }
-            ASink::SATSink(s) => { s.finalize(it) }
+            ASink::AddSink(s) => s.finalize(it),
+            ASink::RemoveSink(s) => s.finalize(it),
+            ASink::HeadSink(s) => s.finalize(it),
+            ASink::CountSink(s) => s.finalize(it),
+            ASink::SumSink(s) => s.finalize(it),
+            ASink::MaxSink(s) => s.finalize(it),
+            ASink::MinSink(s) => s.finalize(it),
+            ASink::ACTSink(s) => s.finalize(it),
+            ASink::SATSink(s) => s.finalize(it),
             #[cfg(feature = "wasm")]
-            ASink::WASMSink(s) => { s.finalize(it) }
+            ASink::WASMSink(s) => s.finalize(it),
             #[cfg(feature = "grounding")]
-            ASink::PureSink(s) => { s.finalize(it) }
+            ASink::PureSink(s) => s.finalize(it),
         }
     }
 }

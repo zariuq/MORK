@@ -3,7 +3,7 @@
 #![feature(coroutines)]
 #![feature(stmt_expr_attributes)]
 
-pub mod space;
-mod sources;
-mod sinks;
 pub mod mmb;
+mod sinks;
+mod sources;
+pub mod space;
