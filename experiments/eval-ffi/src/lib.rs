@@ -6,9 +6,9 @@ extern crate alloc;
 pub mod sink;
 pub mod source;
 
-pub use sink::{ExprSink};
-pub use source::{ExprSource};
-pub use mork_expr::{Tag, SourceItem};
+pub use mork_expr::{SourceItem, Tag};
+pub use sink::ExprSink;
+pub use source::ExprSource;
 
 pub type FuncPtr = extern "C" fn(*mut ExprSource, *mut ExprSink) -> Result<(), EvalError>;
 
@@ -32,7 +32,10 @@ impl core::fmt::Display for EvalError {
 
 impl core::convert::From<&'static str> for EvalError {
     fn from(s: &'static str) -> Self {
-        EvalError::Msg { ptr: s.as_ptr(), len: s.len() }
+        EvalError::Msg {
+            ptr: s.as_ptr(),
+            len: s.len(),
+        }
     }
 }
 

@@ -1,11 +1,11 @@
 #![feature(coroutine_trait)]
 #![feature(coroutines)]
 
-use std::collections::HashMap;
-use std::ops::{Coroutine, CoroutineState};
-use mork_expr::{item_source, SourceItem};
 use eval_ffi::{EvalError, ExprSink, ExprSource, FuncPtr, Tag};
 use log::trace;
+use mork_expr::{SourceItem, item_source};
+use std::collections::HashMap;
+use std::ops::{Coroutine, CoroutineState};
 
 extern "C" fn nothing(src: *mut ExprSource, snk: *mut ExprSink) -> Result<(), EvalError> {
     Ok(())
@@ -19,10 +19,13 @@ pub struct StackFrame {
     sink: ExprSink,
     // sink: SinkCoro,
     rest: usize,
-    func: FuncPtr
+    func: FuncPtr,
 }
 
-pub enum FuncType { Macro, Pure }
+pub enum FuncType {
+    Macro,
+    Pure,
+}
 
 pub struct Func {
     func: FuncPtr,
@@ -41,7 +44,12 @@ pub struct EvalScope {
 
 macro_rules! alloc {
     (get $es:ident) => {
-        if let Some(mut rv) = $es.alloc_pool.pop() { rv.clear(); rv } else { Vec::with_capacity(EXPR_SIZE) }
+        if let Some(mut rv) = $es.alloc_pool.pop() {
+            rv.clear();
+            rv
+        } else {
+            Vec::with_capacity(EXPR_SIZE)
+        }
     };
     (ret $es:ident $buf:ident) => {
         $buf.clear();
@@ -53,7 +61,13 @@ const EXPR_SIZE: usize = 1024 * 1024;
 impl EvalScope {
     pub fn new() -> Self {
         let mut hm = HashMap::new();
-        hm.insert(b"'".to_vec(), Func{ func: quote, ty: FuncType::Pure });
+        hm.insert(
+            b"'".to_vec(),
+            Func {
+                func: quote,
+                ty: FuncType::Pure,
+            },
+        );
         Self {
             fns: hm,
             stack: Vec::new(),
@@ -82,7 +96,11 @@ impl EvalScope {
         self.stack.clear();
         // self.alloc_pool.clear();
         let sink = ExprSink::new(self.get_alloc());
-        self.stack.push(StackFrame { sink, rest: 1, func: nothing });
+        self.stack.push(StackFrame {
+            sink,
+            rest: 1,
+            func: nothing,
+        });
         self.push_eval()?;
         self.eval_impl()?;
         let top = self.stack.pop().unwrap();
@@ -93,14 +111,18 @@ impl EvalScope {
         // take current expr item, and push a new frame to evaluate it.
         match self.expr.read() {
             SourceItem::Tag(Tag::Arity(arity)) => {
-                let SourceItem::Symbol(fn_name) = self.expr.read() else { return Err(EvalError::from("expected function symbol on the left")) };
+                let SourceItem::Symbol(fn_name) = self.expr.read() else {
+                    return Err(EvalError::from("expected function symbol on the left"));
+                };
                 let func = self.fns.get(fn_name).ok_or_else(|| {
                     trace!(target: "pure", "{:?} not in function registry", std::str::from_utf8(fn_name));
                     "unknown function"
                 })?.func;
                 if func == quote {
                     let top_frame = self.stack.last_mut().unwrap();
-                    let e = mork_expr::Expr { ptr: unsafe { self.expr.ptr.cast_mut().add(self.expr.position) } };
+                    let e = mork_expr::Expr {
+                        ptr: unsafe { self.expr.ptr.cast_mut().add(self.expr.position) },
+                    };
                     let mut src = item_source(e);
                     while let CoroutineState::Yielded(i) = std::pin::pin!(&mut src).resume(()) {
                         top_frame.sink.write(i)?;
@@ -108,9 +130,14 @@ impl EvalScope {
                 } else {
                     let mut frame = StackFrame {
                         // yes this is just get_alloc but Rust is stupid
-                        sink: ExprSink::new(if let Some(mut rv) = self.alloc_pool.pop() { rv.clear(); rv } else { Vec::with_capacity(EXPR_SIZE) }),
+                        sink: ExprSink::new(if let Some(mut rv) = self.alloc_pool.pop() {
+                            rv.clear();
+                            rv
+                        } else {
+                            Vec::with_capacity(EXPR_SIZE)
+                        }),
                         rest: arity as usize - 1,
-                        func: func
+                        func: func,
                     };
                     frame.sink.write(SourceItem::Tag(Tag::Arity(arity)))?;
                     frame.sink.write(SourceItem::Symbol(fn_name))?;

@@ -2,17 +2,16 @@
 #![feature(coroutines)]
 
 use eval::{EvalScope, FuncType};
-use mork_expr::{construct};
+use mork_expr::construct;
 
-use std::pin::Pin;
-use std::ops::{Coroutine, CoroutineState, ControlFlow};
-use std::convert::Infallible;
 use std::collections::HashMap;
+use std::convert::Infallible;
+use std::ops::{ControlFlow, Coroutine, CoroutineState};
+use std::pin::Pin;
 
-use eval_ffi::{EvalError, ExprSink, SinkItem, ExprSource, SourceItem, FuncPtr, Tag};
+use eval_ffi::{EvalError, ExprSink, ExprSource, FuncPtr, SinkItem, SourceItem, Tag};
 
 mod alloc;
-
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     const TRACE_ALLOC: bool = false;
@@ -21,10 +20,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     if TRACE_ALLOC {
         tracking_allocator::AllocationRegistry::enable_tracking();
     }
-    let mut local_token =
-        tracking_allocator::AllocationGroupToken::register()
+    let mut local_token = tracking_allocator::AllocationGroupToken::register()
         .expect("failed to register allocation group");
-
 
     let mut scope = EvalScope::new();
     let lib;
@@ -43,10 +40,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         const LIB_SUFFIX: &str = ".dll";
 
         use std::path::PathBuf;
-        let target_dir = format!("{}/{}",
-            env!("CARGO_MANIFEST_DIR"),
-            "../../target/release",
-        );
+        let target_dir = format!("{}/{}", env!("CARGO_MANIFEST_DIR"), "../../target/release",);
         let lib_path = format!("{target_dir}/libeval_examples{LIB_SUFFIX}");
         lib = libloading::Library::new(lib_path)?;
 

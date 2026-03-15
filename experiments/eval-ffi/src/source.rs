@@ -1,4 +1,4 @@
-use mork_expr::{byte_item, Expr, Tag, SourceItem};
+use mork_expr::{Expr, SourceItem, Tag, byte_item};
 
 use crate::EvalError;
 
@@ -11,7 +11,7 @@ pub struct ExprSource {
 }
 
 #[cfg(feature = "std")]
-use alloc::{string::String, format};
+use alloc::{format, string::String};
 use mork_expr::macros::DeserializableExpr;
 
 impl ExprSource {
@@ -39,7 +39,8 @@ impl ExprSource {
             let tag = byte_item(byte);
             match tag {
                 Tag::SymbolSize(len) => {
-                    let symbol = unsafe { core::slice::from_raw_parts(self.ptr.add(pos), len as usize) };
+                    let symbol =
+                        unsafe { core::slice::from_raw_parts(self.ptr.add(pos), len as usize) };
                     let s = if symbol.iter().any(|&b| b.is_ascii_graphic()) {
                         core::str::from_utf8(symbol).ok()
                     } else {
@@ -79,7 +80,9 @@ impl ExprSource {
         let tag = byte_item(byte);
         match tag {
             Tag::SymbolSize(len) => {
-                let slice = unsafe { core::slice::from_raw_parts(self.ptr.add(self.position), len as usize) };
+                let slice = unsafe {
+                    core::slice::from_raw_parts(self.ptr.add(self.position), len as usize)
+                };
                 self.position += len as usize;
                 SourceItem::Symbol(slice)
             }
@@ -128,7 +131,7 @@ impl ExprSource {
             SourceItem::Symbol(slice) => {
                 return Err(EvalError::from("invalid symbol size of i32"));
             }
-            _ => return Err(EvalError::from("trying to read i32 from not a symbol"))
+            _ => return Err(EvalError::from("trying to read i32 from not a symbol")),
         }
         Ok(i32::from_be_bytes(array))
     }
@@ -144,13 +147,17 @@ impl ExprSource {
             SourceItem::Symbol(slice) => {
                 return Err(EvalError::from("invalid symbol size of f32"));
             }
-            _ => return Err(EvalError::from("trying to read f32 from not a symbol"))
+            _ => return Err(EvalError::from("trying to read f32 from not a symbol")),
         }
         Ok(f32::from_be_bytes(array))
     }
 
-    pub fn consume<T : DeserializableExpr>(&mut self) -> Result<T, EvalError> {
-        let se = unsafe { Expr{ ptr: self.ptr.add(self.position).cast_mut() } };
+    pub fn consume<T: DeserializableExpr>(&mut self) -> Result<T, EvalError> {
+        let se = unsafe {
+            Expr {
+                ptr: self.ptr.add(self.position).cast_mut(),
+            }
+        };
 
         if T::check(se) {
             self.position += T::advanced(se);
