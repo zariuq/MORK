@@ -1,10 +1,12 @@
-use crate::sinks::{ASink, Z3Sink};
+use crate::sinks::ASink;
+#[cfg(feature = "z3")]
+use crate::sinks::Z3Sink;
 use log::trace;
-use mork_expr::macros::SerializableExpr;
-use mork_expr::{Expr, Tag, byte_item, destruct, item_byte, serialize};
-use pathmap::PathMap;
 use pathmap::arena_compact::ACTMmapZipper;
+use pathmap::PathMap;
 use pathmap::zipper::*;
+use mork_expr::{byte_item, destruct, item_byte, serialize, Expr, Tag};
+use mork_expr::macros::SerializableExpr;
 
 pub(crate) enum ResourceRequest {
     BTM(&'static [u8]),
