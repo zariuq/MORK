@@ -5,6 +5,7 @@ members = [
     "expr/",
     "frontend/",
     "kernel/",
+    "experiments/cetta-space-bridge",
     "experiments/eval",
     "experiments/eval-ffi",
     "experiments/eval-examples",
@@ -29,3 +30,7 @@ gxhash = {version="3.4.1", git="https://github.com/luketpeterson/gxhash/"} # for
 log = { version = "0.4.27" }
 env_logger = "0.11.8"
 pathmap = { path = "../PathMap/", version = "0.3.0", features = ["jemalloc", "arena_compact", "nightly"] }
+
+[profile.release]
+lto = "fat"
+codegen-units = 1

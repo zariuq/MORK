@@ -1530,7 +1530,11 @@ enum IntArithOp {
 
 impl IntArithSink {
     pub fn new_with_op(e: Expr, op: IntArithOp) -> Self {
-        IntArithSink { e, op, changed: false }
+        IntArithSink {
+            e,
+            op,
+            changed: false,
+        }
     }
 
     /// Header length: Arity(4) + SymbolSize(N) + N bytes of op name
@@ -1560,7 +1564,11 @@ impl Sink for IntArithSink {
                 _ => panic!("IntArithSink: unknown op {:?}", std::str::from_utf8(sym)),
             }
         };
-        IntArithSink { e, op, changed: false }
+        IntArithSink {
+            e,
+            op,
+            changed: false,
+        }
     }
 
     fn request(&self) -> impl Iterator<Item = WriteResourceRequest> {
@@ -1589,7 +1597,11 @@ impl Sink for IntArithSink {
 
         let after_header = &path[hlen..];
         // Use ExprZipper to find child boundaries
-        let expr_after_header = unsafe { Expr { ptr: after_header.as_ptr().cast_mut() } };
+        let expr_after_header = unsafe {
+            Expr {
+                ptr: after_header.as_ptr().cast_mut(),
+            }
+        };
 
         // Skip child 1 (prefix): find its span length
         let prefix_span = unsafe { expr_after_header.span().as_ref().unwrap() };
@@ -1597,22 +1609,34 @@ impl Sink for IntArithSink {
 
         // arg1 starts right after prefix
         let arg1_start = hlen + prefix_len;
-        let expr_arg1 = unsafe { Expr { ptr: path[arg1_start..].as_ptr().cast_mut() } };
+        let expr_arg1 = unsafe {
+            Expr {
+                ptr: path[arg1_start..].as_ptr().cast_mut(),
+            }
+        };
         let arg1_span = unsafe { expr_arg1.span().as_ref().unwrap() };
         let arg1_len = arg1_span.len();
 
         // arg2 starts right after arg1
         let arg2_start = arg1_start + arg1_len;
-        let expr_arg2 = unsafe { Expr { ptr: path[arg2_start..].as_ptr().cast_mut() } };
+        let expr_arg2 = unsafe {
+            Expr {
+                ptr: path[arg2_start..].as_ptr().cast_mut(),
+            }
+        };
         let arg2_span = unsafe { expr_arg2.span().as_ref().unwrap() };
         let arg2_len = arg2_span.len();
 
         // Parse arg1 and arg2 as decimal integer symbols
         let parse_int = |span: &[u8]| -> Option<i64> {
-            if span.is_empty() { return None; }
+            if span.is_empty() {
+                return None;
+            }
             if let Tag::SymbolSize(n) = byte_item(span[0]) {
                 let n = n as usize;
-                if span.len() < 1 + n { return None; }
+                if span.len() < 1 + n {
+                    return None;
+                }
                 let s = std::str::from_utf8(&span[1..1 + n]).ok()?;
                 s.parse::<i64>().ok()
             } else {
@@ -1640,7 +1664,13 @@ impl Sink for IntArithSink {
             IntArithOp::Add => a + b,
             IntArithOp::Sub => a - b,
             IntArithOp::Mul => a * b,
-            IntArithOp::Eq => if a == b { 1 } else { 0 },
+            IntArithOp::Eq => {
+                if a == b {
+                    1
+                } else {
+                    0
+                }
+            }
         };
 
         let result_str = result.to_string();
@@ -2076,7 +2106,9 @@ impl Sink for ASink {
             *e.ptr == item_byte(Tag::Arity(4))
                 && *e.ptr.offset(1) == item_byte(Tag::SymbolSize(2))
                 && *e.ptr.offset(2) == b'i'
-                && (*e.ptr.offset(3) == b'+' || *e.ptr.offset(3) == b'-' || *e.ptr.offset(3) == b'*')
+                && (*e.ptr.offset(3) == b'+'
+                    || *e.ptr.offset(3) == b'-'
+                    || *e.ptr.offset(3) == b'*')
         } {
             ASink::IntArithSink(IntArithSink::new(e))
         } else if unsafe {
