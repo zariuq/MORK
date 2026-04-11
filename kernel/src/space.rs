@@ -1275,6 +1275,117 @@ impl Space {
         candidate
     }
 
+    /// Query with factor expressions returned.
+    /// Unlike `query_multi` which returns a single Expr, this returns all factor expressions
+    /// that matched the product pattern, enabling callers to inspect/use each factor.
+    pub fn query_multi_with_factor_exprs<F: FnMut(BTreeMap<(u8, u8), ExprEnv>, &[Expr]) -> bool>(
+        btm: &PathMap<()>,
+        pat_expr: Expr,
+        mut effect: F,
+    ) -> usize {
+        let pat_newvars = pat_expr.newvars();
+        trace!(target: "query_multi", "pattern (newvars={}) {:?}", pat_newvars, serialize(unsafe { pat_expr.span().as_ref().unwrap() }));
+        let n_factors = pat_expr.arity().unwrap() as usize;
+        debug_assert!(n_factors > 0);
+        if n_factors == 1 {
+            let factor_exprs = [pat_expr];
+            effect(BTreeMap::new(), &factor_exprs);
+            return 1;
+        }
+        let mut pat_args = Vec::with_capacity(n_factors);
+        ExprEnv::new(0, pat_expr).args(&mut pat_args);
+
+        let mut prz = ProductZipper::new(
+            btm.read_zipper(),
+            (0..(pat_args.len() - 2)).map(|_i| btm.read_zipper()),
+        );
+        prz.reserve_buffers(1 << 32, 32);
+
+        Self::query_multi_with_factor_exprs_raw(&mut prz, &pat_args[1..], effect)
+    }
+
+    #[cfg(feature = "no_search")]
+    #[inline(always)]
+    pub fn query_multi_with_factor_exprs_raw<
+        PZ: ZipperProduct,
+        F: FnMut(BTreeMap<(u8, u8), ExprEnv>, &[Expr]) -> bool,
+    >(
+        mut prz: &mut PZ,
+        sources: &[ExprEnv],
+        mut effect: F,
+    ) -> usize {
+        // Naive fallback for no_search builds
+        let mut candidate = 0;
+        while prz.to_next_val() {
+            if prz.focus_factor() != prz.factor_count() - 1 {
+                continue;
+            };
+            let primary = Expr { ptr: prz.origin_path().as_ptr().cast_mut() };
+            let mut factor_exprs = Vec::with_capacity(sources.len());
+            factor_exprs.push(primary);
+            let mut pairs = vec![(sources[0], ExprEnv::new(1, primary))];
+            for (&pa, &other_i) in sources[1..].iter().zip(prz.path_indices()) {
+                let factor_expr = Expr { ptr: unsafe { prz.origin_path().as_ptr().cast_mut().add(other_i) } };
+                factor_exprs.push(factor_expr);
+                pairs.push((pa, ExprEnv::new((pairs.len() + 1) as u8, factor_expr)));
+            }
+            match unify(pairs) {
+                Ok(bs) => {
+                    unsafe { std::ptr::write_volatile(&mut candidate, std::ptr::read_volatile(&candidate) + 1); }
+                    if !effect(bs, &factor_exprs) { break; }
+                }
+                Err(failed) => { trace!(target: "query_multi_ref", "U failed {:?}", failed) }
+            }
+        }
+        candidate
+    }
+
+    #[cfg(not(feature = "no_search"))]
+    #[inline(always)]
+    pub fn query_multi_with_factor_exprs_raw<
+        PZ: ZipperProduct,
+        F: FnMut(BTreeMap<(u8, u8), ExprEnv>, &[Expr]) -> bool,
+    >(
+        mut prz: &mut PZ,
+        sources: &[ExprEnv],
+        mut effect: F,
+    ) -> usize {
+        let mut stack = sources[0..].iter().rev().cloned().collect::<Vec<_>>();
+        let mut references: Vec<u32> = vec![];
+        let mut candidate = 0;
+        thread_local! {
+            static BREAK: std::cell::RefCell<[u64; 64]> = const { std::cell::RefCell::new([0; 64]) };
+        }
+        BREAK.with_borrow_mut(|a| {
+            if unsafe { setjmp(a) == 0 } {
+                coreferential_transition(
+                    &mut prz,
+                    &mut stack,
+                    unsafe { ((&references) as *const Vec<u32>).cast_mut().as_mut().unwrap() },
+                    &mut |loc| {
+                        let primary = Expr { ptr: loc.origin_path().as_ptr().cast_mut() };
+                        let mut factor_exprs = Vec::with_capacity(sources.len());
+                        factor_exprs.push(primary);
+                        let mut pairs = vec![(sources[0], ExprEnv::new(1, primary))];
+                        for (&pa, &other_i) in sources[1..].iter().zip(loc.path_indices()) {
+                            let factor_expr = Expr { ptr: unsafe { loc.origin_path().as_ptr().cast_mut().add(other_i) } };
+                            factor_exprs.push(factor_expr);
+                            pairs.push((pa, ExprEnv::new((pairs.len() + 1) as u8, factor_expr)));
+                        }
+                        match unify(pairs) {
+                            Ok(bs) => {
+                                unsafe { std::ptr::write_volatile(&mut candidate, std::ptr::read_volatile(&candidate) + 1); }
+                                if !effect(bs, &factor_exprs) { unsafe { longjmp(a, 1) } }
+                            }
+                            Err(failed) => { trace!(target: "query_multi", "U failed {:?}", failed) }
+                        }
+                    },
+                )
+            }
+        });
+        candidate
+    }
+
     pub fn prefix_subsumption(prefixes: &[&[u8]]) -> Vec<usize> {
         let n = prefixes.len();
         let mut out = Vec::with_capacity(n);
