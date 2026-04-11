@@ -1275,9 +1275,6 @@ impl Space {
         candidate
     }
 
-    /// Query with factor expressions returned.
-    /// Unlike `query_multi` which returns a single Expr, this returns all factor expressions
-    /// that matched the product pattern, enabling callers to inspect/use each factor.
     pub fn query_multi_with_factor_exprs<F: FnMut(BTreeMap<(u8, u8), ExprEnv>, &[Expr]) -> bool>(
         btm: &PathMap<()>,
         pat_expr: Expr,
@@ -1314,7 +1311,6 @@ impl Space {
         sources: &[ExprEnv],
         mut effect: F,
     ) -> usize {
-        // Naive fallback for no_search builds
         let mut candidate = 0;
         while prz.to_next_val() {
             if prz.focus_factor() != prz.factor_count() - 1 {
@@ -1915,5 +1911,46 @@ impl Drop for Space {
             // z3.terminate();
             drop(z3.stdin.take())
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn query_multi_with_factor_exprs_returns_factor_exprs() {
+        let mut s = Space::new();
+        s.add_all_sexpr(b"(pair a b)\n(pair b c)\n").unwrap();
+
+        let mut query_buf = [0u8; 256];
+        let (query, _) = s
+            .parse_sexpr(b"(, (pair $x $y) (pair $y $z))", query_buf.as_mut_ptr())
+            .unwrap();
+
+        let expected_first = {
+            let mut buf = [0u8; 64];
+            let (_, used) = s.parse_sexpr(b"(pair a b)", buf.as_mut_ptr()).unwrap();
+            buf[..used].to_vec()
+        };
+        let expected_second = {
+            let mut buf = [0u8; 64];
+            let (_, used) = s.parse_sexpr(b"(pair b c)", buf.as_mut_ptr()).unwrap();
+            buf[..used].to_vec()
+        };
+
+        let mut seen = Vec::new();
+        let touched = Space::query_multi_with_factor_exprs(&s.btm, query, |bindings, factor_exprs| {
+            assert_eq!(bindings.len(), 3);
+            assert_eq!(factor_exprs.len(), 2);
+            seen.push((
+                unsafe { factor_exprs[0].span().as_ref().unwrap() }.to_vec(),
+                unsafe { factor_exprs[1].span().as_ref().unwrap() }.to_vec(),
+            ));
+            true
+        });
+
+        assert_eq!(touched, 1);
+        assert_eq!(seen, vec![(expected_first, expected_second)]);
     }
 }
